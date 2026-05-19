@@ -25,7 +25,8 @@ const {
  *
  */
 const CONFIG = {
-    VERSION: '2500.77-TIME-AUDIT-COMMAND',
+    VERSION: '2500.81-KOREAN-VOICE-LOGS',
+    RELEASE_NOTE: 'Korean DC/LIVE OFF loss-time logs',
     GUILD_ID: '1502598521294028830',
     LOG_CHANNEL: '1503681085618262158',
     STATUS_CHANNEL: '1503681415407992962',
@@ -135,6 +136,24 @@ const JOKES = {
     OT: ['Overtime has been processed. Don\'t push yourself too hard and keep it up!'],
     OFF: ['Day off has been processed. Rest well!']
 };  
+
+function printStartupBanner() {
+    const now = moment().tz(CONFIG.TIMEZONE);
+    const lines = [
+        '',
+        '============================================================',
+        ' ATTENDANCE BOT ONLINE',
+        '------------------------------------------------------------',
+        ` Version : ${CONFIG.VERSION}`,
+        ' Entry   : index.js',
+        ` Update  : ${CONFIG.RELEASE_NOTE}`,
+        ` Timezone: ${CONFIG.TIMEZONE}`,
+        ` Started : ${now.format('YYYY-MM-DD HH:mm:ss')}`,
+        '============================================================',
+        ''
+    ];
+    console.log(lines.join('\n'));
+}
 
 /**
  * [ STATE & MUTEX ]
@@ -814,7 +833,7 @@ function createPendingClockOut(user, source, at, graceMins, reason = null) {
     if (!user) return false;
     const start = moment(at).tz(CONFIG.TIMEZONE);
     const existing = user.pendingClockOut;
-    if (existing && !existing.recoveredAt && existing.source === source && existing.at === start.toISOString()) return false;
+    if (existing && !existing.recoveredAt && existing.source === source) return false;
     user.pendingClockOut = {
         source,
         at: start.toISOString(),
@@ -1016,6 +1035,7 @@ async function activatePendingManualOvertime(user, now) {
 function markLiveOffState(user, now) {
     if (!user) return false;
     let changed = false;
+    const wasLiveOff = Boolean(user.liveOffStartedAt);
     if (transitionRecordedStatus(user, {
         voiceStatus: 'LIVE_OFF'
     }, now, 'voice-state', 'live-off')) changed = true;
@@ -1033,7 +1053,7 @@ function markLiveOffState(user, now) {
         user.voiceJoinedAt = now.toISOString();
         changed = true;
     }
-    user.liveOffWarnedFor = null;
+    if (!wasLiveOff) user.liveOffWarnedFor = null;
     return changed;
 }
 
@@ -1057,6 +1077,16 @@ async function recordLiveConfirmation(member, user, shift, now, text = '라이�
     const key = getShiftSessionKey(shift, now);
     if (user.lastLiveLogKey === key) return false;
     user.lastLiveLogKey = key;
+    await recordLog(user, 'reconnect', text);
+    return true;
+}
+
+async function recordLiveRecovery(member, user, shift, now, startedAt, text) {
+    if (!member || !user || !shift) return false;
+    const started = startedAt ? moment(startedAt).tz(CONFIG.TIMEZONE) : moment(now).tz(CONFIG.TIMEZONE);
+    const key = `${getShiftSessionKey(shift, now)}:${started.format('YYYY-MM-DD HH:mm')}`;
+    if (user.lastLiveRecoveryLogKey === key) return false;
+    user.lastLiveRecoveryLogKey = key;
     await recordLog(user, 'reconnect', text);
     return true;
 }
@@ -2143,15 +2173,15 @@ async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().
             user.disconnectedAt = null;
             recoverPendingClockOut(user, now, `${source}_voice_rejoined_live_off`);
             markLiveOffState(user, now);
-            await recordLog(user, 'reconnect', 'DC 복구 (음성채널 재접속, 라이브 OFF)');
-            await recordLog(user, 'disconnect', '라이브 OFF (음성채널 접속)');
+            await recordLog(user, 'reconnect', 'DC 복구 - 음성채널 재접속, 라이브 OFF 상태');
+            await recordLog(user, 'disconnect', '라이브 OFF 시작 - 음성채널 접속 상태');
             return true;
         }
         if (user.checkedIn && !user.isFinished && !getActiveLiveException(member.id, now)) {
             // ✨ 정규 퇴근 시간 이후에 방송을 끄면 즉시 퇴근 처리 (유예 없음)
             const shiftEnd = getScheduledEndMoment(user, now); 
             if (shiftEnd && now.isSameOrAfter(shiftEnd)) {
-                await handleClockOut(member, user, now, '정규 퇴근 시간 이후 방송 종료 (자동 퇴근)', now, { clockOutSource: 'auto-out-after-shift-live-off' });
+                await handleClockOut(member, user, now, '정규 퇴근 시간 이후 방송 종료 - 자동 퇴근', now, { clockOutSource: 'auto-out-after-shift-live-off' });
                 changed = true;
                 return true;
             }
@@ -2165,7 +2195,7 @@ async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().
                 : (liveOffAt ? moment(liveOffAt).tz(CONFIG.TIMEZONE).add(CONFIG.LIVE_OFF_CLOCK_OUT_MINS, 'minutes') : null);
             const isLiveOffClockOutDue = Boolean(pendingLiveOffClockOutAt && now.isSameOrAfter(pendingLiveOffClockOutAt));
             if (started) {
-                await recordLog(user, 'disconnect', stoppedStreaming ? '라이브 OFF (음성채널 유지)' : '라이브 OFF (음성채널 접속)');
+                await recordLog(user, 'disconnect', stoppedStreaming ? '라이브 OFF 시작 - 방송 종료' : '라이브 OFF 시작 - 음성채널 접속 상태');
                 changed = true;
             }
             if (!isLiveOffClockOutDue && liveOffMins >= CONFIG.LIVE_OFF_DM_AFTER_MINS && user.liveOffWarnedFor !== warnKey) {
@@ -2195,7 +2225,7 @@ async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().
         ? moment(user.liveOffStartedAt || user.voiceJoinedAt).tz(CONFIG.TIMEZONE)
         : null;
     const liveOffDurationText = liveOffStartedAt
-        ? ` [라이브 OFF: ${formatDuration(Math.max(0, now.diff(liveOffStartedAt, 'minutes')))}]`
+        ? ` [라이브 OFF 지속: ${formatDuration(Math.max(0, now.diff(liveOffStartedAt, 'minutes')))}]`
         : '';
 
     if (clearLiveOffState(user, now)) changed = true;
@@ -2210,8 +2240,8 @@ async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().
         transitionRecordedStatus(user, {
             voiceStatus: 'LIVE_ON'
         }, now, source, 'dc-recovered-live-on');
-        await recordLog(user, 'reconnect', 'DC 복구 (방송 켬)');
-        await recordLog(user, 'reconnect', '라이브 ON (DC 복구)' + liveOffDurationText);
+        await recordLog(user, 'reconnect', 'DC 복구 - 라이브 ON 상태로 복귀');
+        await recordLog(user, 'reconnect', '라이브 ON 복구 - DC 이후 방송 재개' + liveOffDurationText);
         if (await activatePendingManualOvertime(user, now)) changed = true;
         return true;
     }
@@ -2232,9 +2262,13 @@ async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().
 
     if (becameLive || liveOffStartedAt) {
         const text = liveOffStartedAt
-            ? '라이브 ON (방송 복구)' + liveOffDurationText
-            : '라이브 ON (출근 상태 확인)';
-        if (await recordLiveConfirmation(member, user, shift, now, text)) changed = true;
+            ? '라이브 ON 복구 - 방송 재개' + liveOffDurationText
+            : '라이브 ON 확인 - 출근 상태 유지';
+        if (liveOffStartedAt) {
+            if (await recordLiveRecovery(member, user, shift, now, liveOffStartedAt, text)) changed = true;
+        } else if (await recordLiveConfirmation(member, user, shift, now, text)) {
+            changed = true;
+        }
     } else if (source === 'heartbeat' && await recordLiveConfirmation(member, user, shift, now)) {
         changed = true;
     }
@@ -3930,11 +3964,13 @@ async function checkDayOffReservations() {
     for (const reservation of Object.values(dayOffReservations)) {
         if (!reservation || reservation.status !== 'approved') continue;
         const logicalDate = getDayOffLogicalDateForShift(reservation.shift, now);
-        if (reservation.leaveDate !== logicalDate || reservation.appliedDate === logicalDate) continue;
+        if (reservation.leaveDate !== logicalDate) continue;
 
         const member = await guild.members.fetch(reservation.userId).catch(() => null);
         const u = ensureUserData(member || { id: reservation.userId, displayName: reservation.name }, reservation.shift);
         if (!u) continue;
+        if (reservation.appliedDate === logicalDate && u.dayOff) continue;
+        const alreadyCounted = reservation.appliedDate === logicalDate;
         const reservationBounds = buildShiftBoundsForBusinessDate(
             reservation.shift,
             moment.tz(reservation.leaveDate, 'YYYY-MM-DD', CONFIG.TIMEZONE)
@@ -3950,7 +3986,7 @@ async function checkDayOffReservations() {
         u.checkedIn = false;
         u.disconnected = false;
         u.isFinished = true;
-        u.offCount = (u.offCount || 0) + 1;
+        if (!alreadyCounted) u.offCount = (u.offCount || 0) + 1;
         overtimeUsers = overtimeUsers.filter(o => o.id !== reservation.userId);
         if (member) await updateWorkingRole(member, false);
 
@@ -4237,6 +4273,7 @@ client.on(Events.InteractionCreate, async i => {
                 await refreshGuildMembers(i.guild, { force: true });
                 await reconcileAttendanceMembership(i.guild);
                 await syncVoiceStates();
+                await checkDayOffReservations();
                 await autoOvertimeCheck();
                 await syncAutoPanels();
                 await renderDashboardCore({ forceMemberRefresh: true });
@@ -4843,7 +4880,7 @@ client.once(Events.ClientReady, async () => {
     cron.schedule('30 19 * * 2', () => performSmartReset('day'), { timezone: CONFIG.TIMEZONE });
     cron.schedule('30 9 * * 0,1,2,4,5,6', () => performSmartReset('night'), { timezone: CONFIG.TIMEZONE });
     cron.schedule('30 4 * * 3', () => performSmartReset('night'), { timezone: CONFIG.TIMEZONE });
-    console.log(`🤖 v${CONFIG.VERSION} READY`);
+    printStartupBanner();
 });
 
 client.login(process.env.TOKEN);
