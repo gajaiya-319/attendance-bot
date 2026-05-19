@@ -878,6 +878,14 @@ function canStartOvertimeNow(user, now = moment().tz(CONFIG.TIMEZONE)) {
     return Boolean(overtimeStart && moment(now).tz(CONFIG.TIMEZONE).isSameOrAfter(overtimeStart));
 }
 
+function isFinishedBeforeCurrentShift(user, shift, now = moment().tz(CONFIG.TIMEZONE)) {
+    if (!user?.isFinished || user.checkedIn || !shift) return false;
+    const finishedAt = user.checkOutRaw || user.attendanceStatusChangedAt;
+    if (!finishedAt) return false;
+    const bounds = getShiftBounds(shift, now);
+    return Boolean(bounds?.start && moment(finishedAt).tz(CONFIG.TIMEZONE).isBefore(bounds.start));
+}
+
 function isCurrentShiftRegularWorker(member, now = moment().tz(CONFIG.TIMEZONE)) {
     if (!member?.roles?.cache) return false;
     const activeShift = getOperationalShift(now);
@@ -1975,6 +1983,15 @@ async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().
             return await notifyDayOffPresence(member, user, shift, now, action);
         }
         return false;
+    }
+
+    if (isStreaming && isFinishedBeforeCurrentShift(user, shift, now)) {
+        user.isFinished = false;
+        user.finishedPresence = null;
+        user.finalLeftAt = null;
+        if (await handleClockIn(member, user, shift, now, true)) changed = true;
+        if (await activatePendingManualOvertime(user, now)) changed = true;
+        return true;
     }
 
     const canResumeAsApprovedOt = Boolean(
