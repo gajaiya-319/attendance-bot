@@ -928,6 +928,7 @@ function getRestorableOvertimeSession(user, shift, now = moment().tz(CONFIG.TIME
 }
 
 async function restoreOvertimeAfterFinish(member, user, shift, now, source = 'voice_snapshot') {
+    if (isCurrentShiftRegularWorker(member, now)) return false;
     const restorable = getRestorableOvertimeSession(user, shift, now);
     if (!restorable) return false;
 
@@ -1539,18 +1540,24 @@ function getHybridDashboardState(user, context) {
     const legacy = getLegacyDashboardState(user, context);
     const attendanceStatus = user.attendanceStatus || null;
     const voiceStatus = user.voiceStatus || null;
-    const { now } = context;
+    const { now, bounds } = context;
 
     // ✨ [핵심 수정] 봇의 현재 시간이 아닌, '유저의 실제 출근 시간'을 기준으로 퇴근 시점을 정확히 계산합니다.
     const shiftEnd = getScheduledEndMoment(user, now);
     const isShiftEnded = shiftEnd && now.isSameOrAfter(shiftEnd);
+    const isWithinCurrentShiftBounds = Boolean(
+        bounds?.start &&
+        bounds?.end &&
+        now.isSameOrAfter(bounds.start) &&
+        now.isBefore(bounds.end)
+    );
     const isOT = overtimeUsers.some(ot => ot.id === user.id);
 
     if (!attendanceStatus && !voiceStatus) return legacy;
     if (user.dayOff || attendanceStatus === 'DAY_OFF') return 'LEAVE';
     if (attendanceStatus === 'FINISHED' || user.isFinished) return 'FINISHED';
 
-    if (isShiftEnded && !isOT && user.checkedIn) {
+    if (isShiftEnded && !isWithinCurrentShiftBounds && !isOT && user.checkedIn) {
         return 'FINISHED';
     }
 
