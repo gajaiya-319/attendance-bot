@@ -878,6 +878,16 @@ function canStartOvertimeNow(user, now = moment().tz(CONFIG.TIMEZONE)) {
     return Boolean(overtimeStart && moment(now).tz(CONFIG.TIMEZONE).isSameOrAfter(overtimeStart));
 }
 
+function isCurrentShiftRegularWorker(member, now = moment().tz(CONFIG.TIMEZONE)) {
+    if (!member?.roles?.cache) return false;
+    const activeShift = getOperationalShift(now);
+    if (!activeShift) return false;
+    const roleId = activeShift === 'day' ? CONFIG.ROLES.DAY : CONFIG.ROLES.NIGHT;
+    if (!member.roles.cache.has(roleId)) return false;
+    const bounds = getShiftBounds(activeShift, now);
+    return Boolean(bounds && now.isSameOrAfter(bounds.start) && now.isBefore(bounds.end));
+}
+
 function getLatestOvertimeSession(user) {
     if (!user || !Array.isArray(user.sessions)) return null;
     return user.sessions
@@ -3003,11 +3013,22 @@ async function autoOvertimeCheck() {
         if ((!u.checkedIn && !u.pendingManualOT) || u.dayOff || overtimeUsers.some(ot => ot.id === id)) continue;
         if (!['day', 'night'].includes(u.shift)) continue;
 
+        const member = guild?.members.cache.get(id);
+        if (isCurrentShiftRegularWorker(member, now)) {
+            if (u.checkedIn && u.attendanceStatus === 'OVERTIME') {
+                transitionRecordedStatus(u, {
+                    attendanceStatus: 'WORKING',
+                    voiceStatus: member?.voice?.streaming || guild?.voiceStates.cache.get(id)?.streaming ? 'LIVE_ON' : (member?.voice?.channelId || guild?.voiceStates.cache.get(id)?.channelId ? 'LIVE_OFF' : 'OFFLINE')
+                }, now, 'auto-overtime-check', 'current-shift-regular-worker');
+                changed = true;
+            }
+            continue;
+        }
+
         const targetEnd = getOvertimeStartMoment(u, now);
         if (!targetEnd) continue;
 
         if (u.pendingManualOT && now.isSameOrAfter(targetEnd)) {
-            const member = guild?.members.cache.get(id);
             const voiceState = guild?.voiceStates.cache.get(id);
             const isStreamingNow = Boolean(member?.voice?.streaming || voiceState?.streaming);
             if (isStreamingNow && addOvertimeUser(u, 'MANUAL', targetEnd)) {
@@ -3025,7 +3046,6 @@ async function autoOvertimeCheck() {
         }
 
         if (now.isSameOrAfter(targetEnd.clone().add(CONFIG.AUTO_OT_AFTER_MINS, 'minutes'))) {
-            const member = guild?.members.cache.get(id);
             const voiceState = guild?.voiceStates.cache.get(id);
             const isStreamingNow = Boolean(member?.voice?.streaming || voiceState?.streaming);
             const hasLiveException = Boolean(getActiveLiveException(id, now));
