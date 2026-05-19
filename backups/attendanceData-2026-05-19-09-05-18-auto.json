@@ -1,0 +1,4377 @@
+{
+  "attendanceData": {
+    "1503719236139356180": {
+      "id": "1503719236139356180",
+      "name": "Anderes - P Night Time Trainee",
+      "shift": null,
+      "checkedIn": false,
+      "dayOff": false,
+      "disconnected": false,
+      "disconnectedAt": null,
+      "isFinished": true,
+      "strikes": 1,
+      "points": -5,
+      "totalNormal": 0,
+      "totalLate": 0,
+      "totalAbsent": 1,
+      "totalEarly": 0,
+      "totalOT": 1,
+      "dcCount": 2,
+      "offCount": 0,
+      "lastActionAt": 0,
+      "fState": "FINISHED",
+      "isOT": false,
+      "earlyOut": false,
+      "checkInTime": "08:09 AM",
+      "checkInRaw": "2026-05-17T00:09:24.148Z",
+      "status": null,
+      "strikeReceivedThisShift": false,
+      "checkOutTime": "10:16 AM",
+      "checkOutRaw": "2026-05-17T02:16:48.360Z",
+      "dashboardName": "Anderes",
+      "voiceJoinedAt": null,
+      "liveOffWarnedFor": null
+    },
+    "1293572479989710858": {
+      "id": "1293572479989710858",
+      "name": "JuRe - H Night Time",
+      "shift": "night",
+      "checkedIn": true,
+      "dayOff": false,
+      "disconnected": false,
+      "disconnectedAt": null,
+      "isFinished": false,
+      "strikes": 3,
+      "points": 15,
+      "totalNormal": 1,
+      "totalLate": 2,
+      "totalAbsent": 1,
+      "totalEarly": 1,
+      "totalOT": 3,
+      "dcCount": 6,
+      "offCount": 0,
+      "lastActionAt": 0,
+      "fState": "ACTIVE",
+      "isOT": true,
+      "earlyOut": false,
+      "checkInTime": "09:00 PM",
+      "checkInRaw": "2026-05-18T13:00:01.266Z",
+      "status": "ontime",
+      "strikeReceivedThisShift": false,
+      "checkOutTime": "10:07 PM",
+      "checkOutRaw": "2026-05-17T14:07:06.262Z",
+      "dashboardName": "JuRe",
+      "voiceJoinedAt": null,
+      "liveOffWarnedFor": null,
+      "lastLiveLogKey": "night:2026-05-18 21:00",
+      "shiftSessionKey": "night:2026-05-18 21:00",
+      "liveOffStartedAt": null,
+      "lastLiveOnAt": "2026-05-18T13:00:01.266Z",
+      "lastLiveOffAt": "2026-05-18T00:59:12.888Z",
+      "pendingManualOT": false,
+      "dayOffExpireAt": null,
+      "sessions": [
+        {
+          "id": "night:2026-05-18-21-00:1779109201266",
+          "shift": "night",
+          "sessionKey": "night:2026-05-18 21:00",
+          "scheduledStartAt": "2026-05-18T13:00:00.000Z",
+          "scheduledEndAt": "2026-05-19T01:00:00.000Z",
+          "clockInAt": "2026-05-18T13:00:01.266Z",
+          "clockInSource": "live-on",
+          "clockOutAt": null,
+          "clockOutSource": null,
+          "clockOutReason": null,
+          "workedMinutes": 0,
+          "liveOffPeriods": [],
+          "dcPeriods": [],
+          "otType": "AUTO",
+          "otStartedAt": "2026-05-19T01:00:00.000Z"
+        }
+      ],
+      "activeSessionId": "night:2026-05-18-21-00:1779109201266",
+      "preShiftLiveAt": null,
+      "lastPreShiftWaitLogKey": null,
+      "pendingClockOut": null,
+      "attendanceEvents": [
+        {
+          "at": "2026-05-19T01:00:00.000Z",
+          "type": "recorded_status_changed",
+          "source": "auto-overtime-check",
+          "meta": {
+            "reason": "auto-ot-started",
+            "attendanceStatus": {
+              "from": null,
+              "to": "OVERTIME"
+            },
+            "voiceStatus": {
+              "from": null,
+              "to": "LIVE_ON"
+            }
+          }
+        }
+      ],
+      "lastEventKey": "recorded_status_changed:auto-overtime-check",
+      "lastEventAt": "2026-05-19T01:00:00.000Z",
+      "attendanceStatus": "OVERTIME",
+      "voiceStatus": "LIVE_ON",
+      "attendanceStatusChangedAt": "2026-05-19T01:00:00.000Z",
+      "voiceStatusChangedAt": "2026-05-19T01:00:00.000Z",
+      "dayOffPresenceNotifiedFor": null,
+      "afterFinishPresenceNotifiedFor": null,
+      "finishedPresence": null,
+      "finalLeftAt": null
+    },
+    "1081208806765240330": {
+      "id": "1081208806765240330",
+      "name": "K3nchin - P Night Time",
+      "shift": "night",
+      "checkedIn": true,
+      "dayOff": false,
+      "disconnected": false,
+      "disconnectedAt": null,
+      "isFinished": false,
+      "strikes": 4,
+      "points": -35,
+      "totalNormal": 0,
+      "totalLate": 3,
+      "totalAbsent": 1,
+      "totalEarly": 3,
+      "totalOT": 2,
+      "dcCount": 7,
+      "offCount": 0,
+      "lastActionAt": 0,
+      "fState": "LIVE_OFF",
+      "isOT": false,
+      "earlyOut": false,
+      "checkInTime": "03:15 AM",
+      "checkInRaw": "2026-05-18T19:15:25.606Z",
+      "status": "absent",
+      "strikeReceivedThisShift": true,
+      "checkOutTime": "02:53 AM",
+      "checkOutRaw": "2026-05-18T18:53:47.414Z",
+      "dashboardName": "K3nchin",
+      "voiceJoinedAt": null,
+      "liveOffWarnedFor": null,
+      "shiftSessionKey": "night:2026-05-18 21:00",
+      "lastLiveLogKey": "night:2026-05-18 21:00",
+      "liveOffStartedAt": null,
+      "lastLiveOnAt": "2026-05-18T19:15:25.606Z",
+      "lastLiveOffAt": "2026-05-18T18:53:47.414Z",
+      "pendingManualOT": false,
+      "dayOffExpireAt": null,
+      "sessions": [
+        {
+          "id": "night:2026-05-18-21-00:1779112085030",
+          "shift": "night",
+          "sessionKey": "night:2026-05-18 21:00",
+          "scheduledStartAt": "2026-05-18T13:00:00.000Z",
+          "scheduledEndAt": "2026-05-19T01:00:00.000Z",
+          "clockInAt": "2026-05-18T13:48:05.030Z",
+          "clockInSource": "live-on",
+          "clockOutAt": "2026-05-18T18:53:47.414Z",
+          "clockOutSource": "live-off-timeout",
+          "clockOutReason": "라이브 OFF 유예 초과 자동 퇴근",
+          "workedMinutes": 305,
+          "liveOffPeriods": [
+            {
+              "startedAt": "2026-05-18T18:53:47.414Z",
+              "endedAt": "2026-05-18T18:53:47.414Z",
+              "minutes": 0,
+              "reason": "live-off"
+            }
+          ],
+          "dcPeriods": [
+            {
+              "startedAt": "2026-05-18T18:50:09.093Z",
+              "endedAt": "2026-05-18T18:53:47.414Z",
+              "minutes": 3,
+              "reason": "voice-left"
+            }
+          ],
+          "otType": null,
+          "clockOutDetectedAt": "2026-05-18T19:14:25.603Z"
+        },
+        {
+          "id": "night:2026-05-18-21-00:1779131725606",
+          "shift": "night",
+          "sessionKey": "night:2026-05-18 21:00",
+          "scheduledStartAt": "2026-05-18T13:00:00.000Z",
+          "scheduledEndAt": "2026-05-19T01:00:00.000Z",
+          "clockInAt": "2026-05-18T19:15:25.606Z",
+          "clockInDetectedAt": "2026-05-18T19:15:25.606Z",
+          "clockInSource": "live-on",
+          "clockOutAt": null,
+          "clockOutDetectedAt": null,
+          "clockOutSource": null,
+          "clockOutReason": null,
+          "workedMinutes": 0,
+          "liveOffPeriods": [],
+          "dcPeriods": [],
+          "otType": null
+        }
+      ],
+      "activeSessionId": "night:2026-05-18-21-00:1779131725606",
+      "preShiftLiveAt": null,
+      "lastPreShiftWaitLogKey": null,
+      "pendingClockOut": null,
+      "attendanceEvents": [
+        {
+          "at": "2026-05-18T18:50:09.093Z",
+          "type": "clockout_candidate",
+          "source": "voice_leave",
+          "meta": {
+            "expiresAt": "2026-05-18T19:10:09.093Z",
+            "reason": "음성채널 이탈 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T18:53:47.414Z",
+          "type": "voice_join",
+          "source": "voice_state",
+          "meta": {
+            "live": false
+          }
+        },
+        {
+          "at": "2026-05-18T18:53:47.414Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T19:13:47.414Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T18:53:47.414Z",
+          "type": "clock_out_confirmed",
+          "source": "live-off-timeout",
+          "meta": {
+            "detectedAt": "2026-05-18T19:14:25.603Z",
+            "reason": "라이브 OFF 유예 초과 자동 퇴근"
+          }
+        },
+        {
+          "at": "2026-05-18T19:15:25.606Z",
+          "type": "clock_in_attempt",
+          "source": "live_on",
+          "meta": {
+            "shift": "night"
+          }
+        },
+        {
+          "at": "2026-05-18T19:15:25.606Z",
+          "type": "clock_in_confirmed",
+          "source": "live_on",
+          "meta": {
+            "detectedAt": "2026-05-18T19:15:25.606Z",
+            "preShift": false
+          }
+        }
+      ],
+      "lastEventKey": "clock_in_confirmed:live_on",
+      "lastEventAt": "2026-05-18T19:15:25.606Z",
+      "attendanceStatus": null,
+      "voiceStatus": null,
+      "attendanceStatusChangedAt": null,
+      "voiceStatusChangedAt": null,
+      "dayOffPresenceNotifiedFor": null,
+      "afterFinishPresenceNotifiedFor": null,
+      "finishedPresence": null,
+      "finalLeftAt": null
+    },
+    "859384661477556264": {
+      "id": "859384661477556264",
+      "name": "Ding-dong -H Night Time",
+      "shift": "night",
+      "checkedIn": false,
+      "dayOff": true,
+      "disconnected": false,
+      "disconnectedAt": null,
+      "isFinished": true,
+      "strikes": 2,
+      "points": 15,
+      "totalNormal": 2,
+      "totalLate": 1,
+      "totalAbsent": 1,
+      "totalEarly": 1,
+      "totalOT": 2,
+      "dcCount": 3,
+      "offCount": 1,
+      "lastActionAt": 0,
+      "fState": "LIVE_OFF",
+      "isOT": false,
+      "earlyOut": false,
+      "checkInTime": "09:01 PM",
+      "checkInRaw": "2026-05-18T13:01:36.830Z",
+      "status": "ontime",
+      "strikeReceivedThisShift": false,
+      "checkOutTime": "08:52 AM",
+      "checkOutRaw": "2026-05-18T00:52:37.618Z",
+      "voiceJoinedAt": null,
+      "liveOffWarnedFor": null,
+      "dashboardName": "Ding",
+      "lastLiveLogKey": "night:2026-05-18 21:00",
+      "shiftSessionKey": "night:2026-05-18 21:00",
+      "liveOffStartedAt": null,
+      "lastLiveOnAt": "2026-05-18T16:02:34.280Z",
+      "lastLiveOffAt": "2026-05-18T16:02:30.032Z",
+      "pendingManualOT": false,
+      "dayOffExpireAt": "2026-05-19T20:00:00.000Z",
+      "sessions": [
+        {
+          "id": "night:2026-05-18-21-00:1779109296830",
+          "shift": "night",
+          "sessionKey": "night:2026-05-18 21:00",
+          "scheduledStartAt": "2026-05-18T13:00:00.000Z",
+          "scheduledEndAt": "2026-05-19T01:00:00.000Z",
+          "clockInAt": "2026-05-18T13:01:36.830Z",
+          "clockInSource": "live-on",
+          "clockOutAt": null,
+          "clockOutSource": null,
+          "clockOutReason": null,
+          "workedMinutes": 0,
+          "liveOffPeriods": [
+            {
+              "startedAt": "2026-05-18T15:59:57.204Z",
+              "endedAt": "2026-05-18T16:01:07.791Z",
+              "minutes": 1,
+              "reason": "live-off"
+            },
+            {
+              "startedAt": "2026-05-18T16:02:30.032Z",
+              "endedAt": "2026-05-18T16:02:34.280Z",
+              "minutes": 0,
+              "reason": "live-off"
+            }
+          ],
+          "dcPeriods": [],
+          "otType": null
+        }
+      ],
+      "activeSessionId": "night:2026-05-18-21-00:1779109296830",
+      "preShiftLiveAt": null,
+      "lastPreShiftWaitLogKey": null,
+      "pendingClockOut": null,
+      "attendanceEvents": [
+        {
+          "at": "2026-05-19T01:05:17.412Z",
+          "type": "recorded_status_changed",
+          "source": "dayoff-auto-apply",
+          "meta": {
+            "reason": "approved-day-off-applied",
+            "attendanceStatus": {
+              "from": null,
+              "to": "DAY_OFF"
+            },
+            "voiceStatus": {
+              "from": null,
+              "to": "OFFLINE"
+            }
+          }
+        }
+      ],
+      "lastEventKey": "recorded_status_changed:dayoff-auto-apply",
+      "lastEventAt": "2026-05-19T01:05:17.412Z",
+      "attendanceStatus": "DAY_OFF",
+      "voiceStatus": "OFFLINE",
+      "attendanceStatusChangedAt": "2026-05-19T01:05:17.412Z",
+      "voiceStatusChangedAt": "2026-05-19T01:05:17.412Z",
+      "dayOffPresenceNotifiedFor": null,
+      "afterFinishPresenceNotifiedFor": null,
+      "finishedPresence": null,
+      "finalLeftAt": null
+    },
+    "790279096143446086": {
+      "id": "790279096143446086",
+      "name": "AB - P Night Time",
+      "shift": "night",
+      "checkedIn": true,
+      "dayOff": false,
+      "disconnected": false,
+      "disconnectedAt": null,
+      "isFinished": false,
+      "strikes": 2,
+      "points": -10,
+      "totalNormal": 0,
+      "totalLate": 1,
+      "totalAbsent": 1,
+      "totalEarly": 0,
+      "totalOT": 1,
+      "dcCount": 2,
+      "offCount": 1,
+      "lastActionAt": 0,
+      "fState": "LIVE_OFF",
+      "isOT": false,
+      "earlyOut": false,
+      "checkInTime": "09:48 PM",
+      "checkInRaw": "2026-05-18T13:48:05.030Z",
+      "status": "late",
+      "strikeReceivedThisShift": true,
+      "checkOutTime": "10:16 AM",
+      "checkOutRaw": "2026-05-17T02:16:48.360Z",
+      "dashboardName": "AB",
+      "shiftSessionKey": "night:2026-05-18 21:00",
+      "voiceJoinedAt": null,
+      "liveOffWarnedFor": null,
+      "lastLiveLogKey": "night:2026-05-18 21:00",
+      "liveOffStartedAt": null,
+      "lastLiveOnAt": "2026-05-18T13:48:05.030Z",
+      "lastLiveOffAt": null,
+      "pendingManualOT": false,
+      "dayOffExpireAt": null,
+      "sessions": [
+        {
+          "id": "night:2026-05-18-21-00:1779112085030",
+          "shift": "night",
+          "sessionKey": "night:2026-05-18 21:00",
+          "scheduledStartAt": "2026-05-18T13:00:00.000Z",
+          "scheduledEndAt": "2026-05-19T01:00:00.000Z",
+          "clockInAt": "2026-05-18T13:48:05.030Z",
+          "clockInSource": "live-on",
+          "clockOutAt": null,
+          "clockOutSource": null,
+          "clockOutReason": null,
+          "workedMinutes": 0,
+          "liveOffPeriods": [],
+          "dcPeriods": [],
+          "otType": null
+        }
+      ],
+      "activeSessionId": "night:2026-05-18-21-00:1779112085030",
+      "preShiftLiveAt": null,
+      "lastPreShiftWaitLogKey": null,
+      "pendingClockOut": null,
+      "attendanceEvents": [],
+      "lastEventKey": null,
+      "lastEventAt": null,
+      "attendanceStatus": null,
+      "voiceStatus": null,
+      "attendanceStatusChangedAt": null,
+      "voiceStatusChangedAt": null,
+      "dayOffPresenceNotifiedFor": null,
+      "afterFinishPresenceNotifiedFor": null,
+      "finishedPresence": null,
+      "finalLeftAt": null
+    },
+    "770881003778474025": {
+      "id": "770881003778474025",
+      "name": "denxie - H Trainee Night Time",
+      "shift": "night",
+      "checkedIn": true,
+      "dayOff": false,
+      "disconnected": false,
+      "disconnectedAt": null,
+      "isFinished": false,
+      "strikes": 4,
+      "points": 0,
+      "totalNormal": 1,
+      "totalLate": 1,
+      "totalAbsent": 3,
+      "totalEarly": 2,
+      "totalOT": 5,
+      "dcCount": 1,
+      "offCount": 0,
+      "lastActionAt": 0,
+      "fState": "ACTIVE",
+      "isOT": true,
+      "earlyOut": false,
+      "checkInTime": "11:24 PM",
+      "checkInRaw": "2026-05-18T15:24:49.519Z",
+      "status": "absent",
+      "strikeReceivedThisShift": true,
+      "checkOutTime": "10:55 PM",
+      "checkOutRaw": "2026-05-18T14:55:47.228Z",
+      "dashboardName": "denxie",
+      "voiceJoinedAt": null,
+      "liveOffWarnedFor": null,
+      "lastLiveLogKey": "night:2026-05-18 21:00",
+      "shiftSessionKey": "night:2026-05-18 21:00",
+      "liveOffStartedAt": null,
+      "lastLiveOnAt": "2026-05-18T15:24:49.519Z",
+      "lastLiveOffAt": "2026-05-18T15:16:08.590Z",
+      "pendingManualOT": false,
+      "dayOffExpireAt": null,
+      "sessions": [
+        {
+          "id": "night:2026-05-18-21-00:1779109213488",
+          "shift": "night",
+          "sessionKey": "night:2026-05-18 21:00",
+          "scheduledStartAt": "2026-05-18T13:00:00.000Z",
+          "scheduledEndAt": "2026-05-19T01:00:00.000Z",
+          "clockInAt": "2026-05-18T13:00:13.488Z",
+          "clockInSource": "live-on",
+          "clockOutAt": "2026-05-18T14:55:47.228Z",
+          "clockOutSource": "live-off-timeout",
+          "clockOutReason": "라이브 OFF 유예 초과 자동 퇴근",
+          "workedMinutes": 115,
+          "liveOffPeriods": [
+            {
+              "startedAt": "2026-05-18T14:55:47.228Z",
+              "endedAt": "2026-05-18T14:55:47.228Z",
+              "minutes": 0,
+              "reason": "live-off"
+            }
+          ],
+          "dcPeriods": [],
+          "otType": null
+        },
+        {
+          "id": "night:2026-05-18-21-00:1779117889519",
+          "shift": "night",
+          "sessionKey": "night:2026-05-18 21:00",
+          "scheduledStartAt": "2026-05-18T13:00:00.000Z",
+          "scheduledEndAt": "2026-05-19T01:00:00.000Z",
+          "clockInAt": "2026-05-18T15:24:49.519Z",
+          "clockInSource": "live-on",
+          "clockOutAt": null,
+          "clockOutSource": null,
+          "clockOutReason": null,
+          "workedMinutes": 0,
+          "liveOffPeriods": [],
+          "dcPeriods": [],
+          "otType": "AUTO",
+          "otStartedAt": "2026-05-19T01:00:00.000Z"
+        }
+      ],
+      "activeSessionId": "night:2026-05-18-21-00:1779117889519",
+      "preShiftLiveAt": null,
+      "lastPreShiftWaitLogKey": null,
+      "pendingClockOut": null,
+      "attendanceEvents": [
+        {
+          "at": "2026-05-19T01:00:00.000Z",
+          "type": "recorded_status_changed",
+          "source": "auto-overtime-check",
+          "meta": {
+            "reason": "auto-ot-started",
+            "attendanceStatus": {
+              "from": null,
+              "to": "OVERTIME"
+            },
+            "voiceStatus": {
+              "from": null,
+              "to": "LIVE_ON"
+            }
+          }
+        }
+      ],
+      "lastEventKey": "recorded_status_changed:auto-overtime-check",
+      "lastEventAt": "2026-05-19T01:00:00.000Z",
+      "attendanceStatus": "OVERTIME",
+      "voiceStatus": "LIVE_ON",
+      "attendanceStatusChangedAt": "2026-05-19T01:00:00.000Z",
+      "voiceStatusChangedAt": "2026-05-19T01:00:00.000Z",
+      "dayOffPresenceNotifiedFor": null,
+      "afterFinishPresenceNotifiedFor": null,
+      "finishedPresence": null,
+      "finalLeftAt": null
+    },
+    "745826535881179162": {
+      "id": "745826535881179162",
+      "name": "Chuwi - P Night Time Manager",
+      "shift": "night",
+      "checkedIn": true,
+      "dayOff": false,
+      "disconnected": false,
+      "disconnectedAt": null,
+      "isFinished": false,
+      "strikes": 3,
+      "points": -5,
+      "totalNormal": 1,
+      "totalLate": 2,
+      "totalAbsent": 1,
+      "totalEarly": 0,
+      "totalOT": 1,
+      "dcCount": 4,
+      "offCount": 0,
+      "lastActionAt": 0,
+      "fState": "LIVE_OFF",
+      "isOT": false,
+      "earlyOut": false,
+      "checkInTime": "09:48 PM",
+      "checkInRaw": "2026-05-18T13:48:05.030Z",
+      "status": "late",
+      "strikeReceivedThisShift": true,
+      "checkOutTime": "09:08 AM",
+      "checkOutRaw": "2026-05-18T01:08:39.723Z",
+      "voiceJoinedAt": null,
+      "liveOffWarnedFor": null,
+      "dashboardName": "Chuwi",
+      "lastLiveLogKey": "night:2026-05-18 21:00",
+      "shiftSessionKey": "night:2026-05-18 21:00",
+      "liveOffStartedAt": null,
+      "lastLiveOnAt": "2026-05-18T18:57:35.494Z",
+      "lastLiveOffAt": "2026-05-18T18:53:25.533Z",
+      "pendingManualOT": false,
+      "dayOffExpireAt": null,
+      "sessions": [
+        {
+          "id": "night:2026-05-18-21-00:1779112085030",
+          "shift": "night",
+          "sessionKey": "night:2026-05-18 21:00",
+          "scheduledStartAt": "2026-05-18T13:00:00.000Z",
+          "scheduledEndAt": "2026-05-19T01:00:00.000Z",
+          "clockInAt": "2026-05-18T13:48:05.030Z",
+          "clockInSource": "live-on",
+          "clockOutAt": null,
+          "clockOutSource": null,
+          "clockOutReason": null,
+          "workedMinutes": 0,
+          "liveOffPeriods": [
+            {
+              "startedAt": "2026-05-18T15:27:51.987Z",
+              "endedAt": "2026-05-18T15:40:16.285Z",
+              "minutes": 12,
+              "reason": "live-off"
+            },
+            {
+              "startedAt": "2026-05-18T16:01:38.283Z",
+              "endedAt": "2026-05-18T16:01:54.659Z",
+              "minutes": 0,
+              "reason": "live-off"
+            },
+            {
+              "startedAt": "2026-05-18T16:15:54.325Z",
+              "endedAt": "2026-05-18T16:32:11.461Z",
+              "minutes": 16,
+              "reason": "live-off"
+            },
+            {
+              "startedAt": "2026-05-18T18:46:38.932Z",
+              "endedAt": "2026-05-18T18:57:35.494Z",
+              "minutes": 10,
+              "reason": "live-off"
+            }
+          ],
+          "dcPeriods": [],
+          "otType": null
+        }
+      ],
+      "activeSessionId": "night:2026-05-18-21-00:1779112085030",
+      "preShiftLiveAt": null,
+      "lastPreShiftWaitLogKey": null,
+      "pendingClockOut": null,
+      "attendanceEvents": [
+        {
+          "at": "2026-05-18T18:46:38.932Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T19:06:38.932Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T18:47:25.481Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T19:07:25.481Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T18:48:25.493Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T19:08:25.493Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T18:49:25.502Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T19:09:25.502Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T18:50:25.516Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T19:10:25.516Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T18:51:25.520Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T19:11:25.520Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T18:52:25.762Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T19:12:25.762Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T18:53:25.533Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T19:13:25.533Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T18:57:35.494Z",
+          "type": "clockout_candidate_recovered",
+          "source": "live_off",
+          "meta": {
+            "reason": "live_on_recovered"
+          }
+        }
+      ],
+      "lastEventKey": "clockout_candidate_recovered:live_off",
+      "lastEventAt": "2026-05-18T18:57:35.494Z",
+      "attendanceStatus": null,
+      "voiceStatus": null,
+      "attendanceStatusChangedAt": null,
+      "voiceStatusChangedAt": null,
+      "dayOffPresenceNotifiedFor": null,
+      "afterFinishPresenceNotifiedFor": null,
+      "finishedPresence": null,
+      "finalLeftAt": null
+    },
+    "713662643679920161": {
+      "id": "713662643679920161",
+      "name": "Brave - P Night Time",
+      "shift": "night",
+      "checkedIn": true,
+      "dayOff": false,
+      "disconnected": false,
+      "disconnectedAt": null,
+      "isFinished": false,
+      "strikes": 4,
+      "points": -40,
+      "totalNormal": 2,
+      "totalLate": 1,
+      "totalAbsent": 3,
+      "totalEarly": 4,
+      "totalOT": 3,
+      "dcCount": 6,
+      "offCount": 0,
+      "lastActionAt": 0,
+      "fState": "LIVE_OFF",
+      "isOT": false,
+      "earlyOut": false,
+      "checkInTime": "03:54 AM",
+      "checkInRaw": "2026-05-18T19:54:08.392Z",
+      "status": "absent",
+      "strikeReceivedThisShift": true,
+      "checkOutTime": "03:31 AM",
+      "checkOutRaw": "2026-05-18T19:31:50.275Z",
+      "voiceJoinedAt": null,
+      "liveOffWarnedFor": null,
+      "dashboardName": "Brave",
+      "lastLiveLogKey": "night:2026-05-18 21:00",
+      "shiftSessionKey": "night:2026-05-18 21:00",
+      "liveOffStartedAt": null,
+      "lastLiveOnAt": "2026-05-18T19:54:08.392Z",
+      "lastLiveOffAt": "2026-05-18T19:31:50.275Z",
+      "pendingManualOT": false,
+      "dayOffExpireAt": null,
+      "sessions": [
+        {
+          "id": "night:2026-05-17-21-00:1779069746199",
+          "shift": "night",
+          "sessionKey": "night:2026-05-17 21:00",
+          "scheduledStartAt": "2026-05-17T13:00:00.000Z",
+          "scheduledEndAt": "2026-05-18T01:00:00.000Z",
+          "clockInAt": "2026-05-18T02:02:26.199Z",
+          "clockInSource": "live-on",
+          "clockOutAt": "2026-05-18T02:05:31.475Z",
+          "clockOutSource": "live-off-timeout",
+          "clockOutReason": "라이브 OFF 유예 초과 자동 퇴근",
+          "workedMinutes": 3,
+          "liveOffPeriods": [
+            {
+              "startedAt": "2026-05-18T02:05:31.475Z",
+              "endedAt": "2026-05-18T02:05:31.475Z",
+              "minutes": 0,
+              "reason": "live-off"
+            }
+          ],
+          "dcPeriods": [],
+          "otType": "AUTO"
+        },
+        {
+          "id": "night:2026-05-18-21-00:1779109200000",
+          "shift": "night",
+          "sessionKey": "night:2026-05-18 21:00",
+          "scheduledStartAt": "2026-05-18T13:00:00.000Z",
+          "scheduledEndAt": "2026-05-19T01:00:00.000Z",
+          "clockInAt": "2026-05-18T13:00:00.000Z",
+          "clockInSource": "pre-shift-live",
+          "clockOutAt": "2026-05-18T19:31:50.275Z",
+          "clockOutSource": "live-off-timeout",
+          "clockOutReason": "라이브 OFF 유예 초과 자동 퇴근",
+          "workedMinutes": 391,
+          "liveOffPeriods": [
+            {
+              "startedAt": "2026-05-18T14:13:14.034Z",
+              "endedAt": "2026-05-18T14:13:19.956Z",
+              "minutes": 0,
+              "reason": "live-off"
+            },
+            {
+              "startedAt": "2026-05-18T15:32:26.605Z",
+              "endedAt": "2026-05-18T15:34:28.384Z",
+              "minutes": 2,
+              "reason": "live-off"
+            },
+            {
+              "startedAt": "2026-05-18T15:38:50.413Z",
+              "endedAt": "2026-05-18T15:39:52.597Z",
+              "minutes": 1,
+              "reason": "live-off"
+            },
+            {
+              "startedAt": "2026-05-18T15:46:07.047Z",
+              "endedAt": "2026-05-18T15:46:20.149Z",
+              "minutes": 0,
+              "reason": "live-off"
+            },
+            {
+              "startedAt": "2026-05-18T15:46:55.688Z",
+              "endedAt": "2026-05-18T15:50:53.305Z",
+              "minutes": 3,
+              "reason": "live-off"
+            },
+            {
+              "startedAt": "2026-05-18T15:51:06.631Z",
+              "endedAt": "2026-05-18T15:51:35.263Z",
+              "minutes": 0,
+              "reason": "live-off"
+            },
+            {
+              "startedAt": "2026-05-18T15:58:23.914Z",
+              "endedAt": "2026-05-18T16:00:41.767Z",
+              "minutes": 2,
+              "reason": "live-off"
+            },
+            {
+              "startedAt": "2026-05-18T16:08:02.973Z",
+              "endedAt": "2026-05-18T16:09:48.084Z",
+              "minutes": 1,
+              "reason": "live-off"
+            },
+            {
+              "startedAt": "2026-05-18T16:28:39.782Z",
+              "endedAt": "2026-05-18T16:32:08.008Z",
+              "minutes": 3,
+              "reason": "live-off"
+            },
+            {
+              "startedAt": "2026-05-18T16:59:08.804Z",
+              "endedAt": "2026-05-18T16:59:16.084Z",
+              "minutes": 0,
+              "reason": "live-off"
+            },
+            {
+              "startedAt": "2026-05-18T17:02:09.454Z",
+              "endedAt": "2026-05-18T17:02:12.842Z",
+              "minutes": 0,
+              "reason": "live-off"
+            },
+            {
+              "startedAt": "2026-05-18T17:08:58.117Z",
+              "endedAt": "2026-05-18T17:34:24.249Z",
+              "minutes": 25,
+              "reason": "live-off"
+            },
+            {
+              "startedAt": "2026-05-18T18:53:39.586Z",
+              "endedAt": "2026-05-18T18:53:42.754Z",
+              "minutes": 0,
+              "reason": "live-off"
+            },
+            {
+              "startedAt": "2026-05-18T19:31:50.275Z",
+              "endedAt": "2026-05-18T19:31:50.275Z",
+              "minutes": 0,
+              "reason": "live-off"
+            }
+          ],
+          "dcPeriods": [
+            {
+              "startedAt": "2026-05-18T16:52:24.774Z",
+              "endedAt": "2026-05-18T19:31:50.275Z",
+              "minutes": 159,
+              "reason": "voice-left"
+            }
+          ],
+          "otType": null,
+          "firstLiveOnAt": "2026-05-18T12:54:58.571Z",
+          "clockOutDetectedAt": "2026-05-18T19:53:08.385Z"
+        },
+        {
+          "id": "night:2026-05-18-21-00:1779134048392",
+          "shift": "night",
+          "sessionKey": "night:2026-05-18 21:00",
+          "scheduledStartAt": "2026-05-18T13:00:00.000Z",
+          "scheduledEndAt": "2026-05-19T01:00:00.000Z",
+          "clockInAt": "2026-05-18T19:54:08.392Z",
+          "clockInDetectedAt": "2026-05-18T19:54:08.392Z",
+          "clockInSource": "live-on",
+          "clockOutAt": null,
+          "clockOutDetectedAt": null,
+          "clockOutSource": null,
+          "clockOutReason": null,
+          "workedMinutes": 0,
+          "liveOffPeriods": [],
+          "dcPeriods": [],
+          "otType": null
+        }
+      ],
+      "activeSessionId": "night:2026-05-18-21-00:1779134048392",
+      "preShiftLiveAt": null,
+      "lastPreShiftWaitLogKey": null,
+      "pendingClockOut": null,
+      "attendanceEvents": [
+        {
+          "at": "2026-05-18T16:52:24.774Z",
+          "type": "clockout_candidate",
+          "source": "voice_leave",
+          "meta": {
+            "expiresAt": "2026-05-18T17:12:24.774Z",
+            "reason": "음성채널 이탈 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T16:59:08.804Z",
+          "type": "voice_join",
+          "source": "voice_state",
+          "meta": {
+            "live": false
+          }
+        },
+        {
+          "at": "2026-05-18T16:59:08.804Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T17:19:08.804Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T16:59:16.084Z",
+          "type": "clockout_candidate_recovered",
+          "source": "live_off",
+          "meta": {
+            "reason": "live_on_recovered"
+          }
+        },
+        {
+          "at": "2026-05-18T17:02:09.454Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T17:22:09.454Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T17:02:12.842Z",
+          "type": "clockout_candidate_recovered",
+          "source": "live_off",
+          "meta": {
+            "reason": "live_on_recovered"
+          }
+        },
+        {
+          "at": "2026-05-18T17:08:58.117Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T17:28:58.117Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T17:09:55.195Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T17:29:55.195Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T17:10:55.415Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T17:30:55.415Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T17:12:33.812Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T17:32:33.812Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T17:13:33.814Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T17:33:33.814Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T17:14:33.821Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T17:34:33.821Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T17:15:33.825Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T17:35:33.825Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T17:16:33.830Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T17:36:33.830Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T17:17:33.835Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T17:37:33.835Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T17:18:33.848Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T17:38:33.848Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T17:19:33.862Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T17:39:33.862Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T17:20:33.870Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T17:40:33.870Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T17:21:33.881Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T17:41:33.881Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T17:22:33.884Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T17:42:33.884Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T17:23:33.889Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T17:43:33.889Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T17:24:33.888Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T17:44:33.888Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T17:25:33.900Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T17:45:33.900Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T17:26:33.910Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T17:46:33.910Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T17:27:33.924Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T17:47:33.924Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T17:28:33.933Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T17:48:33.933Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T17:29:33.938Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T17:49:33.938Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T17:30:33.939Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T17:50:33.939Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T17:31:34.197Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T17:51:34.197Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T17:32:33.947Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T17:52:33.947Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T17:33:33.949Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T17:53:33.949Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T17:34:24.249Z",
+          "type": "clockout_candidate_recovered",
+          "source": "live_off",
+          "meta": {
+            "reason": "live_on_recovered"
+          }
+        },
+        {
+          "at": "2026-05-18T18:50:14.778Z",
+          "type": "clockout_candidate",
+          "source": "voice_leave",
+          "meta": {
+            "expiresAt": "2026-05-18T19:10:14.778Z",
+            "reason": "음성채널 이탈 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T18:53:39.586Z",
+          "type": "voice_join",
+          "source": "voice_state",
+          "meta": {
+            "live": false
+          }
+        },
+        {
+          "at": "2026-05-18T18:53:39.586Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T19:13:39.586Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T18:53:42.754Z",
+          "type": "clockout_candidate_recovered",
+          "source": "live_off",
+          "meta": {
+            "reason": "live_on_recovered"
+          }
+        },
+        {
+          "at": "2026-05-18T19:31:50.275Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T19:51:50.275Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T19:31:50.275Z",
+          "type": "clock_out_confirmed",
+          "source": "live-off-timeout",
+          "meta": {
+            "detectedAt": "2026-05-18T19:53:08.385Z",
+            "reason": "라이브 OFF 유예 초과 자동 퇴근"
+          }
+        },
+        {
+          "at": "2026-05-18T19:54:08.392Z",
+          "type": "clock_in_attempt",
+          "source": "live_on",
+          "meta": {
+            "shift": "night"
+          }
+        },
+        {
+          "at": "2026-05-18T19:54:08.392Z",
+          "type": "clock_in_confirmed",
+          "source": "live_on",
+          "meta": {
+            "detectedAt": "2026-05-18T19:54:08.392Z",
+            "preShift": false
+          }
+        }
+      ],
+      "lastEventKey": "clock_in_confirmed:live_on",
+      "lastEventAt": "2026-05-18T19:54:08.392Z",
+      "attendanceStatus": null,
+      "voiceStatus": null,
+      "attendanceStatusChangedAt": null,
+      "voiceStatusChangedAt": null,
+      "dayOffPresenceNotifiedFor": null,
+      "afterFinishPresenceNotifiedFor": null,
+      "finishedPresence": null,
+      "finalLeftAt": null
+    },
+    "661860684883165184": {
+      "id": "661860684883165184",
+      "name": "ROBIN - H Night Time",
+      "shift": "night",
+      "checkedIn": true,
+      "dayOff": false,
+      "disconnected": false,
+      "disconnectedAt": null,
+      "isFinished": false,
+      "strikes": 2,
+      "points": -20,
+      "totalNormal": 1,
+      "totalLate": 1,
+      "totalAbsent": 1,
+      "totalEarly": 2,
+      "totalOT": 1,
+      "dcCount": 4,
+      "offCount": 1,
+      "lastActionAt": 0,
+      "fState": "LIVE_OFF",
+      "isOT": false,
+      "earlyOut": false,
+      "checkInTime": "03:17 AM",
+      "checkInRaw": "2026-05-18T19:17:50.422Z",
+      "status": "absent",
+      "strikeReceivedThisShift": true,
+      "checkOutTime": "02:06 AM",
+      "checkOutRaw": "2026-05-18T18:06:32.922Z",
+      "dashboardName": "ROBIN",
+      "shiftSessionKey": "night:2026-05-18 21:00",
+      "voiceJoinedAt": null,
+      "liveOffWarnedFor": null,
+      "lastLiveLogKey": "night:2026-05-18 21:00",
+      "liveOffStartedAt": null,
+      "lastLiveOnAt": "2026-05-18T19:17:50.422Z",
+      "lastLiveOffAt": "2026-05-18T14:18:59.253Z",
+      "pendingManualOT": false,
+      "dayOffExpireAt": null,
+      "sessions": [
+        {
+          "id": "night:2026-05-18-21-00:1779109271944",
+          "shift": "night",
+          "sessionKey": "night:2026-05-18 21:00",
+          "scheduledStartAt": "2026-05-18T13:00:00.000Z",
+          "scheduledEndAt": "2026-05-19T01:00:00.000Z",
+          "clockInAt": "2026-05-18T13:01:11.944Z",
+          "clockInSource": "live-on",
+          "clockOutAt": "2026-05-18T13:48:05.030Z",
+          "clockOutSource": "live-off-timeout",
+          "clockOutReason": "라이브 OFF 유예 초과 자동 퇴근",
+          "workedMinutes": 46,
+          "liveOffPeriods": [
+            {
+              "startedAt": "2026-05-18T13:48:05.030Z",
+              "endedAt": "2026-05-18T13:48:05.030Z",
+              "minutes": 0,
+              "reason": "live-off"
+            }
+          ],
+          "dcPeriods": [],
+          "otType": null
+        },
+        {
+          "id": "night:2026-05-18-21-00:1779113359195",
+          "shift": "night",
+          "sessionKey": "night:2026-05-18 21:00",
+          "scheduledStartAt": "2026-05-18T13:00:00.000Z",
+          "scheduledEndAt": "2026-05-19T01:00:00.000Z",
+          "clockInAt": "2026-05-18T14:09:19.195Z",
+          "clockInSource": "live-on",
+          "clockOutAt": "2026-05-18T18:06:32.922Z",
+          "clockOutSource": "dc-timeout",
+          "clockOutReason": "DC 유예 시간 초과 (조기 퇴근)",
+          "workedMinutes": 237,
+          "liveOffPeriods": [
+            {
+              "startedAt": "2026-05-18T14:16:31.194Z",
+              "endedAt": "2026-05-18T14:19:43.990Z",
+              "minutes": 3,
+              "reason": "live-off"
+            }
+          ],
+          "dcPeriods": [
+            {
+              "startedAt": "2026-05-18T17:14:26.617Z",
+              "endedAt": "2026-05-18T18:06:32.922Z",
+              "minutes": 52,
+              "reason": "voice-left"
+            }
+          ],
+          "otType": null,
+          "clockOutDetectedAt": "2026-05-18T18:31:25.352Z"
+        },
+        {
+          "id": "night:2026-05-18-21-00:1779131870422",
+          "shift": "night",
+          "sessionKey": "night:2026-05-18 21:00",
+          "scheduledStartAt": "2026-05-18T13:00:00.000Z",
+          "scheduledEndAt": "2026-05-19T01:00:00.000Z",
+          "clockInAt": "2026-05-18T19:17:50.422Z",
+          "clockInDetectedAt": "2026-05-18T19:17:50.422Z",
+          "clockInSource": "live-on",
+          "clockOutAt": null,
+          "clockOutDetectedAt": null,
+          "clockOutSource": null,
+          "clockOutReason": null,
+          "workedMinutes": 0,
+          "liveOffPeriods": [],
+          "dcPeriods": [],
+          "otType": null
+        }
+      ],
+      "activeSessionId": "night:2026-05-18-21-00:1779131870422",
+      "preShiftLiveAt": null,
+      "lastPreShiftWaitLogKey": null,
+      "pendingClockOut": null,
+      "attendanceEvents": [
+        {
+          "at": "2026-05-18T17:14:26.617Z",
+          "type": "clockout_candidate",
+          "source": "voice_leave",
+          "meta": {
+            "expiresAt": "2026-05-18T17:34:26.617Z",
+            "reason": "음성채널 이탈 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T18:06:32.922Z",
+          "type": "clockout_candidate",
+          "source": "voice_leave",
+          "meta": {
+            "expiresAt": "2026-05-18T18:26:32.922Z",
+            "reason": "음성채널 이탈 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T18:06:32.922Z",
+          "type": "clock_out_confirmed",
+          "source": "dc-timeout",
+          "meta": {
+            "detectedAt": "2026-05-18T18:31:25.352Z",
+            "reason": "DC 유예 시간 초과 (조기 퇴근)"
+          }
+        },
+        {
+          "at": "2026-05-18T19:16:34.797Z",
+          "type": "voice_join",
+          "source": "voice_state",
+          "meta": {
+            "live": false
+          }
+        },
+        {
+          "at": "2026-05-18T19:17:50.422Z",
+          "type": "clock_in_attempt",
+          "source": "live_on",
+          "meta": {
+            "shift": "night"
+          }
+        },
+        {
+          "at": "2026-05-18T19:17:50.422Z",
+          "type": "clock_in_confirmed",
+          "source": "live_on",
+          "meta": {
+            "detectedAt": "2026-05-18T19:17:50.422Z",
+            "preShift": false
+          }
+        }
+      ],
+      "lastEventKey": "clock_in_confirmed:live_on",
+      "lastEventAt": "2026-05-18T19:17:50.422Z",
+      "attendanceStatus": null,
+      "voiceStatus": null,
+      "attendanceStatusChangedAt": null,
+      "voiceStatusChangedAt": null,
+      "dayOffPresenceNotifiedFor": null,
+      "afterFinishPresenceNotifiedFor": null,
+      "finishedPresence": null,
+      "finalLeftAt": null
+    },
+    "551041561287458826": {
+      "id": "551041561287458826",
+      "name": "Shiijiro - P Night Time",
+      "shift": "night",
+      "checkedIn": true,
+      "dayOff": false,
+      "disconnected": false,
+      "disconnectedAt": null,
+      "isFinished": false,
+      "strikes": 2,
+      "points": 5,
+      "totalNormal": 2,
+      "totalLate": 1,
+      "totalAbsent": 1,
+      "totalEarly": 2,
+      "totalOT": 2,
+      "dcCount": 4,
+      "offCount": 0,
+      "lastActionAt": 0,
+      "fState": "LIVE_OFF",
+      "isOT": false,
+      "earlyOut": false,
+      "checkInTime": "09:00 PM",
+      "checkInRaw": "2026-05-18T13:00:14.303Z",
+      "status": "ontime",
+      "strikeReceivedThisShift": false,
+      "checkOutTime": "08:52 AM",
+      "checkOutRaw": "2026-05-18T00:52:39.616Z",
+      "voiceJoinedAt": null,
+      "liveOffWarnedFor": null,
+      "dashboardName": "Shiijiro",
+      "lastLiveLogKey": "night:2026-05-18 21:00",
+      "shiftSessionKey": "night:2026-05-18 21:00",
+      "liveOffStartedAt": null,
+      "lastLiveOnAt": "2026-05-18T19:18:00.562Z",
+      "lastLiveOffAt": "2026-05-18T19:17:54.181Z",
+      "pendingManualOT": false,
+      "dayOffExpireAt": null,
+      "sessions": [
+        {
+          "id": "night:2026-05-18-21-00:1779109214303",
+          "shift": "night",
+          "sessionKey": "night:2026-05-18 21:00",
+          "scheduledStartAt": "2026-05-18T13:00:00.000Z",
+          "scheduledEndAt": "2026-05-19T01:00:00.000Z",
+          "clockInAt": "2026-05-18T13:00:14.303Z",
+          "clockInSource": "live-on",
+          "clockOutAt": null,
+          "clockOutSource": null,
+          "clockOutReason": null,
+          "workedMinutes": 0,
+          "liveOffPeriods": [
+            {
+              "startedAt": "2026-05-18T14:12:04.477Z",
+              "endedAt": "2026-05-18T14:12:09.542Z",
+              "minutes": 0,
+              "reason": "live-off"
+            },
+            {
+              "startedAt": "2026-05-18T15:23:10.020Z",
+              "endedAt": "2026-05-18T15:23:14.394Z",
+              "minutes": 0,
+              "reason": "live-off"
+            },
+            {
+              "startedAt": "2026-05-18T15:27:51.096Z",
+              "endedAt": "2026-05-18T15:27:57.460Z",
+              "minutes": 0,
+              "reason": "live-off"
+            },
+            {
+              "startedAt": "2026-05-18T19:17:54.181Z",
+              "endedAt": "2026-05-18T19:18:00.562Z",
+              "minutes": 0,
+              "reason": "live-off"
+            }
+          ],
+          "dcPeriods": [],
+          "otType": null
+        }
+      ],
+      "activeSessionId": "night:2026-05-18-21-00:1779109214303",
+      "preShiftLiveAt": null,
+      "lastPreShiftWaitLogKey": null,
+      "pendingClockOut": null,
+      "attendanceEvents": [
+        {
+          "at": "2026-05-18T19:17:54.181Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T19:37:54.181Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T19:18:00.562Z",
+          "type": "clockout_candidate_recovered",
+          "source": "live_off",
+          "meta": {
+            "reason": "live_on_recovered"
+          }
+        }
+      ],
+      "lastEventKey": "clockout_candidate_recovered:live_off",
+      "lastEventAt": "2026-05-18T19:18:00.562Z",
+      "attendanceStatus": null,
+      "voiceStatus": null,
+      "attendanceStatusChangedAt": null,
+      "voiceStatusChangedAt": null,
+      "dayOffPresenceNotifiedFor": null,
+      "afterFinishPresenceNotifiedFor": null,
+      "finishedPresence": null,
+      "finalLeftAt": null
+    },
+    "490914201179652126": {
+      "id": "490914201179652126",
+      "name": "Cee - H Night Time",
+      "shift": "night",
+      "checkedIn": true,
+      "dayOff": false,
+      "disconnected": false,
+      "disconnectedAt": null,
+      "isFinished": false,
+      "strikes": 2,
+      "points": -20,
+      "totalNormal": 0,
+      "totalLate": 1,
+      "totalAbsent": 1,
+      "totalEarly": 1,
+      "totalOT": 1,
+      "dcCount": 5,
+      "offCount": 1,
+      "lastActionAt": 0,
+      "fState": "LIVE_OFF",
+      "isOT": false,
+      "earlyOut": false,
+      "checkInTime": "09:48 PM",
+      "checkInRaw": "2026-05-18T13:48:05.030Z",
+      "status": "late",
+      "strikeReceivedThisShift": true,
+      "checkOutTime": "08:50 AM",
+      "checkOutRaw": "2026-05-17T00:50:57.351Z",
+      "dashboardName": "Cee",
+      "shiftSessionKey": "night:2026-05-18 21:00",
+      "voiceJoinedAt": null,
+      "liveOffWarnedFor": null,
+      "lastLiveLogKey": "night:2026-05-18 21:00",
+      "liveOffStartedAt": null,
+      "lastLiveOnAt": "2026-05-18T15:51:06.235Z",
+      "lastLiveOffAt": "2026-05-18T15:51:01.727Z",
+      "pendingManualOT": false,
+      "dayOffExpireAt": null,
+      "sessions": [
+        {
+          "id": "night:2026-05-18-21-00:1779112085030",
+          "shift": "night",
+          "sessionKey": "night:2026-05-18 21:00",
+          "scheduledStartAt": "2026-05-18T13:00:00.000Z",
+          "scheduledEndAt": "2026-05-19T01:00:00.000Z",
+          "clockInAt": "2026-05-18T13:48:05.030Z",
+          "clockInSource": "live-on",
+          "clockOutAt": null,
+          "clockOutSource": null,
+          "clockOutReason": null,
+          "workedMinutes": 0,
+          "liveOffPeriods": [
+            {
+              "startedAt": "2026-05-18T14:46:51.805Z",
+              "endedAt": "2026-05-18T14:50:51.184Z",
+              "minutes": 3,
+              "reason": "live-off"
+            },
+            {
+              "startedAt": "2026-05-18T15:38:14.803Z",
+              "endedAt": "2026-05-18T15:38:22.494Z",
+              "minutes": 0,
+              "reason": "live-off"
+            },
+            {
+              "startedAt": "2026-05-18T15:46:50.513Z",
+              "endedAt": "2026-05-18T15:46:56.576Z",
+              "minutes": 0,
+              "reason": "live-off"
+            },
+            {
+              "startedAt": "2026-05-18T15:51:01.727Z",
+              "endedAt": "2026-05-18T15:51:06.235Z",
+              "minutes": 0,
+              "reason": "live-off"
+            }
+          ],
+          "dcPeriods": [
+            {
+              "startedAt": "2026-05-18T14:46:46.900Z",
+              "endedAt": "2026-05-18T14:50:51.184Z",
+              "minutes": 4,
+              "reason": "voice-left"
+            }
+          ],
+          "otType": null
+        }
+      ],
+      "activeSessionId": "night:2026-05-18-21-00:1779112085030",
+      "preShiftLiveAt": null,
+      "lastPreShiftWaitLogKey": null,
+      "pendingClockOut": null,
+      "attendanceEvents": [],
+      "lastEventKey": null,
+      "lastEventAt": null,
+      "attendanceStatus": null,
+      "voiceStatus": null,
+      "attendanceStatusChangedAt": null,
+      "voiceStatusChangedAt": null,
+      "dayOffPresenceNotifiedFor": null,
+      "afterFinishPresenceNotifiedFor": null,
+      "finishedPresence": null,
+      "finalLeftAt": null
+    },
+    "462691437197262850": {
+      "id": "462691437197262850",
+      "name": "Gab - P Night Time",
+      "shift": "night",
+      "checkedIn": true,
+      "dayOff": false,
+      "disconnected": false,
+      "disconnectedAt": null,
+      "isFinished": false,
+      "strikes": 2,
+      "points": 15,
+      "totalNormal": 1,
+      "totalLate": 1,
+      "totalAbsent": 1,
+      "totalEarly": 0,
+      "totalOT": 2,
+      "dcCount": 2,
+      "offCount": 0,
+      "lastActionAt": 0,
+      "fState": "LIVE_OFF",
+      "isOT": false,
+      "earlyOut": false,
+      "checkInTime": "09:48 PM",
+      "checkInRaw": "2026-05-18T13:48:05.030Z",
+      "status": "late",
+      "strikeReceivedThisShift": true,
+      "checkOutTime": "09:01 AM",
+      "checkOutRaw": "2026-05-18T01:01:11.746Z",
+      "dashboardName": "Gab",
+      "voiceJoinedAt": null,
+      "liveOffWarnedFor": null,
+      "lastLiveLogKey": "night:2026-05-18 21:00",
+      "shiftSessionKey": "night:2026-05-18 21:00",
+      "liveOffStartedAt": null,
+      "lastLiveOnAt": "2026-05-18T13:48:05.030Z",
+      "lastLiveOffAt": "2026-05-18T13:01:00.545Z",
+      "pendingManualOT": false,
+      "dayOffExpireAt": null,
+      "sessions": [
+        {
+          "id": "night:2026-05-18-21-00:1779112085030",
+          "shift": "night",
+          "sessionKey": "night:2026-05-18 21:00",
+          "scheduledStartAt": "2026-05-18T13:00:00.000Z",
+          "scheduledEndAt": "2026-05-19T01:00:00.000Z",
+          "clockInAt": "2026-05-18T13:48:05.030Z",
+          "clockInSource": "live-on",
+          "clockOutAt": null,
+          "clockOutSource": null,
+          "clockOutReason": null,
+          "workedMinutes": 0,
+          "liveOffPeriods": [],
+          "dcPeriods": [],
+          "otType": null
+        }
+      ],
+      "activeSessionId": "night:2026-05-18-21-00:1779112085030",
+      "preShiftLiveAt": null,
+      "lastPreShiftWaitLogKey": null,
+      "pendingClockOut": null,
+      "attendanceEvents": [],
+      "lastEventKey": null,
+      "lastEventAt": null,
+      "attendanceStatus": null,
+      "voiceStatus": null,
+      "attendanceStatusChangedAt": null,
+      "voiceStatusChangedAt": null,
+      "dayOffPresenceNotifiedFor": null,
+      "afterFinishPresenceNotifiedFor": null,
+      "finishedPresence": null,
+      "finalLeftAt": null
+    },
+    "1344281692755591200": {
+      "id": "1344281692755591200",
+      "name": "Daba - P  Night time(Ryuji)",
+      "shift": "night",
+      "checkedIn": true,
+      "dayOff": false,
+      "disconnected": false,
+      "disconnectedAt": null,
+      "isFinished": false,
+      "strikes": 1,
+      "points": 10,
+      "totalNormal": 1,
+      "totalLate": 1,
+      "totalAbsent": 0,
+      "totalEarly": 1,
+      "totalOT": 1,
+      "dcCount": 1,
+      "offCount": 0,
+      "lastActionAt": 0,
+      "fState": "LIVE_OFF",
+      "isOT": false,
+      "strikeReceivedThisShift": true,
+      "status": "absent",
+      "dashboardName": "Daba",
+      "earlyOut": false,
+      "checkInTime": "11:19 PM",
+      "checkInRaw": "2026-05-18T15:19:06.658Z",
+      "lastLiveLogKey": "night:2026-05-18 21:00",
+      "shiftSessionKey": "night:2026-05-18 21:00",
+      "voiceJoinedAt": null,
+      "liveOffWarnedFor": null,
+      "liveOffStartedAt": null,
+      "lastLiveOnAt": "2026-05-18T19:17:13.586Z",
+      "lastLiveOffAt": "2026-05-18T19:16:33.373Z",
+      "pendingManualOT": false,
+      "dayOffExpireAt": null,
+      "sessions": [
+        {
+          "id": "night:2026-05-18-21-00:1779112085030",
+          "shift": "night",
+          "sessionKey": "night:2026-05-18 21:00",
+          "scheduledStartAt": "2026-05-18T13:00:00.000Z",
+          "scheduledEndAt": "2026-05-19T01:00:00.000Z",
+          "clockInAt": "2026-05-18T13:48:05.030Z",
+          "clockInSource": "live-on",
+          "clockOutAt": "2026-05-18T14:55:40.926Z",
+          "clockOutSource": "live-off-timeout",
+          "clockOutReason": "라이브 OFF 유예 초과 자동 퇴근",
+          "workedMinutes": 67,
+          "liveOffPeriods": [
+            {
+              "startedAt": "2026-05-18T14:08:59.208Z",
+              "endedAt": "2026-05-18T14:10:19.527Z",
+              "minutes": 1,
+              "reason": "live-off"
+            },
+            {
+              "startedAt": "2026-05-18T14:23:58.138Z",
+              "endedAt": "2026-05-18T14:35:00.072Z",
+              "minutes": 11,
+              "reason": "live-off"
+            },
+            {
+              "startedAt": "2026-05-18T14:55:40.926Z",
+              "endedAt": "2026-05-18T14:55:40.926Z",
+              "minutes": 0,
+              "reason": "live-off"
+            }
+          ],
+          "dcPeriods": [],
+          "otType": null
+        },
+        {
+          "id": "night:2026-05-18-21-00:1779117546658",
+          "shift": "night",
+          "sessionKey": "night:2026-05-18 21:00",
+          "scheduledStartAt": "2026-05-18T13:00:00.000Z",
+          "scheduledEndAt": "2026-05-19T01:00:00.000Z",
+          "clockInAt": "2026-05-18T15:19:06.658Z",
+          "clockInSource": "live-on",
+          "clockOutAt": null,
+          "clockOutSource": null,
+          "clockOutReason": null,
+          "workedMinutes": 0,
+          "liveOffPeriods": [
+            {
+              "startedAt": "2026-05-18T19:16:33.373Z",
+              "endedAt": "2026-05-18T19:17:13.586Z",
+              "minutes": 0,
+              "reason": "live-off"
+            }
+          ],
+          "dcPeriods": [],
+          "otType": null
+        }
+      ],
+      "activeSessionId": "night:2026-05-18-21-00:1779117546658",
+      "checkOutTime": "10:55 PM",
+      "checkOutRaw": "2026-05-18T14:55:40.926Z",
+      "preShiftLiveAt": null,
+      "lastPreShiftWaitLogKey": null,
+      "pendingClockOut": null,
+      "attendanceEvents": [
+        {
+          "at": "2026-05-18T19:16:33.373Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T19:36:33.373Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T19:17:13.586Z",
+          "type": "clockout_candidate_recovered",
+          "source": "live_off",
+          "meta": {
+            "reason": "live_on_recovered"
+          }
+        }
+      ],
+      "lastEventKey": "clockout_candidate_recovered:live_off",
+      "lastEventAt": "2026-05-18T19:17:13.586Z",
+      "attendanceStatus": null,
+      "voiceStatus": null,
+      "attendanceStatusChangedAt": null,
+      "voiceStatusChangedAt": null,
+      "dayOffPresenceNotifiedFor": null,
+      "afterFinishPresenceNotifiedFor": null,
+      "finishedPresence": null,
+      "finalLeftAt": null
+    },
+    "718730291023314964": {
+      "id": "718730291023314964",
+      "name": "Ryuji - P Day time",
+      "shift": "day",
+      "checkedIn": true,
+      "dayOff": false,
+      "disconnected": false,
+      "disconnectedAt": null,
+      "isFinished": false,
+      "strikes": 1,
+      "points": 45,
+      "totalNormal": 2,
+      "totalLate": 1,
+      "totalAbsent": 0,
+      "totalEarly": 0,
+      "totalOT": 2,
+      "dcCount": 2,
+      "offCount": 0,
+      "lastActionAt": 0,
+      "earlyOut": false,
+      "checkInTime": "09:04 AM",
+      "checkInRaw": "2026-05-19T01:04:37.910Z",
+      "status": "ontime",
+      "fState": "ACTIVE",
+      "isOT": false,
+      "voiceJoinedAt": null,
+      "liveOffWarnedFor": null,
+      "dashboardName": "Ryuji",
+      "strikeReceivedThisShift": false,
+      "checkOutTime": "09:48 PM",
+      "checkOutRaw": "2026-05-18T13:48:05.030Z",
+      "dayOffExpireAt": null,
+      "liveOffStartedAt": null,
+      "lastLiveOnAt": "2026-05-19T01:05:15.396Z",
+      "lastLiveOffAt": "2026-05-18T12:59:00.526Z",
+      "sessions": [
+        {
+          "id": "day:2026-05-18-09-00:1779066361769",
+          "shift": "day",
+          "sessionKey": "day:2026-05-18 09:00",
+          "scheduledStartAt": "2026-05-18T01:00:00.000Z",
+          "scheduledEndAt": "2026-05-18T13:00:00.000Z",
+          "clockInAt": "2026-05-18T01:06:01.769Z",
+          "clockInSource": "live-on",
+          "clockOutAt": "2026-05-18T13:48:05.030Z",
+          "clockOutSource": "dc-timeout",
+          "clockOutReason": "DC 유예 시간 초과 (정상 퇴근)",
+          "workedMinutes": 762,
+          "liveOffPeriods": [
+            {
+              "startedAt": "2026-05-18T12:51:10.189Z",
+              "endedAt": "2026-05-18T13:48:05.030Z",
+              "minutes": 56,
+              "reason": "live-off"
+            }
+          ],
+          "dcPeriods": [],
+          "otType": "AUTO"
+        },
+        {
+          "id": "day:2026-05-19-09-00:1779152677910",
+          "shift": "day",
+          "sessionKey": "day:2026-05-19 09:00",
+          "scheduledStartAt": "2026-05-19T01:00:00.000Z",
+          "scheduledEndAt": "2026-05-19T11:00:00.000Z",
+          "clockInAt": "2026-05-19T01:04:37.910Z",
+          "clockInDetectedAt": "2026-05-19T01:04:37.910Z",
+          "clockInSource": "live-on",
+          "clockOutAt": null,
+          "clockOutDetectedAt": null,
+          "clockOutSource": null,
+          "clockOutReason": null,
+          "workedMinutes": 0,
+          "liveOffPeriods": [],
+          "dcPeriods": [],
+          "otType": null
+        }
+      ],
+      "activeSessionId": "day:2026-05-19-09-00:1779152677910",
+      "pendingManualOT": false,
+      "shiftSessionKey": "day:2026-05-19 09:00",
+      "lastLiveLogKey": "day:2026-05-19 09:00",
+      "preShiftLiveAt": null,
+      "lastPreShiftWaitLogKey": null,
+      "pendingClockOut": null,
+      "attendanceEvents": [
+        {
+          "at": "2026-05-19T01:04:30.915Z",
+          "type": "finished_presence_changed",
+          "source": "heartbeat",
+          "meta": {
+            "from": null,
+            "to": "in_voice"
+          }
+        },
+        {
+          "at": "2026-05-19T01:04:30.915Z",
+          "type": "after_finish_presence_detected",
+          "source": "voice_snapshot",
+          "meta": {
+            "action": "LIVE ON after clock-out",
+            "result": "finished_kept"
+          }
+        },
+        {
+          "at": "2026-05-19T01:04:37.910Z",
+          "type": "clock_in_attempt",
+          "source": "live_on",
+          "meta": {
+            "shift": "day"
+          }
+        },
+        {
+          "at": "2026-05-19T01:04:37.910Z",
+          "type": "recorded_status_changed",
+          "source": "live-on",
+          "meta": {
+            "reason": "clock-in",
+            "attendanceStatus": {
+              "from": null,
+              "to": "WORKING"
+            },
+            "voiceStatus": {
+              "from": null,
+              "to": "LIVE_ON"
+            }
+          }
+        },
+        {
+          "at": "2026-05-19T01:04:37.910Z",
+          "type": "clock_in_confirmed",
+          "source": "live_on",
+          "meta": {
+            "detectedAt": "2026-05-19T01:04:37.910Z",
+            "preShift": false
+          }
+        }
+      ],
+      "lastEventKey": "clock_in_confirmed:live_on",
+      "lastEventAt": "2026-05-19T01:04:37.910Z",
+      "attendanceStatus": "WORKING",
+      "voiceStatus": "LIVE_ON",
+      "attendanceStatusChangedAt": "2026-05-19T01:04:37.910Z",
+      "voiceStatusChangedAt": "2026-05-19T01:04:37.910Z",
+      "dayOffPresenceNotifiedFor": null,
+      "afterFinishPresenceNotifiedFor": "day:2026-05-19 09:00:LIVE ON after clock-out",
+      "finishedPresence": null,
+      "finalLeftAt": null
+    },
+    "727085698401697843": {
+      "id": "727085698401697843",
+      "name": "Zurin -  Great Manager",
+      "shift": "day",
+      "checkedIn": false,
+      "dayOff": false,
+      "disconnected": false,
+      "disconnectedAt": null,
+      "isFinished": true,
+      "strikes": 1,
+      "points": 25,
+      "totalNormal": 1,
+      "totalLate": 1,
+      "totalAbsent": 0,
+      "totalEarly": 1,
+      "totalOT": 2,
+      "dcCount": 3,
+      "offCount": 0,
+      "lastActionAt": 0,
+      "earlyOut": false,
+      "checkInTime": "09:23 AM",
+      "checkInRaw": "2026-05-18T01:23:24.364Z",
+      "status": "late",
+      "fState": "LIVE_OFF",
+      "isOT": false,
+      "voiceJoinedAt": null,
+      "liveOffWarnedFor": null,
+      "dashboardName": "Zurin",
+      "strikeReceivedThisShift": true,
+      "checkOutTime": "08:49 PM",
+      "checkOutRaw": "2026-05-18T12:49:00.454Z",
+      "dayOffExpireAt": null,
+      "liveOffStartedAt": null,
+      "lastLiveOnAt": "2026-05-18T02:34:05.507Z",
+      "lastLiveOffAt": "2026-05-18T12:59:00.526Z",
+      "sessions": [
+        {
+          "id": "day:2026-05-18-09-00:1779067404364",
+          "shift": "day",
+          "sessionKey": "day:2026-05-18 09:00",
+          "scheduledStartAt": "2026-05-18T01:00:00.000Z",
+          "scheduledEndAt": "2026-05-18T13:00:00.000Z",
+          "clockInAt": "2026-05-18T01:23:24.364Z",
+          "clockInSource": "live-on",
+          "clockOutAt": "2026-05-18T12:49:00.454Z",
+          "clockOutSource": "live-off-timeout",
+          "clockOutReason": "라이브 OFF 유예 초과 자동 퇴근",
+          "workedMinutes": 685,
+          "liveOffPeriods": [
+            {
+              "startedAt": "2026-05-18T01:23:42.972Z",
+              "endedAt": "2026-05-18T01:26:04.242Z",
+              "minutes": 2,
+              "reason": "live-off"
+            },
+            {
+              "startedAt": "2026-05-18T02:33:51.786Z",
+              "endedAt": "2026-05-18T02:34:05.507Z",
+              "minutes": 0,
+              "reason": "live-off"
+            },
+            {
+              "startedAt": "2026-05-18T12:49:00.454Z",
+              "endedAt": "2026-05-18T12:49:00.454Z",
+              "minutes": 0,
+              "reason": "live-off"
+            }
+          ],
+          "dcPeriods": [],
+          "otType": "AUTO"
+        }
+      ],
+      "activeSessionId": null,
+      "pendingManualOT": false,
+      "shiftSessionKey": "day:2026-05-18 09:00",
+      "lastLiveLogKey": "day:2026-05-18 09:00",
+      "preShiftLiveAt": null,
+      "lastPreShiftWaitLogKey": null,
+      "pendingClockOut": null,
+      "attendanceEvents": [
+        {
+          "at": "2026-05-19T01:04:30.915Z",
+          "type": "finished_presence_changed",
+          "source": "heartbeat",
+          "meta": {
+            "from": null,
+            "to": "left_voice"
+          }
+        }
+      ],
+      "lastEventKey": "finished_presence_changed:heartbeat",
+      "lastEventAt": "2026-05-19T01:04:30.915Z",
+      "finishedPresence": "left_voice",
+      "finalLeftAt": "2026-05-19T01:04:30.915Z"
+    },
+    "1501940399940436066": {
+      "id": "1501940399940436066",
+      "name": "Zeki - P Day time",
+      "shift": "day",
+      "checkedIn": false,
+      "dayOff": false,
+      "disconnected": false,
+      "disconnectedAt": null,
+      "isFinished": true,
+      "strikes": 0,
+      "points": 50,
+      "totalNormal": 4,
+      "totalLate": 0,
+      "totalAbsent": 0,
+      "totalEarly": 2,
+      "totalOT": 2,
+      "dcCount": 3,
+      "offCount": 0,
+      "lastActionAt": 0,
+      "earlyOut": false,
+      "checkInTime": "09:00 AM",
+      "checkInRaw": "2026-05-18T01:00:13.786Z",
+      "status": "ontime",
+      "checkOutTime": "08:53 PM",
+      "checkOutRaw": "2026-05-18T12:53:15.626Z",
+      "fState": "DISCONNECTED",
+      "isOT": false,
+      "voiceJoinedAt": null,
+      "liveOffWarnedFor": null,
+      "dashboardName": "Zeki",
+      "strikeReceivedThisShift": false,
+      "dayOffExpireAt": null,
+      "liveOffStartedAt": null,
+      "lastLiveOnAt": "2026-05-18T02:02:30.118Z",
+      "lastLiveOffAt": "2026-05-18T12:59:00.526Z",
+      "sessions": [
+        {
+          "id": "day:2026-05-18-09-00:1779065982639",
+          "shift": "day",
+          "sessionKey": "day:2026-05-18 09:00",
+          "scheduledStartAt": "2026-05-18T01:00:00.000Z",
+          "scheduledEndAt": "2026-05-18T13:00:00.000Z",
+          "clockInAt": "2026-05-18T00:59:42.639Z",
+          "clockInSource": "live-on",
+          "clockOutAt": "2026-05-18T12:53:15.626Z",
+          "clockOutSource": "dc-timeout",
+          "clockOutReason": "DC 유예 시간 초과 (정상 퇴근)",
+          "workedMinutes": 713,
+          "liveOffPeriods": [
+            {
+              "startedAt": "2026-05-18T02:02:25.019Z",
+              "endedAt": "2026-05-18T02:02:30.118Z",
+              "minutes": 0,
+              "reason": "live-off"
+            },
+            {
+              "startedAt": "2026-05-18T12:53:08.903Z",
+              "endedAt": "2026-05-18T12:53:15.626Z",
+              "minutes": 0,
+              "reason": "live-off"
+            }
+          ],
+          "dcPeriods": [
+            {
+              "startedAt": "2026-05-18T12:53:15.626Z",
+              "endedAt": "2026-05-18T12:53:15.626Z",
+              "minutes": 0,
+              "reason": "voice-left"
+            }
+          ],
+          "otType": "AUTO"
+        }
+      ],
+      "activeSessionId": null,
+      "pendingManualOT": false,
+      "lastLiveLogKey": "day:2026-05-18 09:00",
+      "shiftSessionKey": "day:2026-05-18 09:00",
+      "preShiftLiveAt": null,
+      "finishedPresence": "left_voice",
+      "finalLeftAt": "2026-05-19T01:04:30.915Z",
+      "attendanceEvents": [
+        {
+          "at": "2026-05-19T01:04:30.915Z",
+          "type": "finished_presence_changed",
+          "source": "heartbeat",
+          "meta": {
+            "from": null,
+            "to": "left_voice"
+          }
+        }
+      ],
+      "lastEventKey": "finished_presence_changed:heartbeat",
+      "lastEventAt": "2026-05-19T01:04:30.915Z"
+    },
+    "1485260819423035393": {
+      "id": "1485260819423035393",
+      "name": "kram - H Day time",
+      "shift": "day",
+      "checkedIn": false,
+      "dayOff": false,
+      "disconnected": false,
+      "disconnectedAt": null,
+      "isFinished": true,
+      "strikes": 1,
+      "points": 25,
+      "totalNormal": 1,
+      "totalLate": 1,
+      "totalAbsent": 0,
+      "totalEarly": 1,
+      "totalOT": 2,
+      "dcCount": 2,
+      "offCount": 0,
+      "lastActionAt": 0,
+      "earlyOut": false,
+      "checkInTime": "10:12 AM",
+      "checkInRaw": "2026-05-18T02:12:35.491Z",
+      "status": "late",
+      "fState": "DISCONNECTED",
+      "isOT": false,
+      "dashboardName": "kram",
+      "voiceJoinedAt": null,
+      "liveOffWarnedFor": null,
+      "strikeReceivedThisShift": true,
+      "checkOutTime": "09:48 PM",
+      "checkOutRaw": "2026-05-18T13:48:05.030Z",
+      "dayOffExpireAt": null,
+      "liveOffStartedAt": null,
+      "lastLiveOnAt": "2026-05-18T02:12:35.491Z",
+      "lastLiveOffAt": "2026-05-18T12:59:00.526Z",
+      "sessions": [
+        {
+          "id": "day:2026-05-18-09-00:1779067014083",
+          "shift": "day",
+          "sessionKey": "day:2026-05-18 09:00",
+          "scheduledStartAt": "2026-05-18T01:00:00.000Z",
+          "scheduledEndAt": "2026-05-18T13:00:00.000Z",
+          "clockInAt": "2026-05-18T01:16:54.083Z",
+          "clockInSource": "live-on",
+          "clockOutAt": "2026-05-18T01:51:14.124Z",
+          "clockOutSource": "live-off-timeout",
+          "clockOutReason": "라이브 OFF 유예 초과 자동 퇴근",
+          "workedMinutes": 34,
+          "liveOffPeriods": [
+            {
+              "startedAt": "2026-05-18T01:51:14.124Z",
+              "endedAt": "2026-05-18T01:51:14.124Z",
+              "minutes": 0,
+              "reason": "live-off"
+            }
+          ],
+          "dcPeriods": [],
+          "otType": null
+        },
+        {
+          "id": "day:2026-05-18-09-00:1779070355491",
+          "shift": "day",
+          "sessionKey": "day:2026-05-18 09:00",
+          "scheduledStartAt": "2026-05-18T01:00:00.000Z",
+          "scheduledEndAt": "2026-05-18T13:00:00.000Z",
+          "clockInAt": "2026-05-18T02:12:35.491Z",
+          "clockInSource": "live-on",
+          "clockOutAt": "2026-05-18T13:48:05.030Z",
+          "clockOutSource": "dc-timeout",
+          "clockOutReason": "DC 유예 시간 초과 (정상 퇴근)",
+          "workedMinutes": 695,
+          "liveOffPeriods": [
+            {
+              "startedAt": "2026-05-18T12:51:17.951Z",
+              "endedAt": "2026-05-18T13:48:05.030Z",
+              "minutes": 56,
+              "reason": "live-off"
+            }
+          ],
+          "dcPeriods": [],
+          "otType": "AUTO"
+        }
+      ],
+      "activeSessionId": null,
+      "pendingManualOT": false,
+      "shiftSessionKey": "day:2026-05-18 09:00",
+      "lastLiveLogKey": "day:2026-05-18 09:00",
+      "preShiftLiveAt": null,
+      "finishedPresence": "left_voice",
+      "finalLeftAt": "2026-05-19T01:04:30.915Z",
+      "attendanceEvents": [
+        {
+          "at": "2026-05-19T01:04:30.915Z",
+          "type": "finished_presence_changed",
+          "source": "heartbeat",
+          "meta": {
+            "from": null,
+            "to": "left_voice"
+          }
+        }
+      ],
+      "lastEventKey": "finished_presence_changed:heartbeat",
+      "lastEventAt": "2026-05-19T01:04:30.915Z"
+    },
+    "1438181988598022181": {
+      "id": "1438181988598022181",
+      "name": "Raizo - P Day Manager",
+      "shift": "day",
+      "checkedIn": false,
+      "dayOff": false,
+      "disconnected": false,
+      "disconnectedAt": null,
+      "isFinished": false,
+      "strikes": 0,
+      "points": 50,
+      "totalNormal": 2,
+      "totalLate": 0,
+      "totalAbsent": 0,
+      "totalEarly": 0,
+      "totalOT": 2,
+      "dcCount": 2,
+      "offCount": 0,
+      "lastActionAt": 0,
+      "earlyOut": false,
+      "checkInTime": "09:05 AM",
+      "checkInRaw": "2026-05-18T01:05:40.666Z",
+      "status": null,
+      "fState": "WAITING",
+      "isOT": false,
+      "voiceJoinedAt": null,
+      "liveOffWarnedFor": null,
+      "dashboardName": "Raizo",
+      "strikeReceivedThisShift": false,
+      "checkOutTime": "09:48 PM",
+      "checkOutRaw": "2026-05-18T13:48:05.030Z",
+      "dayOffExpireAt": null,
+      "liveOffStartedAt": null,
+      "lastLiveOnAt": "2026-05-18T13:00:45.346Z",
+      "lastLiveOffAt": "2026-05-18T12:59:00.526Z",
+      "sessions": [
+        {
+          "id": "day:2026-05-18-09-00:1779066340666",
+          "shift": "day",
+          "sessionKey": "day:2026-05-18 09:00",
+          "scheduledStartAt": "2026-05-18T01:00:00.000Z",
+          "scheduledEndAt": "2026-05-18T13:00:00.000Z",
+          "clockInAt": "2026-05-18T01:05:40.666Z",
+          "clockInSource": "live-on",
+          "clockOutAt": "2026-05-18T13:48:05.030Z",
+          "clockOutSource": "dc-timeout",
+          "clockOutReason": "DC 유예 시간 초과 (정상 퇴근)",
+          "workedMinutes": 762,
+          "liveOffPeriods": [
+            {
+              "startedAt": "2026-05-18T01:45:15.016Z",
+              "endedAt": "2026-05-18T01:45:20.201Z",
+              "minutes": 0,
+              "reason": "live-off"
+            },
+            {
+              "startedAt": "2026-05-18T01:47:13.341Z",
+              "endedAt": "2026-05-18T01:47:35.153Z",
+              "minutes": 0,
+              "reason": "live-off"
+            },
+            {
+              "startedAt": "2026-05-18T12:57:50.576Z",
+              "endedAt": "2026-05-18T13:00:45.346Z",
+              "minutes": 2,
+              "reason": "live-off"
+            }
+          ],
+          "dcPeriods": [],
+          "otType": "AUTO"
+        }
+      ],
+      "activeSessionId": null,
+      "pendingManualOT": false,
+      "shiftSessionKey": "day:2026-05-19 09:00",
+      "lastLiveLogKey": null,
+      "preShiftLiveAt": null,
+      "attendanceStatus": null,
+      "voiceStatus": null,
+      "attendanceStatusChangedAt": null,
+      "voiceStatusChangedAt": null,
+      "pendingClockOut": null,
+      "attendanceEvents": [
+        {
+          "at": "2026-05-19T01:04:30.915Z",
+          "type": "finished_presence_changed",
+          "source": "heartbeat",
+          "meta": {
+            "from": null,
+            "to": "in_voice"
+          }
+        },
+        {
+          "at": "2026-05-19T01:04:30.915Z",
+          "type": "voice_live_off_snapshot",
+          "source": "heartbeat",
+          "meta": {
+            "live": false
+          }
+        },
+        {
+          "at": "2026-05-19T01:05:15.396Z",
+          "type": "voice_live_off_snapshot",
+          "source": "heartbeat",
+          "meta": {
+            "live": false
+          }
+        }
+      ],
+      "lastEventKey": "voice_live_off_snapshot:heartbeat",
+      "lastEventAt": "2026-05-19T01:05:15.396Z",
+      "lastPreShiftWaitLogKey": null,
+      "dayOffPresenceNotifiedFor": null,
+      "afterFinishPresenceNotifiedFor": null,
+      "finishedPresence": "in_voice",
+      "finalLeftAt": null
+    },
+    "531843192501567518": {
+      "id": "531843192501567518",
+      "name": "BitShelby - H Day Time",
+      "shift": "day",
+      "checkedIn": true,
+      "dayOff": false,
+      "disconnected": false,
+      "disconnectedAt": null,
+      "isFinished": false,
+      "strikes": 0,
+      "points": 60,
+      "totalNormal": 4,
+      "totalLate": 0,
+      "totalAbsent": 0,
+      "totalEarly": 1,
+      "totalOT": 2,
+      "dcCount": 2,
+      "offCount": 0,
+      "lastActionAt": 0,
+      "earlyOut": false,
+      "checkInTime": "09:04 AM",
+      "checkInRaw": "2026-05-19T01:04:37.910Z",
+      "status": "ontime",
+      "fState": "ACTIVE",
+      "isOT": false,
+      "voiceJoinedAt": null,
+      "liveOffWarnedFor": null,
+      "dashboardName": "BitShelby",
+      "strikeReceivedThisShift": false,
+      "checkOutTime": "08:49 PM",
+      "checkOutRaw": "2026-05-18T12:49:00.454Z",
+      "dayOffExpireAt": null,
+      "liveOffStartedAt": null,
+      "lastLiveOnAt": "2026-05-19T01:05:15.396Z",
+      "lastLiveOffAt": "2026-05-18T12:59:00.526Z",
+      "sessions": [
+        {
+          "id": "day:2026-05-18-09-00:1779065511173",
+          "shift": "day",
+          "sessionKey": "day:2026-05-18 09:00",
+          "scheduledStartAt": "2026-05-18T01:00:00.000Z",
+          "scheduledEndAt": "2026-05-18T13:00:00.000Z",
+          "clockInAt": "2026-05-18T00:51:51.173Z",
+          "clockInSource": "live-on",
+          "clockOutAt": "2026-05-18T12:49:00.454Z",
+          "clockOutSource": "dc-timeout",
+          "clockOutReason": "DC 유예 시간 초과 (정상 퇴근)",
+          "workedMinutes": 717,
+          "liveOffPeriods": [
+            {
+              "startedAt": "2026-05-18T12:54:00.501Z",
+              "endedAt": "2026-05-18T12:49:00.454Z",
+              "minutes": 0,
+              "reason": "live-off"
+            }
+          ],
+          "dcPeriods": [],
+          "otType": "AUTO"
+        },
+        {
+          "id": "day:2026-05-19-09-00:1779152677910",
+          "shift": "day",
+          "sessionKey": "day:2026-05-19 09:00",
+          "scheduledStartAt": "2026-05-19T01:00:00.000Z",
+          "scheduledEndAt": "2026-05-19T11:00:00.000Z",
+          "clockInAt": "2026-05-19T01:04:37.910Z",
+          "clockInDetectedAt": "2026-05-19T01:04:37.910Z",
+          "clockInSource": "live-on",
+          "clockOutAt": null,
+          "clockOutDetectedAt": null,
+          "clockOutSource": null,
+          "clockOutReason": null,
+          "workedMinutes": 0,
+          "liveOffPeriods": [],
+          "dcPeriods": [],
+          "otType": null
+        }
+      ],
+      "activeSessionId": "day:2026-05-19-09-00:1779152677910",
+      "pendingManualOT": false,
+      "lastLiveLogKey": "day:2026-05-19 09:00",
+      "shiftSessionKey": "day:2026-05-19 09:00",
+      "preShiftLiveAt": null,
+      "attendanceStatus": "WORKING",
+      "voiceStatus": "LIVE_ON",
+      "attendanceStatusChangedAt": "2026-05-19T01:04:37.910Z",
+      "voiceStatusChangedAt": "2026-05-19T01:04:37.910Z",
+      "pendingClockOut": null,
+      "attendanceEvents": [
+        {
+          "at": "2026-05-19T01:04:30.915Z",
+          "type": "finished_presence_changed",
+          "source": "heartbeat",
+          "meta": {
+            "from": null,
+            "to": "in_voice"
+          }
+        },
+        {
+          "at": "2026-05-19T01:04:30.915Z",
+          "type": "after_finish_presence_detected",
+          "source": "voice_snapshot",
+          "meta": {
+            "action": "LIVE ON after clock-out",
+            "result": "finished_kept"
+          }
+        },
+        {
+          "at": "2026-05-19T01:04:37.910Z",
+          "type": "clock_in_attempt",
+          "source": "live_on",
+          "meta": {
+            "shift": "day"
+          }
+        },
+        {
+          "at": "2026-05-19T01:04:37.910Z",
+          "type": "recorded_status_changed",
+          "source": "live-on",
+          "meta": {
+            "reason": "clock-in",
+            "attendanceStatus": {
+              "from": null,
+              "to": "WORKING"
+            },
+            "voiceStatus": {
+              "from": null,
+              "to": "LIVE_ON"
+            }
+          }
+        },
+        {
+          "at": "2026-05-19T01:04:37.910Z",
+          "type": "clock_in_confirmed",
+          "source": "live_on",
+          "meta": {
+            "detectedAt": "2026-05-19T01:04:37.910Z",
+            "preShift": false
+          }
+        }
+      ],
+      "lastEventKey": "clock_in_confirmed:live_on",
+      "lastEventAt": "2026-05-19T01:04:37.910Z",
+      "lastPreShiftWaitLogKey": null,
+      "dayOffPresenceNotifiedFor": null,
+      "afterFinishPresenceNotifiedFor": "day:2026-05-19 09:00:LIVE ON after clock-out",
+      "finishedPresence": null,
+      "finalLeftAt": null
+    },
+    "1503209628744421426": {
+      "id": "1503209628744421426",
+      "name": "Lanceyy -  Day time",
+      "shift": null,
+      "checkedIn": false,
+      "dayOff": false,
+      "disconnected": false,
+      "disconnectedAt": null,
+      "isFinished": true,
+      "strikes": 0,
+      "points": 0,
+      "totalNormal": 0,
+      "totalLate": 0,
+      "totalAbsent": 0,
+      "totalEarly": 0,
+      "totalOT": 0,
+      "dcCount": 0,
+      "offCount": 0,
+      "lastActionAt": 0,
+      "fState": "ABSENT",
+      "isOT": false,
+      "dashboardName": "Lanceyy#1426",
+      "status": null,
+      "voiceJoinedAt": null,
+      "liveOffWarnedFor": null
+    },
+    "335597204670644235": {
+      "id": "335597204670644235",
+      "name": "Giru Kun - P  Daytime",
+      "shift": "day",
+      "checkedIn": false,
+      "dayOff": false,
+      "disconnected": false,
+      "disconnectedAt": null,
+      "isFinished": true,
+      "strikes": 0,
+      "points": 50,
+      "totalNormal": 2,
+      "totalLate": 0,
+      "totalAbsent": 0,
+      "totalEarly": 0,
+      "totalOT": 2,
+      "dcCount": 2,
+      "offCount": 0,
+      "lastActionAt": 0,
+      "fState": "DISCONNECTED",
+      "isOT": false,
+      "earlyOut": false,
+      "checkInTime": "09:04 AM",
+      "checkInRaw": "2026-05-18T01:04:35.945Z",
+      "status": "ontime",
+      "voiceJoinedAt": null,
+      "liveOffWarnedFor": null,
+      "dashboardName": "Giru Kun",
+      "strikeReceivedThisShift": false,
+      "checkOutTime": "09:48 PM",
+      "checkOutRaw": "2026-05-18T13:48:05.030Z",
+      "dayOffExpireAt": null,
+      "liveOffStartedAt": null,
+      "lastLiveOnAt": "2026-05-18T12:52:20.871Z",
+      "lastLiveOffAt": "2026-05-18T12:59:49.310Z",
+      "sessions": [
+        {
+          "id": "day:2026-05-18-09-00:1779066275945",
+          "shift": "day",
+          "sessionKey": "day:2026-05-18 09:00",
+          "scheduledStartAt": "2026-05-18T01:00:00.000Z",
+          "scheduledEndAt": "2026-05-18T13:00:00.000Z",
+          "clockInAt": "2026-05-18T01:04:35.945Z",
+          "clockInSource": "live-on",
+          "clockOutAt": "2026-05-18T13:48:05.030Z",
+          "clockOutSource": "dc-timeout",
+          "clockOutReason": "DC 유예 시간 초과 (정상 퇴근)",
+          "workedMinutes": 763,
+          "liveOffPeriods": [
+            {
+              "startedAt": "2026-05-18T12:49:00.454Z",
+              "endedAt": "2026-05-18T12:52:20.871Z",
+              "minutes": 3,
+              "reason": "live-off"
+            },
+            {
+              "startedAt": "2026-05-18T12:59:49.310Z",
+              "endedAt": "2026-05-18T13:48:05.030Z",
+              "minutes": 48,
+              "reason": "live-off"
+            }
+          ],
+          "dcPeriods": [],
+          "otType": "AUTO"
+        }
+      ],
+      "activeSessionId": null,
+      "pendingManualOT": false,
+      "shiftSessionKey": "day:2026-05-18 09:00",
+      "lastLiveLogKey": "day:2026-05-18 09:00",
+      "preShiftLiveAt": null,
+      "finishedPresence": "left_voice",
+      "finalLeftAt": "2026-05-19T01:04:30.915Z",
+      "attendanceEvents": [
+        {
+          "at": "2026-05-19T01:04:30.915Z",
+          "type": "finished_presence_changed",
+          "source": "heartbeat",
+          "meta": {
+            "from": null,
+            "to": "left_voice"
+          }
+        }
+      ],
+      "lastEventKey": "finished_presence_changed:heartbeat",
+      "lastEventAt": "2026-05-19T01:04:30.915Z"
+    },
+    "607614273681752064": {
+      "id": "607614273681752064",
+      "name": "병새신끼",
+      "shift": null,
+      "checkedIn": false,
+      "dayOff": false,
+      "disconnected": false,
+      "disconnectedAt": null,
+      "isFinished": true,
+      "strikes": 0,
+      "points": 0,
+      "totalNormal": 0,
+      "totalLate": 0,
+      "totalAbsent": 0,
+      "totalEarly": 0,
+      "totalOT": 0,
+      "dcCount": 0,
+      "offCount": 0,
+      "lastActionAt": 0,
+      "fState": "WAITING",
+      "isOT": false,
+      "status": null,
+      "voiceJoinedAt": null,
+      "liveOffWarnedFor": null
+    },
+    "1503726967785132125": {
+      "id": "1503726967785132125",
+      "name": "Benskrty - P Day time",
+      "shift": null,
+      "checkedIn": false,
+      "dayOff": false,
+      "disconnected": false,
+      "disconnectedAt": null,
+      "isFinished": true,
+      "strikes": 3,
+      "points": 0,
+      "totalNormal": 0,
+      "totalLate": 2,
+      "totalAbsent": 1,
+      "totalEarly": 0,
+      "totalOT": 2,
+      "dcCount": 3,
+      "offCount": 0,
+      "lastActionAt": 0,
+      "fState": "LATE",
+      "isOT": false,
+      "voiceJoinedAt": null,
+      "liveOffWarnedFor": null,
+      "earlyOut": false,
+      "checkInTime": "09:32 AM",
+      "checkInRaw": "2026-05-18T01:32:16.970Z",
+      "status": null,
+      "strikeReceivedThisShift": true,
+      "dashboardName": "Benskrty",
+      "checkOutTime": "03:09 AM",
+      "checkOutRaw": "2026-05-17T19:09:43.652Z",
+      "liveOffStartedAt": null,
+      "lastLiveOnAt": null,
+      "lastLiveOffAt": null,
+      "pendingManualOT": false,
+      "dayOffExpireAt": null,
+      "sessions": [
+        {
+          "id": "day:2026-05-18-09-00:1779067936970",
+          "shift": "day",
+          "sessionKey": "day:2026-05-18 09:00",
+          "scheduledStartAt": "2026-05-18T01:00:00.000Z",
+          "scheduledEndAt": "2026-05-18T13:00:00.000Z",
+          "clockInAt": "2026-05-18T01:32:16.970Z",
+          "clockInSource": "live-on",
+          "clockOutAt": null,
+          "clockOutSource": null,
+          "clockOutReason": null,
+          "workedMinutes": 0,
+          "liveOffPeriods": [],
+          "dcPeriods": [],
+          "otType": null
+        }
+      ],
+      "activeSessionId": "day:2026-05-18-09-00:1779067936970",
+      "shiftSessionKey": "day:2026-05-18 09:00",
+      "lastLiveLogKey": "day:2026-05-18 09:00"
+    },
+    "1484850943475580960": {
+      "id": "1484850943475580960",
+      "name": "Renz -H  Day Time",
+      "shift": "day",
+      "checkedIn": false,
+      "dayOff": false,
+      "disconnected": false,
+      "disconnectedAt": null,
+      "isFinished": false,
+      "strikes": 1,
+      "points": 10,
+      "totalNormal": 0,
+      "totalLate": 1,
+      "totalAbsent": 0,
+      "totalEarly": 0,
+      "totalOT": 1,
+      "dcCount": 1,
+      "offCount": 0,
+      "lastActionAt": 0,
+      "fState": "WAITING",
+      "isOT": false,
+      "dashboardName": "Renz",
+      "strikeReceivedThisShift": false,
+      "status": null,
+      "dayOffExpireAt": null,
+      "liveOffStartedAt": null,
+      "lastLiveOnAt": "2026-05-18T01:06:35.619Z",
+      "lastLiveOffAt": "2026-05-18T12:59:00.526Z",
+      "sessions": [
+        {
+          "id": "day:2026-05-18-09-00:1779066395619",
+          "shift": "day",
+          "sessionKey": "day:2026-05-18 09:00",
+          "scheduledStartAt": "2026-05-18T01:00:00.000Z",
+          "scheduledEndAt": "2026-05-18T13:00:00.000Z",
+          "clockInAt": "2026-05-18T01:06:35.619Z",
+          "clockInSource": "live-on",
+          "clockOutAt": "2026-05-18T12:56:00.559Z",
+          "clockOutSource": "dc-timeout",
+          "clockOutReason": "DC 유예 시간 초과 (정상 퇴근)",
+          "workedMinutes": 709,
+          "liveOffPeriods": [
+            {
+              "startedAt": "2026-05-18T12:53:46.501Z",
+              "endedAt": "2026-05-18T12:56:00.559Z",
+              "minutes": 2,
+              "reason": "live-off"
+            }
+          ],
+          "dcPeriods": [
+            {
+              "startedAt": "2026-05-18T12:56:00.559Z",
+              "endedAt": "2026-05-18T12:56:00.559Z",
+              "minutes": 0,
+              "reason": "voice-left"
+            }
+          ],
+          "otType": "AUTO"
+        }
+      ],
+      "activeSessionId": null,
+      "pendingManualOT": false,
+      "voiceJoinedAt": null,
+      "liveOffWarnedFor": null,
+      "shiftSessionKey": "day:2026-05-19 09:00",
+      "lastLiveLogKey": null,
+      "earlyOut": false,
+      "checkInTime": "09:06 AM",
+      "checkInRaw": "2026-05-18T01:06:35.619Z",
+      "preShiftLiveAt": null,
+      "checkOutTime": "08:56 PM",
+      "checkOutRaw": "2026-05-18T12:56:00.559Z",
+      "attendanceStatus": null,
+      "voiceStatus": null,
+      "attendanceStatusChangedAt": null,
+      "voiceStatusChangedAt": null,
+      "pendingClockOut": null,
+      "attendanceEvents": [
+        {
+          "at": "2026-05-19T01:04:30.915Z",
+          "type": "finished_presence_changed",
+          "source": "heartbeat",
+          "meta": {
+            "from": null,
+            "to": "in_voice"
+          }
+        },
+        {
+          "at": "2026-05-19T01:04:30.915Z",
+          "type": "voice_live_off_snapshot",
+          "source": "heartbeat",
+          "meta": {
+            "live": false
+          }
+        },
+        {
+          "at": "2026-05-19T01:05:15.396Z",
+          "type": "voice_live_off_snapshot",
+          "source": "heartbeat",
+          "meta": {
+            "live": false
+          }
+        }
+      ],
+      "lastEventKey": "voice_live_off_snapshot:heartbeat",
+      "lastEventAt": "2026-05-19T01:05:15.396Z",
+      "lastPreShiftWaitLogKey": null,
+      "dayOffPresenceNotifiedFor": null,
+      "afterFinishPresenceNotifiedFor": null,
+      "finishedPresence": "in_voice",
+      "finalLeftAt": null
+    },
+    "1413905099230810247": {
+      "id": "1413905099230810247",
+      "name": "Yon - P Day time",
+      "shift": "day",
+      "checkedIn": true,
+      "dayOff": false,
+      "disconnected": false,
+      "disconnectedAt": null,
+      "isFinished": false,
+      "strikes": 1,
+      "points": 35,
+      "totalNormal": 2,
+      "totalLate": 1,
+      "totalAbsent": 0,
+      "totalEarly": 1,
+      "totalOT": 2,
+      "dcCount": 2,
+      "offCount": 0,
+      "lastActionAt": 0,
+      "fState": "ACTIVE",
+      "isOT": false,
+      "earlyOut": false,
+      "checkInTime": "09:04 AM",
+      "checkInRaw": "2026-05-19T01:04:37.910Z",
+      "status": "ontime",
+      "dashboardName": "Yon",
+      "strikeReceivedThisShift": false,
+      "checkOutTime": "08:50 PM",
+      "checkOutRaw": "2026-05-18T12:50:48.557Z",
+      "dayOffExpireAt": null,
+      "liveOffStartedAt": null,
+      "lastLiveOnAt": "2026-05-19T01:05:15.396Z",
+      "lastLiveOffAt": "2026-05-18T12:59:00.526Z",
+      "sessions": [
+        {
+          "id": "day:2026-05-18-09-00:1779066571559",
+          "shift": "day",
+          "sessionKey": "day:2026-05-18 09:00",
+          "scheduledStartAt": "2026-05-18T01:00:00.000Z",
+          "scheduledEndAt": "2026-05-18T13:00:00.000Z",
+          "clockInAt": "2026-05-18T01:09:31.559Z",
+          "clockInSource": "live-on",
+          "clockOutAt": "2026-05-18T12:50:48.557Z",
+          "clockOutSource": "dc-timeout",
+          "clockOutReason": "DC 유예 시간 초과 (정상 퇴근)",
+          "workedMinutes": 701,
+          "liveOffPeriods": [
+            {
+              "startedAt": "2026-05-18T12:48:53.150Z",
+              "endedAt": "2026-05-18T12:50:48.557Z",
+              "minutes": 1,
+              "reason": "live-off"
+            }
+          ],
+          "dcPeriods": [
+            {
+              "startedAt": "2026-05-18T12:50:48.557Z",
+              "endedAt": "2026-05-18T12:50:48.557Z",
+              "minutes": 0,
+              "reason": "voice-left"
+            }
+          ],
+          "otType": "AUTO"
+        },
+        {
+          "id": "day:2026-05-19-09-00:1779152677910",
+          "shift": "day",
+          "sessionKey": "day:2026-05-19 09:00",
+          "scheduledStartAt": "2026-05-19T01:00:00.000Z",
+          "scheduledEndAt": "2026-05-19T11:00:00.000Z",
+          "clockInAt": "2026-05-19T01:04:37.910Z",
+          "clockInDetectedAt": "2026-05-19T01:04:37.910Z",
+          "clockInSource": "live-on",
+          "clockOutAt": null,
+          "clockOutDetectedAt": null,
+          "clockOutSource": null,
+          "clockOutReason": null,
+          "workedMinutes": 0,
+          "liveOffPeriods": [],
+          "dcPeriods": [],
+          "otType": null
+        }
+      ],
+      "activeSessionId": "day:2026-05-19-09-00:1779152677910",
+      "pendingManualOT": false,
+      "shiftSessionKey": "day:2026-05-19 09:00",
+      "voiceJoinedAt": null,
+      "liveOffWarnedFor": null,
+      "lastLiveLogKey": "day:2026-05-19 09:00",
+      "preShiftLiveAt": null,
+      "attendanceStatus": "WORKING",
+      "voiceStatus": "LIVE_ON",
+      "attendanceStatusChangedAt": "2026-05-19T01:04:37.910Z",
+      "voiceStatusChangedAt": "2026-05-19T01:04:37.910Z",
+      "pendingClockOut": null,
+      "attendanceEvents": [
+        {
+          "at": "2026-05-19T01:04:30.915Z",
+          "type": "finished_presence_changed",
+          "source": "heartbeat",
+          "meta": {
+            "from": null,
+            "to": "in_voice"
+          }
+        },
+        {
+          "at": "2026-05-19T01:04:30.915Z",
+          "type": "after_finish_presence_detected",
+          "source": "voice_snapshot",
+          "meta": {
+            "action": "LIVE ON after clock-out",
+            "result": "finished_kept"
+          }
+        },
+        {
+          "at": "2026-05-19T01:04:37.910Z",
+          "type": "clock_in_attempt",
+          "source": "live_on",
+          "meta": {
+            "shift": "day"
+          }
+        },
+        {
+          "at": "2026-05-19T01:04:37.910Z",
+          "type": "recorded_status_changed",
+          "source": "live-on",
+          "meta": {
+            "reason": "clock-in",
+            "attendanceStatus": {
+              "from": null,
+              "to": "WORKING"
+            },
+            "voiceStatus": {
+              "from": null,
+              "to": "LIVE_ON"
+            }
+          }
+        },
+        {
+          "at": "2026-05-19T01:04:37.910Z",
+          "type": "clock_in_confirmed",
+          "source": "live_on",
+          "meta": {
+            "detectedAt": "2026-05-19T01:04:37.910Z",
+            "preShift": false
+          }
+        }
+      ],
+      "lastEventKey": "clock_in_confirmed:live_on",
+      "lastEventAt": "2026-05-19T01:04:37.910Z",
+      "lastPreShiftWaitLogKey": null,
+      "dayOffPresenceNotifiedFor": null,
+      "afterFinishPresenceNotifiedFor": "day:2026-05-19 09:00:LIVE ON after clock-out",
+      "finishedPresence": null,
+      "finalLeftAt": null
+    },
+    "1484858560914395226": {
+      "id": "1484858560914395226",
+      "name": "Lanceyy -H Day Time",
+      "shift": "day",
+      "checkedIn": false,
+      "dayOff": false,
+      "disconnected": false,
+      "disconnectedAt": null,
+      "isFinished": false,
+      "strikes": 1,
+      "points": 0,
+      "totalNormal": 0,
+      "totalLate": 1,
+      "totalAbsent": 0,
+      "totalEarly": 1,
+      "totalOT": 1,
+      "dcCount": 4,
+      "offCount": 1,
+      "lastActionAt": 0,
+      "fState": "WAITING",
+      "isOT": false,
+      "earlyOut": false,
+      "checkInTime": "09:10 AM",
+      "checkInRaw": "2026-05-17T01:10:01.841Z",
+      "status": null,
+      "strikeReceivedThisShift": false,
+      "checkOutTime": "08:51 AM",
+      "checkOutRaw": "2026-05-18T00:51:13.710Z",
+      "voiceJoinedAt": null,
+      "liveOffWarnedFor": null,
+      "dashboardName": "Lanceyy",
+      "dayOffExpireAt": null,
+      "liveOffStartedAt": null,
+      "lastLiveOnAt": null,
+      "lastLiveOffAt": null,
+      "sessions": [],
+      "activeSessionId": null,
+      "pendingManualOT": false,
+      "shiftSessionKey": "day:2026-05-19 09:00",
+      "lastLiveLogKey": null,
+      "preShiftLiveAt": null,
+      "voiceStatus": "OFFLINE",
+      "voiceStatusChangedAt": "2026-05-19T01:04:30.915Z",
+      "attendanceEvents": [
+        {
+          "at": "2026-05-19T01:04:30.915Z",
+          "type": "recorded_status_changed",
+          "source": "heartbeat",
+          "meta": {
+            "reason": "voice-offline",
+            "voiceStatus": {
+              "from": null,
+              "to": "OFFLINE"
+            }
+          }
+        }
+      ],
+      "lastEventKey": "recorded_status_changed:heartbeat",
+      "lastEventAt": "2026-05-19T01:04:30.915Z",
+      "attendanceStatus": null,
+      "attendanceStatusChangedAt": null,
+      "pendingClockOut": null,
+      "lastPreShiftWaitLogKey": null,
+      "dayOffPresenceNotifiedFor": null,
+      "afterFinishPresenceNotifiedFor": null,
+      "finishedPresence": null,
+      "finalLeftAt": null
+    },
+    "1353400387666710579": {
+      "id": "1353400387666710579",
+      "name": "Zurin - Second ID",
+      "shift": null,
+      "checkedIn": false,
+      "dayOff": false,
+      "disconnected": false,
+      "disconnectedAt": null,
+      "isFinished": true,
+      "strikes": 0,
+      "points": 0,
+      "totalNormal": 0,
+      "totalLate": 0,
+      "totalAbsent": 0,
+      "totalEarly": 0,
+      "totalOT": 0,
+      "dcCount": 0,
+      "offCount": 0,
+      "voiceJoinedAt": null,
+      "liveOffWarnedFor": null,
+      "lastActionAt": 0,
+      "dashboardName": "Zurin",
+      "fState": "WAITING",
+      "isOT": false,
+      "status": null
+    },
+    "464289456715726880": {
+      "id": "464289456715726880",
+      "name": "Katsuki - P Day time Trainee",
+      "shift": "day",
+      "checkedIn": true,
+      "dayOff": false,
+      "disconnected": false,
+      "disconnectedAt": null,
+      "isFinished": false,
+      "strikes": 1,
+      "points": 5,
+      "totalNormal": 1,
+      "totalLate": 0,
+      "totalAbsent": 1,
+      "totalEarly": 0,
+      "totalOT": 1,
+      "dcCount": 1,
+      "offCount": 0,
+      "voiceJoinedAt": null,
+      "liveOffWarnedFor": null,
+      "lastActionAt": 0,
+      "fState": "ACTIVE",
+      "isOT": false,
+      "dashboardName": "Katsuki",
+      "strikeReceivedThisShift": false,
+      "status": "ontime",
+      "dayOffExpireAt": null,
+      "liveOffStartedAt": null,
+      "lastLiveOnAt": "2026-05-19T01:05:15.396Z",
+      "lastLiveOffAt": "2026-05-18T12:59:02.164Z",
+      "preShiftLiveAt": null,
+      "sessions": [
+        {
+          "id": "day:2026-05-18-09-00:1779108533157",
+          "shift": "day",
+          "sessionKey": "day:2026-05-18 09:00",
+          "scheduledStartAt": "2026-05-18T01:00:00.000Z",
+          "scheduledEndAt": "2026-05-18T13:00:00.000Z",
+          "clockInAt": "2026-05-18T12:48:53.157Z",
+          "clockInSource": "live-on",
+          "clockOutAt": "2026-05-18T13:48:05.030Z",
+          "clockOutSource": "dc-timeout",
+          "clockOutReason": "DC 유예 시간 초과 (정상 퇴근)",
+          "workedMinutes": 59,
+          "liveOffPeriods": [
+            {
+              "startedAt": "2026-05-18T12:59:02.164Z",
+              "endedAt": "2026-05-18T13:48:05.030Z",
+              "minutes": 49,
+              "reason": "live-off"
+            }
+          ],
+          "dcPeriods": [],
+          "otType": "AUTO"
+        },
+        {
+          "id": "day:2026-05-19-09-00:1779152677910",
+          "shift": "day",
+          "sessionKey": "day:2026-05-19 09:00",
+          "scheduledStartAt": "2026-05-19T01:00:00.000Z",
+          "scheduledEndAt": "2026-05-19T11:00:00.000Z",
+          "clockInAt": "2026-05-19T01:04:37.910Z",
+          "clockInDetectedAt": "2026-05-19T01:04:37.910Z",
+          "clockInSource": "live-on",
+          "clockOutAt": null,
+          "clockOutDetectedAt": null,
+          "clockOutSource": null,
+          "clockOutReason": null,
+          "workedMinutes": 0,
+          "liveOffPeriods": [],
+          "dcPeriods": [],
+          "otType": null
+        }
+      ],
+      "activeSessionId": "day:2026-05-19-09-00:1779152677910",
+      "pendingManualOT": false,
+      "shiftSessionKey": "day:2026-05-19 09:00",
+      "lastLiveLogKey": "day:2026-05-19 09:00",
+      "earlyOut": false,
+      "checkInTime": "09:04 AM",
+      "checkInRaw": "2026-05-19T01:04:37.910Z",
+      "checkOutTime": "09:48 PM",
+      "checkOutRaw": "2026-05-18T13:48:05.030Z",
+      "attendanceStatus": "WORKING",
+      "voiceStatus": "LIVE_ON",
+      "attendanceStatusChangedAt": "2026-05-19T01:04:37.910Z",
+      "voiceStatusChangedAt": "2026-05-19T01:04:37.910Z",
+      "pendingClockOut": null,
+      "attendanceEvents": [
+        {
+          "at": "2026-05-19T01:04:30.915Z",
+          "type": "finished_presence_changed",
+          "source": "heartbeat",
+          "meta": {
+            "from": null,
+            "to": "in_voice"
+          }
+        },
+        {
+          "at": "2026-05-19T01:04:30.915Z",
+          "type": "after_finish_presence_detected",
+          "source": "voice_snapshot",
+          "meta": {
+            "action": "LIVE ON after clock-out",
+            "result": "finished_kept"
+          }
+        },
+        {
+          "at": "2026-05-19T01:04:37.910Z",
+          "type": "clock_in_attempt",
+          "source": "live_on",
+          "meta": {
+            "shift": "day"
+          }
+        },
+        {
+          "at": "2026-05-19T01:04:37.910Z",
+          "type": "recorded_status_changed",
+          "source": "live-on",
+          "meta": {
+            "reason": "clock-in",
+            "attendanceStatus": {
+              "from": null,
+              "to": "WORKING"
+            },
+            "voiceStatus": {
+              "from": null,
+              "to": "LIVE_ON"
+            }
+          }
+        },
+        {
+          "at": "2026-05-19T01:04:37.910Z",
+          "type": "clock_in_confirmed",
+          "source": "live_on",
+          "meta": {
+            "detectedAt": "2026-05-19T01:04:37.910Z",
+            "preShift": false
+          }
+        }
+      ],
+      "lastEventKey": "clock_in_confirmed:live_on",
+      "lastEventAt": "2026-05-19T01:04:37.910Z",
+      "lastPreShiftWaitLogKey": null,
+      "dayOffPresenceNotifiedFor": null,
+      "afterFinishPresenceNotifiedFor": "day:2026-05-19 09:00:LIVE ON after clock-out",
+      "finishedPresence": null,
+      "finalLeftAt": null
+    },
+    "1104399162457456770": {
+      "id": "1104399162457456770",
+      "name": "K1mo",
+      "shift": null,
+      "checkedIn": false,
+      "dayOff": false,
+      "disconnected": false,
+      "disconnectedAt": null,
+      "isFinished": true,
+      "strikes": 0,
+      "points": 0,
+      "totalNormal": 0,
+      "totalLate": 0,
+      "totalAbsent": 0,
+      "totalEarly": 0,
+      "totalOT": 0,
+      "dcCount": 0,
+      "offCount": 0,
+      "voiceJoinedAt": null,
+      "liveOffWarnedFor": null,
+      "lastActionAt": 0,
+      "dashboardName": "K1mo",
+      "fState": "WAITING",
+      "isOT": false,
+      "shiftSessionKey": "night:2026-05-17 21:00",
+      "status": null,
+      "strikeReceivedThisShift": false,
+      "lastLiveLogKey": null
+    },
+    "280301228716589058": {
+      "id": "280301228716589058",
+      "name": "Graet - IM A KING",
+      "shift": "night",
+      "checkedIn": false,
+      "dayOff": false,
+      "disconnected": false,
+      "disconnectedAt": null,
+      "isFinished": true,
+      "strikes": 3,
+      "points": -25,
+      "totalNormal": 2,
+      "totalLate": 1,
+      "totalAbsent": 2,
+      "totalEarly": 9,
+      "totalOT": 6,
+      "dcCount": 15,
+      "offCount": 8,
+      "voiceJoinedAt": null,
+      "liveOffWarnedFor": null,
+      "lastActionAt": 1779132213331,
+      "shiftSessionKey": "night:2026-05-18 21:00",
+      "status": "absent",
+      "strikeReceivedThisShift": true,
+      "lastLiveLogKey": "night:2026-05-18 21:00",
+      "dashboardName": "Graet",
+      "fState": "DISCONNECTED",
+      "isOT": false,
+      "manualPanelTouchedAt": "2026-05-18T19:23:33.331Z",
+      "earlyOut": false,
+      "checkInTime": "03:40 AM",
+      "checkInRaw": "2026-05-18T19:40:03.427Z",
+      "checkOutTime": "03:52 AM",
+      "checkOutRaw": "2026-05-18T19:52:16.144Z",
+      "liveOffStartedAt": null,
+      "lastLiveOnAt": "2026-05-18T19:40:03.427Z",
+      "lastLiveOffAt": "2026-05-18T16:33:35.176Z",
+      "pendingManualOT": true,
+      "dayOffExpireAt": null,
+      "sessions": [
+        {
+          "id": "night:2026-05-17-21-00:1779069048532",
+          "shift": "night",
+          "sessionKey": "night:2026-05-17 21:00",
+          "scheduledStartAt": "2026-05-17T13:00:00.000Z",
+          "scheduledEndAt": "2026-05-18T01:00:00.000Z",
+          "clockInAt": "2026-05-18T01:50:48.532Z",
+          "clockInSource": "button-or-command",
+          "clockOutAt": "2026-05-18T01:51:03.440Z",
+          "clockOutSource": "clock-out",
+          "clockOutReason": "愿由ъ옄 媛뺤젣 ?닿렐",
+          "workedMinutes": 0,
+          "liveOffPeriods": [],
+          "dcPeriods": [],
+          "otType": null
+        },
+        {
+          "id": "night:2026-05-18-21-00:1779116429566",
+          "shift": "night",
+          "sessionKey": "night:2026-05-18 21:00",
+          "scheduledStartAt": "2026-05-18T13:00:00.000Z",
+          "scheduledEndAt": "2026-05-19T01:00:00.000Z",
+          "clockInAt": "2026-05-18T15:00:29.566Z",
+          "clockInSource": "live-on",
+          "clockOutAt": "2026-05-18T15:02:36.338Z",
+          "clockOutSource": "clock-out",
+          "clockOutReason": "휴무 버튼 전환 전 퇴근 처리",
+          "workedMinutes": 2,
+          "liveOffPeriods": [
+            {
+              "startedAt": "2026-05-18T15:00:37.307Z",
+              "endedAt": "2026-05-18T15:02:36.338Z",
+              "minutes": 1,
+              "reason": "live-off"
+            }
+          ],
+          "dcPeriods": [
+            {
+              "startedAt": "2026-05-18T15:00:34.039Z",
+              "endedAt": "2026-05-18T15:02:36.338Z",
+              "minutes": 2,
+              "reason": "voice-left"
+            }
+          ],
+          "otType": null
+        },
+        {
+          "id": "night:2026-05-18-21-00:1779116578204",
+          "shift": "night",
+          "sessionKey": "night:2026-05-18 21:00",
+          "scheduledStartAt": "2026-05-18T13:00:00.000Z",
+          "scheduledEndAt": "2026-05-19T01:00:00.000Z",
+          "clockInAt": "2026-05-18T15:02:58.204Z",
+          "clockInSource": "live-on",
+          "clockOutAt": "2026-05-18T16:02:41.331Z",
+          "clockOutSource": "dc-timeout",
+          "clockOutReason": "DC 유예 시간 초과 (조기 퇴근)",
+          "workedMinutes": 59,
+          "liveOffPeriods": [
+            {
+              "startedAt": "2026-05-18T15:03:04.405Z",
+              "endedAt": "2026-05-18T15:17:45.780Z",
+              "minutes": 14,
+              "reason": "live-off"
+            },
+            {
+              "startedAt": "2026-05-18T15:17:51.149Z",
+              "endedAt": "2026-05-18T15:17:59.205Z",
+              "minutes": 0,
+              "reason": "live-off"
+            },
+            {
+              "startedAt": "2026-05-18T15:18:26.418Z",
+              "endedAt": "2026-05-18T15:18:32.473Z",
+              "minutes": 0,
+              "reason": "live-off"
+            },
+            {
+              "startedAt": "2026-05-18T15:25:28.076Z",
+              "endedAt": "2026-05-18T15:25:40.093Z",
+              "minutes": 0,
+              "reason": "live-off"
+            },
+            {
+              "startedAt": "2026-05-18T15:25:46.512Z",
+              "endedAt": "2026-05-18T15:26:05.363Z",
+              "minutes": 0,
+              "reason": "live-off"
+            },
+            {
+              "startedAt": "2026-05-18T16:02:36.804Z",
+              "endedAt": "2026-05-18T16:02:41.331Z",
+              "minutes": 0,
+              "reason": "live-off"
+            }
+          ],
+          "dcPeriods": [
+            {
+              "startedAt": "2026-05-18T15:03:01.287Z",
+              "endedAt": "2026-05-18T15:16:55.574Z",
+              "minutes": 13,
+              "reason": "voice-left"
+            },
+            {
+              "startedAt": "2026-05-18T15:17:00.872Z",
+              "endedAt": "2026-05-18T15:17:03.516Z",
+              "minutes": 0,
+              "reason": "voice-left"
+            },
+            {
+              "startedAt": "2026-05-18T15:17:06.629Z",
+              "endedAt": "2026-05-18T15:17:08.652Z",
+              "minutes": 0,
+              "reason": "voice-left"
+            },
+            {
+              "startedAt": "2026-05-18T15:17:11.566Z",
+              "endedAt": "2026-05-18T15:17:41.273Z",
+              "minutes": 0,
+              "reason": "voice-left"
+            },
+            {
+              "startedAt": "2026-05-18T15:17:54.067Z",
+              "endedAt": "2026-05-18T15:17:56.098Z",
+              "minutes": 0,
+              "reason": "voice-left"
+            },
+            {
+              "startedAt": "2026-05-18T15:25:34.530Z",
+              "endedAt": "2026-05-18T15:25:36.548Z",
+              "minutes": 0,
+              "reason": "voice-left"
+            },
+            {
+              "startedAt": "2026-05-18T15:25:57.180Z",
+              "endedAt": "2026-05-18T15:26:01.135Z",
+              "minutes": 0,
+              "reason": "voice-left"
+            },
+            {
+              "startedAt": "2026-05-18T16:02:41.331Z",
+              "endedAt": "2026-05-18T16:02:41.331Z",
+              "minutes": 0,
+              "reason": "voice-left"
+            }
+          ],
+          "otType": "MANUAL"
+        },
+        {
+          "id": "night:2026-05-18-21-00:1779133203427",
+          "shift": "night",
+          "sessionKey": "night:2026-05-18 21:00",
+          "scheduledStartAt": "2026-05-18T13:00:00.000Z",
+          "scheduledEndAt": "2026-05-19T01:00:00.000Z",
+          "clockInAt": "2026-05-18T19:40:03.427Z",
+          "clockInDetectedAt": "2026-05-18T19:40:03.427Z",
+          "clockInSource": "live-on",
+          "clockOutAt": "2026-05-18T19:52:16.144Z",
+          "clockOutDetectedAt": "2026-05-19T01:05:15.399Z",
+          "clockOutSource": "dc-timeout",
+          "clockOutReason": "DC 유예 시간 초과 (조기 퇴근)",
+          "workedMinutes": 12,
+          "liveOffPeriods": [],
+          "dcPeriods": [
+            {
+              "startedAt": "2026-05-18T19:40:14.932Z",
+              "endedAt": "2026-05-18T19:52:16.144Z",
+              "minutes": 12,
+              "reason": "voice-left"
+            }
+          ],
+          "otType": null,
+          "grossMinutes": 12,
+          "liveOffMinutes": 0,
+          "dcMinutes": 12,
+          "creditedMinutes": 0
+        }
+      ],
+      "activeSessionId": null,
+      "preShiftLiveAt": null,
+      "lastPreShiftWaitLogKey": null,
+      "pendingClockOut": null,
+      "attendanceEvents": [
+        {
+          "at": "2026-05-18T19:23:42.903Z",
+          "type": "voice_join",
+          "source": "voice_state",
+          "meta": {
+            "live": false
+          }
+        },
+        {
+          "at": "2026-05-18T19:39:56.855Z",
+          "type": "voice_join",
+          "source": "voice_state",
+          "meta": {
+            "live": false
+          }
+        },
+        {
+          "at": "2026-05-18T19:40:03.427Z",
+          "type": "clock_in_attempt",
+          "source": "live_on",
+          "meta": {
+            "shift": "night"
+          }
+        },
+        {
+          "at": "2026-05-18T19:40:03.427Z",
+          "type": "clock_in_confirmed",
+          "source": "live_on",
+          "meta": {
+            "detectedAt": "2026-05-18T19:40:03.427Z",
+            "preShift": false
+          }
+        },
+        {
+          "at": "2026-05-18T19:40:14.932Z",
+          "type": "clockout_candidate",
+          "source": "voice_leave",
+          "meta": {
+            "expiresAt": "2026-05-18T20:00:14.932Z",
+            "reason": "음성채널 이탈 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T19:52:16.144Z",
+          "type": "clockout_candidate",
+          "source": "voice_leave",
+          "meta": {
+            "expiresAt": "2026-05-18T20:12:16.144Z",
+            "reason": "음성채널 이탈 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T19:52:16.144Z",
+          "type": "recorded_status_changed",
+          "source": "dc-timeout",
+          "meta": {
+            "reason": "DC 유예 시간 초과 (조기 퇴근)",
+            "attendanceStatus": {
+              "from": null,
+              "to": "FINISHED"
+            },
+            "voiceStatus": {
+              "from": null,
+              "to": "OFFLINE"
+            }
+          }
+        },
+        {
+          "at": "2026-05-18T19:52:16.144Z",
+          "type": "finished_presence_changed",
+          "source": "dc-timeout",
+          "meta": {
+            "from": null,
+            "to": "left_voice"
+          }
+        },
+        {
+          "at": "2026-05-18T19:52:16.144Z",
+          "type": "clock_out_confirmed",
+          "source": "dc-timeout",
+          "meta": {
+            "detectedAt": "2026-05-19T01:05:15.399Z",
+            "reason": "DC 유예 시간 초과 (조기 퇴근)"
+          }
+        }
+      ],
+      "lastEventKey": "clock_out_confirmed:dc-timeout",
+      "lastEventAt": "2026-05-18T19:52:16.144Z",
+      "attendanceStatus": "FINISHED",
+      "voiceStatus": "OFFLINE",
+      "attendanceStatusChangedAt": "2026-05-18T19:52:16.144Z",
+      "voiceStatusChangedAt": "2026-05-18T19:52:16.144Z",
+      "dayOffPresenceNotifiedFor": null,
+      "afterFinishPresenceNotifiedFor": null,
+      "finishedPresence": "left_voice",
+      "finalLeftAt": "2026-05-18T19:52:16.144Z"
+    },
+    "1317066374996295784": {
+      "id": "1317066374996295784",
+      "name": "Lance - P Day time Trainee",
+      "shift": "day",
+      "checkedIn": false,
+      "dayOff": false,
+      "dayOffExpireAt": null,
+      "disconnected": false,
+      "disconnectedAt": null,
+      "isFinished": false,
+      "strikes": 0,
+      "points": 0,
+      "totalNormal": 0,
+      "totalLate": 0,
+      "totalAbsent": 0,
+      "totalEarly": 0,
+      "totalOT": 0,
+      "dcCount": 0,
+      "offCount": 0,
+      "voiceJoinedAt": null,
+      "liveOffStartedAt": null,
+      "lastLiveOnAt": null,
+      "lastLiveOffAt": "2026-05-18T12:59:00.526Z",
+      "preShiftLiveAt": null,
+      "activeSessionId": null,
+      "sessions": [],
+      "pendingManualOT": false,
+      "liveOffWarnedFor": null,
+      "lastActionAt": 0,
+      "shiftSessionKey": "day:2026-05-19 09:00",
+      "status": null,
+      "strikeReceivedThisShift": false,
+      "lastLiveLogKey": null,
+      "dashboardName": "Lance",
+      "fState": "WAITING",
+      "isOT": false,
+      "attendanceStatus": null,
+      "voiceStatus": null,
+      "attendanceStatusChangedAt": null,
+      "voiceStatusChangedAt": null,
+      "pendingClockOut": null,
+      "attendanceEvents": [
+        {
+          "at": "2026-05-19T01:04:30.915Z",
+          "type": "voice_live_off_snapshot",
+          "source": "heartbeat",
+          "meta": {
+            "live": false
+          }
+        },
+        {
+          "at": "2026-05-19T01:05:15.396Z",
+          "type": "voice_live_off_snapshot",
+          "source": "heartbeat",
+          "meta": {
+            "live": false
+          }
+        }
+      ],
+      "lastEventKey": "voice_live_off_snapshot:heartbeat",
+      "lastEventAt": "2026-05-19T01:05:15.396Z",
+      "lastPreShiftWaitLogKey": null,
+      "dayOffPresenceNotifiedFor": null,
+      "afterFinishPresenceNotifiedFor": null,
+      "finishedPresence": null,
+      "finalLeftAt": null
+    },
+    "713386873959219281": {
+      "id": "713386873959219281",
+      "name": "Tonstar - P Night Time Trainee",
+      "shift": "night",
+      "checkedIn": true,
+      "dayOff": false,
+      "dayOffExpireAt": null,
+      "disconnected": false,
+      "disconnectedAt": null,
+      "isFinished": false,
+      "strikes": 1,
+      "points": -20,
+      "totalNormal": 0,
+      "totalLate": 0,
+      "totalAbsent": 1,
+      "totalEarly": 0,
+      "totalOT": 0,
+      "dcCount": 2,
+      "offCount": 0,
+      "voiceJoinedAt": null,
+      "liveOffStartedAt": null,
+      "lastLiveOnAt": "2026-05-18T19:07:22.868Z",
+      "lastLiveOffAt": "2026-05-18T19:07:20.327Z",
+      "preShiftLiveAt": null,
+      "lastPreShiftWaitLogKey": null,
+      "activeSessionId": "night:2026-05-18-21-00:1779120476140",
+      "sessions": [
+        {
+          "id": "night:2026-05-18-21-00:1779120476140",
+          "shift": "night",
+          "sessionKey": "night:2026-05-18 21:00",
+          "scheduledStartAt": "2026-05-18T13:00:00.000Z",
+          "scheduledEndAt": "2026-05-19T01:00:00.000Z",
+          "clockInAt": "2026-05-18T16:07:56.140Z",
+          "clockInSource": "live-on",
+          "clockOutAt": null,
+          "clockOutSource": null,
+          "clockOutReason": null,
+          "workedMinutes": 0,
+          "liveOffPeriods": [
+            {
+              "startedAt": "2026-05-18T16:12:12.947Z",
+              "endedAt": "2026-05-18T16:12:20.006Z",
+              "minutes": 0,
+              "reason": "live-off"
+            },
+            {
+              "startedAt": "2026-05-18T16:12:22.660Z",
+              "endedAt": "2026-05-18T16:15:46.886Z",
+              "minutes": 3,
+              "reason": "live-off"
+            },
+            {
+              "startedAt": "2026-05-18T16:15:59.791Z",
+              "endedAt": "2026-05-18T16:16:04.202Z",
+              "minutes": 0,
+              "reason": "live-off"
+            },
+            {
+              "startedAt": "2026-05-18T16:19:19.264Z",
+              "endedAt": "2026-05-18T16:19:22.918Z",
+              "minutes": 0,
+              "reason": "live-off"
+            },
+            {
+              "startedAt": "2026-05-18T16:37:48.264Z",
+              "endedAt": "2026-05-18T16:37:51.915Z",
+              "minutes": 0,
+              "reason": "live-off"
+            },
+            {
+              "startedAt": "2026-05-18T17:36:56.095Z",
+              "endedAt": "2026-05-18T17:37:22.634Z",
+              "minutes": 0,
+              "reason": "live-off"
+            },
+            {
+              "startedAt": "2026-05-18T18:09:05.129Z",
+              "endedAt": "2026-05-18T18:09:08.254Z",
+              "minutes": 0,
+              "reason": "live-off"
+            },
+            {
+              "startedAt": "2026-05-18T18:31:52.384Z",
+              "endedAt": "2026-05-18T19:07:22.868Z",
+              "minutes": 35,
+              "reason": "live-off"
+            }
+          ],
+          "dcPeriods": [
+            {
+              "startedAt": "2026-05-18T18:30:52.850Z",
+              "endedAt": null,
+              "minutes": 0,
+              "reason": "voice-left"
+            }
+          ],
+          "otType": null
+        }
+      ],
+      "pendingManualOT": false,
+      "liveOffWarnedFor": null,
+      "lastActionAt": 0,
+      "shiftSessionKey": "night:2026-05-18 21:00",
+      "status": "absent",
+      "strikeReceivedThisShift": true,
+      "lastLiveLogKey": "night:2026-05-18 21:00",
+      "dashboardName": "Tonstar",
+      "fState": "LIVE_OFF",
+      "isOT": false,
+      "earlyOut": false,
+      "checkInTime": "12:07 AM",
+      "checkInRaw": "2026-05-18T16:07:56.140Z",
+      "pendingClockOut": null,
+      "attendanceEvents": [
+        {
+          "at": "2026-05-18T17:36:56.095Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T17:56:56.095Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T17:37:22.634Z",
+          "type": "clockout_candidate_recovered",
+          "source": "live_off",
+          "meta": {
+            "reason": "live_on_recovered"
+          }
+        },
+        {
+          "at": "2026-05-18T18:09:05.129Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T18:29:05.129Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T18:09:08.254Z",
+          "type": "clockout_candidate_recovered",
+          "source": "live_off",
+          "meta": {
+            "reason": "live_on_recovered"
+          }
+        },
+        {
+          "at": "2026-05-18T18:30:52.850Z",
+          "type": "clockout_candidate",
+          "source": "voice_leave",
+          "meta": {
+            "expiresAt": "2026-05-18T18:50:52.850Z",
+            "reason": "음성채널 이탈 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T18:31:52.384Z",
+          "type": "voice_join",
+          "source": "voice_state",
+          "meta": {
+            "live": false
+          }
+        },
+        {
+          "at": "2026-05-18T18:31:52.384Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T18:51:52.384Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T18:32:25.354Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T18:52:25.354Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T18:33:25.365Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T18:53:25.365Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T18:34:25.370Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T18:54:25.370Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T18:35:25.376Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T18:55:25.376Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T18:36:25.387Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T18:56:25.387Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T18:37:25.397Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T18:57:25.397Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T18:38:25.408Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T18:58:25.408Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T18:39:25.424Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T18:59:25.424Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T18:40:25.429Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T19:00:25.429Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T18:41:20.313Z",
+          "type": "clockout_candidate",
+          "source": "voice_leave",
+          "meta": {
+            "expiresAt": "2026-05-18T19:01:20.313Z",
+            "reason": "음성채널 이탈 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T18:41:25.443Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T19:01:25.443Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T18:42:25.449Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T19:02:25.449Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T18:43:25.454Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T19:03:25.454Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T18:44:25.460Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T19:04:25.460Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T18:45:25.471Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T19:05:25.471Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T18:46:25.480Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T19:06:25.480Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T18:47:25.481Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T19:07:25.481Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T18:48:25.493Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T19:08:25.493Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T18:49:25.502Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T19:09:25.502Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T18:50:25.516Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T19:10:25.516Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T18:51:25.520Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T19:11:25.520Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T18:52:25.762Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T19:12:25.762Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T18:53:25.533Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T19:13:25.533Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T19:07:20.327Z",
+          "type": "clockout_candidate",
+          "source": "live_off",
+          "meta": {
+            "expiresAt": "2026-05-18T19:27:20.327Z",
+            "reason": "라이브 OFF 유예 시작"
+          }
+        },
+        {
+          "at": "2026-05-18T19:07:22.868Z",
+          "type": "clockout_candidate_recovered",
+          "source": "live_off",
+          "meta": {
+            "reason": "live_on_recovered"
+          }
+        }
+      ],
+      "lastEventKey": "clockout_candidate_recovered:live_off",
+      "lastEventAt": "2026-05-18T19:07:22.868Z",
+      "attendanceStatus": null,
+      "voiceStatus": null,
+      "attendanceStatusChangedAt": null,
+      "voiceStatusChangedAt": null,
+      "dayOffPresenceNotifiedFor": null,
+      "afterFinishPresenceNotifiedFor": null,
+      "finishedPresence": null,
+      "finalLeftAt": null
+    }
+  },
+  "overtimeUsers": [
+    {
+      "id": "1293572479989710858",
+      "name": "JuRe - H Night Time",
+      "type": "AUTO",
+      "shift": "night",
+      "shiftSessionKey": "night:2026-05-19 19:00",
+      "startedAt": "2026-05-19T01:00:00.000Z"
+    },
+    {
+      "id": "770881003778474025",
+      "name": "denxie - H Trainee Night Time",
+      "type": "AUTO",
+      "shift": "night",
+      "shiftSessionKey": "night:2026-05-19 19:00",
+      "startedAt": "2026-05-19T01:00:00.000Z"
+    }
+  ],
+  "statusMessageId": "1505305936552525978",
+  "panelInfo": {
+    "day": {
+      "cId": "1503405274935853126",
+      "mId": "1505734413143511123"
+    },
+    "night": {
+      "cId": "1503405331118821426",
+      "mId": "1505734415811219687"
+    }
+  },
+  "announceData": {
+    "1": null,
+    "2": null,
+    "3": null,
+    "4": null,
+    "5": null,
+    "6": null
+  },
+  "dayOffReservations": {
+    "1505270818534457404": {
+      "id": "1505270818534457404",
+      "messageId": "1505270818534457404",
+      "channelId": "1502729397336018964",
+      "userId": "490914201179652126",
+      "name": "CEE",
+      "shift": "night",
+      "shiftLabel": "Night Time",
+      "leaveDate": "2026-05-17",
+      "status": "approved",
+      "approvedBy": "280301228716589058",
+      "approvedByName": "Graet - IM A KING",
+      "updatedAt": "2026-05-17T01:56:43.705Z",
+      "lastDmKey": "2026-05-17:night:490914201179652126",
+      "dmSentAt": "2026-05-17T01:56:01.802Z",
+      "cancelledBy": "280301228716589058",
+      "cancelledByName": "Graet - IM A KING",
+      "cancelledAt": "2026-05-17T01:56:33.611Z",
+      "appliedDate": "2026-05-17",
+      "appliedAt": "2026-05-17T01:56:48.564Z"
+    },
+    "1505967644145225828": {
+      "id": "1505967644145225828",
+      "messageId": "1505967644145225828",
+      "channelId": "1502729397336018964",
+      "userId": "280301228716589058",
+      "name": "graet",
+      "shift": "night",
+      "shiftLabel": "Night Time",
+      "leaveDate": "2026-05-22",
+      "status": "rejected",
+      "approvedBy": "280301228716589058",
+      "approvedByName": "Graet - IM A KING",
+      "updatedAt": "2026-05-18T16:22:00.565Z",
+      "reviewerNotifyKey": "1505967644145225828:2026-05-22:night:pending",
+      "reviewerNotifiedAt": "2026-05-18T16:17:49.179Z",
+      "reviewerDmStatus": "발송 완료",
+      "lastDmKey": "2026-05-22:night:280301228716589058",
+      "dmSentAt": "2026-05-18T16:22:00.906Z",
+      "cancelledBy": "280301228716589058",
+      "cancelledByName": "Graet - IM A KING",
+      "cancelledAt": "2026-05-18T16:22:04.359Z",
+      "rejectedBy": "280301228716589058",
+      "rejectedByName": "Graet - IM A KING",
+      "rejectedAt": "2026-05-18T17:01:34.832Z",
+      "rejectReason": "Rejected by Graet"
+    },
+    "1505974504663416945": {
+      "id": "1505974504663416945",
+      "messageId": "1505974504663416945",
+      "channelId": "1502729397336018964",
+      "userId": "859384661477556264",
+      "name": "CEE",
+      "shift": "night",
+      "shiftLabel": "Night Time",
+      "leaveDate": "2026-05-19",
+      "status": "rejected",
+      "approvedBy": "280301228716589058",
+      "approvedByName": "Graet - IM A KING",
+      "updatedAt": "2026-05-18T18:09:12.006Z",
+      "reviewerNotifyKey": "1505974504663416945:2026-05-19:night:pending",
+      "reviewerNotifiedAt": "2026-05-18T16:45:20.594Z",
+      "reviewerDmStatus": "발송 완료",
+      "lastDmKey": "2026-05-19:night:859384661477556264",
+      "dmSentAt": "2026-05-18T18:09:12.827Z",
+      "rejectedBy": "280301228716589058",
+      "rejectedByName": "Graet - IM A KING",
+      "rejectedAt": "2026-05-18T18:09:26.793Z",
+      "rejectReason": "Rejected by Graet"
+    },
+    "1505979218713116743": {
+      "id": "1505979218713116743",
+      "messageId": "1505979218713116743",
+      "channelId": "1502729397336018964",
+      "userId": "859384661477556264",
+      "name": "Ding-dong -H Night Time",
+      "submittedName": "DING-DONG",
+      "nameMismatch": true,
+      "shift": "night",
+      "shiftLabel": "Night Time",
+      "leaveDate": "2026-05-19",
+      "status": "approved",
+      "approvedBy": "280301228716589058",
+      "approvedByName": "Graet - IM A KING",
+      "updatedAt": "2026-05-18T18:11:11.901Z",
+      "reviewerNotifyKey": "1505979218713116743:2026-05-19:night:pending",
+      "reviewerNotifiedAt": "2026-05-18T17:03:50.357Z",
+      "reviewerDmStatus": "발송 완료",
+      "lastDmKey": "2026-05-19:night:859384661477556264",
+      "dmSentAt": "2026-05-18T18:11:14.289Z",
+      "appliedDate": "2026-05-19",
+      "appliedAt": "2026-05-19T01:05:17.747Z"
+    },
+    "1503118789464821850": {
+      "id": "1503118789464821850",
+      "messageId": "1503118789464821850",
+      "channelId": "1502729397336018964",
+      "userId": "280301228716589058",
+      "name": "Graet - IM A KING",
+      "submittedName": "Date : May 11, 2026",
+      "nameMismatch": true,
+      "shift": "night",
+      "shiftLabel": "Night Time",
+      "leaveDate": "2026-05-13",
+      "status": "pending",
+      "approvedBy": null,
+      "approvedByName": null,
+      "updatedAt": "2026-05-18T17:06:41.673Z",
+      "reviewerNotifyKey": "1503118789464821850:2026-05-13:night:pending",
+      "reviewerNotifiedAt": "2026-05-18T17:06:44.086Z",
+      "reviewerDmStatus": "발송 완료"
+    },
+    "1505983128710156459": {
+      "id": "1505983128710156459",
+      "messageId": "1505983128710156459",
+      "channelId": "1502729397336018964",
+      "userId": "280301228716589058",
+      "name": "Graet - IM A KING",
+      "submittedName": "CEE",
+      "nameMismatch": true,
+      "shift": "night",
+      "shiftLabel": "Night Time",
+      "leaveDate": "2026-05-19",
+      "status": "rejected",
+      "approvedBy": "280301228716589058",
+      "approvedByName": "Graet - IM A KING",
+      "updatedAt": "2026-05-18T17:19:47.628Z",
+      "reviewerNotifyKey": "1505983128710156459:2026-05-19:night:pending",
+      "reviewerNotifiedAt": "2026-05-18T17:19:21.030Z",
+      "reviewerDmStatus": "발송 완료",
+      "lastDmKey": "2026-05-19:night:280301228716589058",
+      "dmSentAt": "2026-05-18T17:19:48.077Z",
+      "rejectedBy": "280301228716589058",
+      "rejectedByName": "Graet - IM A KING",
+      "rejectedAt": "2026-05-18T17:20:37.682Z",
+      "rejectReason": "Rejected by Graet"
+    },
+    "1506001445118546171": {
+      "id": "1506001445118546171",
+      "messageId": "1506001445118546171",
+      "channelId": "1502729397336018964",
+      "userId": "280301228716589058",
+      "name": "Graet - IM A KING",
+      "submittedName": "Garet",
+      "nameMismatch": true,
+      "shift": "night",
+      "shiftLabel": "Night Time",
+      "leaveDate": "2026-05-20",
+      "status": "rejected",
+      "approvedBy": "280301228716589058",
+      "approvedByName": "Graet - IM A KING",
+      "updatedAt": "2026-05-18T19:22:20.519Z",
+      "reviewerNotifyKey": "1506001445118546171:2026-05-20:night:pending",
+      "reviewerNotifiedAt": "2026-05-18T18:32:08.632Z",
+      "reviewerDmStatus": "발송 완료",
+      "lastDmKey": "2026-05-20:night:280301228716589058",
+      "dmSentAt": "2026-05-18T18:32:34.506Z",
+      "cancelledBy": "280301228716589058",
+      "cancelledByName": "Graet - IM A KING",
+      "cancelledAt": "2026-05-18T19:14:38.553Z",
+      "rejectedBy": "280301228716589058",
+      "rejectedByName": "Graet - IM A KING",
+      "rejectedAt": "2026-05-18T19:22:32.798Z",
+      "rejectReason": "Rejected by Graet (Reaction)"
+    }
+  },
+  "liveExceptions": {
+    "1484858560914395226": {
+      "userId": "1484858560914395226",
+      "name": "Lanceyy - Day Time",
+      "shift": "day",
+      "hours": 12,
+      "reason": "컴퓨터문제",
+      "approvedBy": "280301228716589058",
+      "approvedByName": "Graet - IM A KING",
+      "approvedAt": "2026-05-17T12:19:38.505Z",
+      "expiresAt": "2026-05-18T00:19:38.505Z",
+      "status": "expired",
+      "expiredAt": "2026-05-18T00:51:13.710Z"
+    }
+  },
+  "backupReason": "auto",
+  "createdAt": "2026-05-19T01:05:18.044Z"
+}

@@ -1,0 +1,19 @@
+{
+  "name": "require-dotenv-config-const-fssync-require",
+  "version": "1.0.0",
+  "description": "",
+  "main": "attendance-bot - 복사본.js",
+  "scripts": {
+    "test": "node tests/time-logic.test.js && node tests/state-policy.test.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "discord.js": "^14.26.4",
+    "dotenv": "^17.4.2",
+    "moment-timezone": "^0.6.2",
+    "node-cron": "^4.2.1"
+  }
+}
