@@ -1976,38 +1976,39 @@ async function renderDashboardCore({ forceMemberRefresh = false } = {}) {
                 ? `> # ⏱️ PH TIME: **${now.format('hh:mm:ss A')}**\n> ## [ MAINTENANCE - WORK CLOSED ]`
                 : `> # ⏱️ PH TIME: **${now.format('hh:mm:ss A')}**\n> ## [ LIVE MONITORING ]`);
 
+     
         embed.addFields(
-            {
-                name: '📊 OVERVIEW',
-                value: '```text\n' +
-                       `TOTAL     ${String(totalUsers).padStart(2, ' ')}\n` +
-                       `ACTIVE    ${String(active.length).padStart(2, ' ')}\n` +
-                       `FINISHED  ${String(finished.length).padStart(2, ' ')}\n` +
-                       `          \n` +
-                       '```',
-                inline: true
-            },
-            {
-                name: '⚠️ ATTENTION',
-                value: '```text\n' +
-                       `LIVE OFF  ${String(liveOff.length).padStart(2, ' ')}\n` +
-                       `DC        ${String(disconnected.length).padStart(2, ' ')}\n` +
-                       `ABSENT    ${String(absent.length).padStart(2, ' ')}\n` +
-                       `WAITING   ${String(standby.length).padStart(2, ' ')}\n` +
-                       '```',
-                inline: true
-            },
-            {
-                name: '📌 ETC',
-                value: '```text\n' +
-                       `OFF       ${String(leave.length).padStart(2, ' ')}\n` +
-                       `OT        ${String(dashboardOvertimeUsers.length).padStart(2, ' ')}\n` +
-                       `EXCEPTION ${String(liveExceptionUsers.length).padStart(2, ' ')}\n` +
-                       `          \n` +
-                       '```',
-                inline: true
-            }
-        );
+    {
+        name: '📊 OVERVIEW',
+        value: '```text\n' +
+               'TOTAL'.padEnd(10) + String(totalUsers).padStart(4, ' ') + '\n' +
+               'ACTIVE'.padEnd(10) + String(active.length).padStart(4, ' ') + '\n' +
+               'FINISHED'.padEnd(10) + String(finished.length).padStart(4, ' ') + '\n' +
+               '          ' + // 4번째 줄 공백
+               '```',
+        inline: true
+    },
+    {
+        name: '⚠️ ATTENTION',
+        value: '```text\n' +
+               'LIVE OFF'.padEnd(10) + String(liveOff.length).padStart(4, ' ') + '\n' +
+               'DC'.padEnd(10) + String(disconnected.length).padStart(4, ' ') + '\n' +
+               'ABSENT'.padEnd(10) + String(absent.length).padStart(4, ' ') + '\n' +
+               'WAITING'.padEnd(10) + String(standby.length).padStart(4, ' ') + '\n' +
+               '```',
+        inline: true
+    },
+    {
+        name: '📌 ETC',
+        value: '```text\n' +
+               'OFF'.padEnd(10) + String(leave.length).padStart(4, ' ') + '\n' +
+               'OT'.padEnd(10) + String(dashboardOvertimeUsers.length).padStart(4, ' ') + '\n' +
+               'EXCEPTION'.padEnd(10) + String(liveExceptionUsers.length).padStart(4, ' ') + '\n' +
+               '          ' + // 4번째 줄 공백
+               '```',
+        inline: true
+    }
+);
 
         embed.addFields({ name: '\u200B', value: '\u200B', inline: false });
         embed.addFields({ name: `${shiftNameText} [CURRENT]`, value: '\u200B', inline: false });
