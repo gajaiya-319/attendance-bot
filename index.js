@@ -25,8 +25,8 @@ const {
  *
  */
 const CONFIG = {
-    VERSION: '2500.94-INTERACTION-EXPIRE-GUARD',
-    RELEASE_NOTE: 'Ignore expired Discord interactions without noisy errors',
+    VERSION: '2500.95-FINISHED-WAITING-RECOVERY',
+    RELEASE_NOTE: 'Prevent stale finished state and compact active dashboard rows',
     GUILD_ID: '1502598521294028830',
     LOG_CHANNEL: '1503681085618262158',
     STATUS_CHANNEL: '1503681415407992962',
@@ -1579,8 +1579,8 @@ function getDashboardName(user) {
 function renderCleanGrid(arr, icon) {
     if (!arr || arr.length === 0) return 'NONE';
     const sorted = [...arr].sort((a, b) => getDashboardName(a).localeCompare(getDashboardName(b)));
-    const fixN = (u) => padWidth(truncateWidth(getDashboardName(u), 10), 11);
-    const fixT = (t) => padWidth(t || '00:00   ', 9);
+    const fixN = (u) => padWidth(truncateWidth(getDashboardName(u), 8), 9);
+    const fixT = (t) => padWidth(String(t || '00:00').replace(/\s?[AP]M$/i, '').trim(), 6);
     let lines = "```\n";
     for (let i = 0; i < sorted.length; i += 2) {
         const left = sorted[i];
@@ -1688,9 +1688,16 @@ function getHybridDashboardState(user, context) {
         now.isBefore(bounds.end)
     );
     const isOT = overtimeUsers.some(ot => ot.id === user.id);
+    const finishedAt = user.checkOutRaw || user.attendanceStatusChangedAt || null;
+    const finishedVisibleExpired = Boolean(
+        user.isFinished &&
+        finishedAt &&
+        now.diff(moment(finishedAt).tz(CONFIG.TIMEZONE), 'minutes') > CONFIG.FINISHED_VISIBLE_AFTER_MINS
+    );
 
     if (!attendanceStatus && !voiceStatus) return legacy;
     if (user.dayOff || attendanceStatus === 'DAY_OFF') return 'LEAVE';
+    if (finishedVisibleExpired && isWithinCurrentShiftBounds && !user.checkedIn && !isOT) return 'WAITING';
     if (attendanceStatus === 'FINISHED' || user.isFinished) return 'FINISHED';
 
     if (isShiftEnded && !isWithinCurrentShiftBounds && !isOT && user.checkedIn) {
@@ -1846,7 +1853,7 @@ async function renderDashboardCore({ forceMemberRefresh = false } = {}) {
                         user.disconnected ||
                         user.pendingManualOT ||
                         overtimeUsers.some(ot => ot.id === m.id) ||
-                        (user.isFinished && isVoiceConnected) ||
+                        (user.isFinished && isVoiceConnected && !finishedTooLong) ||
                         postMaintenanceFinished
                     )
                 );
