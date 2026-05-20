@@ -25,8 +25,8 @@ const {
  *
  */
 const CONFIG = {
-    VERSION: '2500.81-KOREAN-VOICE-LOGS',
-    RELEASE_NOTE: 'Korean DC/LIVE OFF loss-time logs',
+    VERSION: '2500.94-INTERACTION-EXPIRE-GUARD',
+    RELEASE_NOTE: 'Ignore expired Discord interactions without noisy errors',
     GUILD_ID: '1502598521294028830',
     LOG_CHANNEL: '1503681085618262158',
     STATUS_CHANNEL: '1503681415407992962',
@@ -67,6 +67,7 @@ const CONFIG = {
     FINISHED_VISIBLE_AFTER_MINS: 30,
     AUTO_TIMEOUT_RESUME_WINDOW_MINS: 60,
     GUEST_ASSIGN_AFTER_HOURS: 24,
+    INACTIVE_CANDIDATE_DAYS: 3,
     NICKNAME_ROLE_SYNC: true,
     EXCEPTIONS: {
         SHARED_SEAT_USER: process.env.SHARED_SEAT_USER_ID || null
@@ -118,12 +119,28 @@ const client = new Client({
     partials: [Partials.Message, Partials.Channel, Partials.Reaction]
 });
 
+function isUnknownInteractionError(e) {
+    return e?.code === 10062 || e?.rawError?.code === 10062;
+}
+
+function handleInteractionReplyError(e, context = 'reply') {
+    if (isUnknownInteractionError(e)) {
+        console.warn(`[INTERACTION WARN] Expired interaction ignored during ${context}.`);
+        return null;
+    }
+    throw e;
+}
+
 client.on('error', e => {
+    if (isUnknownInteractionError(e)) {
+        console.warn('[INTERACTION WARN] Unknown interaction ignored. The command reply window already expired.');
+        return;
+    }
     console.error('[CLIENT ERROR]', e);
 });
 
 process.on('unhandledRejection', e => {
-    if (e?.code === 10062) {
+    if (isUnknownInteractionError(e)) {
         console.warn('[INTERACTION WARN] Unknown interaction ignored. The command reply window already expired.');
         return;
     }
@@ -292,6 +309,9 @@ function ensureUserData(member, shift = null) {
             reversibleEarlyPenaltyPoints: null,
             liveOffWarnedFor: null,
             lastFinishedReturnPromptKey: null,
+            lastActivityAt: null,
+            lastActivitySource: null,
+            lastActivityDisplayName: member.displayName || member.user?.username || 'Unknown',
             lastActionAt: 0
         };
     }
@@ -330,6 +350,9 @@ function ensureUserData(member, shift = null) {
     if (!Object.prototype.hasOwnProperty.call(attendanceData[member.id], 'reversibleEarlyPenaltyAppliedAt')) attendanceData[member.id].reversibleEarlyPenaltyAppliedAt = null;
     if (!Object.prototype.hasOwnProperty.call(attendanceData[member.id], 'reversibleEarlyPenaltyPoints')) attendanceData[member.id].reversibleEarlyPenaltyPoints = null;
     if (!Object.prototype.hasOwnProperty.call(attendanceData[member.id], 'lastFinishedReturnPromptKey')) attendanceData[member.id].lastFinishedReturnPromptKey = null;
+    if (!Object.prototype.hasOwnProperty.call(attendanceData[member.id], 'lastActivityAt')) attendanceData[member.id].lastActivityAt = null;
+    if (!Object.prototype.hasOwnProperty.call(attendanceData[member.id], 'lastActivitySource')) attendanceData[member.id].lastActivitySource = null;
+    if (!Object.prototype.hasOwnProperty.call(attendanceData[member.id], 'lastActivityDisplayName')) attendanceData[member.id].lastActivityDisplayName = attendanceData[member.id].name;
     return attendanceData[member.id];
 }
 
@@ -338,6 +361,19 @@ function isCooldown(user) {
     if (now - (user.lastActionAt || 0) < 3000) return true;
     user.lastActionAt = now;
     return false;
+}
+
+function markMemberActivity(member, source = 'unknown', at = moment().tz(CONFIG.TIMEZONE)) {
+    if (!member || member.user?.bot) return false;
+    const u = ensureUserData(member, attendanceData[member.id]?.shift || getMemberShiftRole(member) || determineShift(member));
+    if (!u) return false;
+    const activityAt = moment(at).tz(CONFIG.TIMEZONE);
+    const throttleSeconds = source === 'message' ? 300 : 30;
+    if (u.lastActivityAt && Math.abs(activityAt.diff(moment(u.lastActivityAt).tz(CONFIG.TIMEZONE), 'seconds')) < throttleSeconds) return false;
+    u.lastActivityAt = activityAt.toISOString();
+    u.lastActivitySource = source;
+    u.lastActivityDisplayName = member.displayName || member.user?.username || u.name || 'Unknown';
+    return true;
 }
 
 function isOwnerId(id) {
@@ -362,9 +398,40 @@ function canManageAnnouncements(member) {
 
 function ownerOnlyReply(i) {
     return i.reply({
-        content: 'Owner only command.',
+        content: failText('Owner only command.'),
         flags: MessageFlags.Ephemeral
     }).then(() => setTimeout(() => i.deleteReply().catch(() => {}), 3000));
+}
+
+function okText(content) {
+    const text = String(content || 'Completed.');
+    return /^[✅❌⏳]/u.test(text) ? text : `✅ ${text}`;
+}
+
+function failText(content) {
+    const text = String(content || 'Failed.');
+    return /^[✅❌⏳]/u.test(text) ? text : `❌ ${text}`;
+}
+
+function pendingText(content) {
+    const text = String(content || 'Processing...');
+    return /^[✅❌⏳]/u.test(text) ? text : `⏳ ${text}`;
+}
+
+function commandStatusText(content) {
+    const text = String(content || '');
+    if (!text || /^[✅❌⏳]/u.test(text)) return text;
+    const failPattern = /no perms|admin only|owner only|not found|not checked in|no role|invalid|failed|fail|cannot|could not|restore failed|backup failed|찾지 못|없습니다|권한|올바르지|실패|오류/i;
+    return failPattern.test(text) ? failText(text) : okText(text);
+}
+
+function withCommandStatusPayload(payload) {
+    if (typeof payload === 'string') return commandStatusText(payload);
+    if (!payload || typeof payload !== 'object' || !Object.prototype.hasOwnProperty.call(payload, 'content')) return payload;
+    return {
+        ...payload,
+        content: commandStatusText(payload.content)
+    };
 }
 
 function addOvertimeUser(user, type = 'AUTO', startedAt = null) {
@@ -583,6 +650,30 @@ function getMemberShiftRole(member) {
     if (!hasD && !hasN) return null;
     if (hasD && hasN) return getOperationalShift() || getDashboardShift();
     return hasD ? 'day' : 'night';
+}
+
+function getRecentMaintenanceEnd(now = moment().tz(CONFIG.TIMEZONE), graceMins = CONFIG.FINISHED_VISIBLE_AFTER_MINS) {
+    const mNow = moment(now).tz(CONFIG.TIMEZONE);
+    return MAINTENANCE_WINDOWS
+        .map(window => {
+            if (mNow.format('dddd') !== window.day) return null;
+            const endedAt = applyClockTime(mNow, window.end);
+            const minsSinceEnd = mNow.diff(endedAt, 'minutes');
+            return minsSinceEnd >= 0 && minsSinceEnd <= graceMins ? { ...window, endedAt, minsSinceEnd } : null;
+        })
+        .find(Boolean) || null;
+}
+
+function shouldShowPostMaintenanceFinished(member, user, activeShift, now = moment().tz(CONFIG.TIMEZONE)) {
+    if (!member?.roles?.cache || !user || !activeShift) return false;
+    if (user.dayOff || user.checkedIn || user.disconnected || overtimeUsers.some(ot => ot.id === member.id)) return false;
+    if (!getRecentMaintenanceEnd(now)) return false;
+    const previousShift = activeShift === 'day' ? 'night' : 'day';
+    const previousRoleId = previousShift === 'day' ? CONFIG.ROLES.DAY : CONFIG.ROLES.NIGHT;
+    const activeRoleId = activeShift === 'day' ? CONFIG.ROLES.DAY : CONFIG.ROLES.NIGHT;
+    if (!member.roles.cache.has(previousRoleId) || member.roles.cache.has(activeRoleId)) return false;
+    const voiceState = member.guild?.voiceStates?.cache?.get(member.id);
+    return Boolean(member.voice?.channelId || voiceState?.channelId);
 }
 
 function shouldShowAsPreShiftStandby(member, user, now) {
@@ -1198,6 +1289,11 @@ async function normalizeCurrentShiftSession(member, user, shift, now) {
         user.checkOutRaw &&
         moment(user.checkOutRaw).tz(CONFIG.TIMEZONE).isSameOrAfter(bounds.start)
     );
+    const finishedBeforeCurrentSession = Boolean(
+        user.isFinished &&
+        user.checkOutRaw &&
+        moment(user.checkOutRaw).tz(CONFIG.TIMEZONE).isBefore(bounds.start)
+    );
 
     if (alreadyFinishedThisSession) {
         user.checkedIn = false;
@@ -1210,6 +1306,14 @@ async function normalizeCurrentShiftSession(member, user, shift, now) {
         return true;
     }
     user.isFinished = false;
+    if (finishedBeforeCurrentSession || user.attendanceStatus === 'FINISHED') {
+        transitionRecordedStatus(user, {
+            attendanceStatus: 'PRE_SHIFT',
+            voiceStatus: member.voice?.channelId ? (member.voice?.streaming ? 'LIVE_ON' : 'LIVE_OFF') : 'OFFLINE'
+        }, now, 'shift-normalize', 'previous-finished-reset-for-new-shift');
+        user.finishedPresence = null;
+        user.finalLeftAt = null;
+    }
 
     if (user.dayOff) {
         user.checkedIn = false;
@@ -1474,13 +1578,15 @@ function getDashboardName(user) {
 
 function renderCleanGrid(arr, icon) {
     if (!arr || arr.length === 0) return 'NONE';
-    arr.sort((a, b) => getDashboardName(a).localeCompare(getDashboardName(b)));
-    const fixN = (u) => padWidth(truncateWidth(getDashboardName(u), 12), 13);
+    const sorted = [...arr].sort((a, b) => getDashboardName(a).localeCompare(getDashboardName(b)));
+    const fixN = (u) => padWidth(truncateWidth(getDashboardName(u), 10), 11);
     const fixT = (t) => padWidth(t || '00:00   ', 9);
     let lines = "```\n";
-    for (let i = 0; i < arr.length; i += 2) {
-        let row = icon + " " + fixT(arr[i].checkInTime) + " " + fixN(arr[i]);
-        if (arr[i + 1]) row += "  " + icon + " " + fixT(arr[i + 1].checkInTime) + " " + fixN(arr[i + 1]);
+    for (let i = 0; i < sorted.length; i += 2) {
+        const left = sorted[i];
+        const right = sorted[i + 1];
+        let row = icon + " " + fixT(left.checkInTime) + " " + fixN(left);
+        if (right) row += " " + icon + " " + fixT(right.checkInTime) + " " + fixN(right);
         lines += row + "\n";
     }
     return lines + "```";
@@ -1714,6 +1820,7 @@ async function renderDashboardCore({ forceMemberRefresh = false } = {}) {
                 const voiceState = guild.voiceStates.cache.get(m.id);
                 const isVoiceConnected = Boolean(m.voice?.channelId || voiceState?.channelId);
                 const roleMatchesCurrentShift = !dashboardMaintenance && m.roles.cache.has(roleId);
+                const postMaintenanceFinished = !dashboardMaintenance && shouldShowPostMaintenanceFinished(m, user, activeDisplayShift, now);
                 const finishedAt = user?.checkOutRaw || user?.attendanceStatusChangedAt;
                 const finishedTooLong = Boolean(
                     user?.isFinished &&
@@ -1722,7 +1829,7 @@ async function renderDashboardCore({ forceMemberRefresh = false } = {}) {
                     finishedAt &&
                     now.diff(moment(finishedAt).tz(CONFIG.TIMEZONE), 'minutes') > CONFIG.FINISHED_VISIBLE_AFTER_MINS
                 );
-                if (finishedTooLong && !roleMatchesCurrentShift && !user?.dayOff && !overtimeUsers.some(ot => ot.id === m.id)) return false;
+                if (finishedTooLong && !roleMatchesCurrentShift && !postMaintenanceFinished && !user?.dayOff && !overtimeUsers.some(ot => ot.id === m.id)) return false;
                 const recentManualAction = Boolean(
                     user?.manualPanelTouchedAt &&
                     now.diff(moment(user.manualPanelTouchedAt).tz(CONFIG.TIMEZONE), 'minutes') <= 10 &&
@@ -1739,10 +1846,11 @@ async function renderDashboardCore({ forceMemberRefresh = false } = {}) {
                         user.disconnected ||
                         user.pendingManualOT ||
                         overtimeUsers.some(ot => ot.id === m.id) ||
-                        (user.isFinished && isVoiceConnected) 
+                        (user.isFinished && isVoiceConnected) ||
+                        postMaintenanceFinished
                     )
                 );
-                return roleMatchesCurrentShift || recentManualAction || preShiftStandby || hasTrackedState;
+                return roleMatchesCurrentShift || recentManualAction || preShiftStandby || postMaintenanceFinished || hasTrackedState;
             });
         const currentRoleMemberIds = new Set(
             currentShiftMembers
@@ -1832,7 +1940,8 @@ async function renderDashboardCore({ forceMemberRefresh = false } = {}) {
                     markLiveOffState(u, now);
                     sessionChanged = true;
                 }
-                u.fState = getHybridDashboardState(u, {
+                const postMaintenanceFinished = shouldShowPostMaintenanceFinished(m, u, activeDisplayShift, now);
+                u.fState = postMaintenanceFinished ? 'FINISHED' : getHybridDashboardState(u, {
                     isVoiceLiveOff,
                     isPreShift,
                     isStreaming,
@@ -2587,6 +2696,52 @@ function buildRankingEmbed() {
         .setTimestamp();
 }
 
+async function buildInactiveCandidatesEmbed(guild, days = CONFIG.INACTIVE_CANDIDATE_DAYS) {
+    const now = moment().tz(CONFIG.TIMEZONE);
+    const thresholdDays = Math.max(1, Math.min(30, Number(days) || CONFIG.INACTIVE_CANDIDATE_DAYS));
+    const cutoff = now.clone().subtract(thresholdDays, 'days');
+    await refreshGuildMembers(guild, { force: false, minIntervalMs: 5 * 60 * 1000 });
+
+    const candidates = guild.members.cache
+        .filter(member => {
+            if (!member || member.user?.bot) return false;
+            if (isOwnerId(member.id)) return false;
+            if (member.permissions?.has(PermissionFlagsBits.Administrator)) return false;
+            const u = attendanceData[member.id];
+            if (u?.checkedIn || u?.disconnected || u?.dayOff || overtimeUsers.some(ot => ot.id === member.id)) return false;
+            const lastAt = u?.lastActivityAt || (member.joinedTimestamp ? moment(member.joinedTimestamp).tz(CONFIG.TIMEZONE).toISOString() : null);
+            return Boolean(lastAt && moment(lastAt).tz(CONFIG.TIMEZONE).isBefore(cutoff));
+        })
+        .map(member => {
+            const u = attendanceData[member.id] || {};
+            const lastAt = u.lastActivityAt || moment(member.joinedTimestamp).tz(CONFIG.TIMEZONE).toISOString();
+            const source = u.lastActivitySource || 'joined';
+            return {
+                id: member.id,
+                name: member.displayName || member.user?.username || 'Unknown',
+                source,
+                lastAt: moment(lastAt).tz(CONFIG.TIMEZONE),
+                days: now.diff(moment(lastAt).tz(CONFIG.TIMEZONE), 'days')
+            };
+        })
+        .sort((a, b) => a.lastAt.valueOf() - b.lastAt.valueOf());
+
+    const rows = candidates.length
+        ? candidates.slice(0, 30).map(c => {
+            const name = padWidth(truncateWidth(c.name, 18), 19);
+            return `${name} | ${String(c.days).padStart(2)}d | ${c.lastAt.format('MM/DD HH:mm')} | ${c.source}`;
+        }).join('\n')
+        : 'No inactive kick candidates.';
+
+    return new EmbedBuilder()
+        .setTitle('Inactive Kick Candidate Report')
+        .setColor(candidates.length ? '#E67E22' : '#2ECC71')
+        .setDescription(`기준: 마지막 관찰 활동 ${thresholdDays}일 이상 없음\n주의: 아직 자동 추방하지 않고 후보만 표시합니다.`)
+        .addFields({ name: `Candidates (${candidates.length})`, value: `\`\`\`\n${rows}\n\`\`\``, inline: false })
+        .setFooter({ text: 'Activity sources: message | voice_state | command | button | joined' })
+        .setTimestamp();
+}
+
 async function syncWorkingRoles({ dryRun = false } = {}) {
     const guild = client.guilds.cache.get(CONFIG.GUILD_ID);
     if (!guild || !CONFIG.ROLES.WORKING) return { added: 0, removed: 0, skipped: true, notes: ['WORKING role or guild unavailable.'] };
@@ -2721,6 +2876,167 @@ async function autoAssignGuestForUnassignedMembers(guild) {
         }
     }
 
+    return changed;
+}
+
+function buildGuestNickname(displayName) {
+    const suffix = ' - Guest';
+    const base = String(displayName || 'Guest')
+        .replace(/\s+-\s+Guest$/i, '')
+        .trim() || 'Guest';
+    return `${base.slice(0, 32 - suffix.length)}${suffix}`;
+}
+
+async function syncManualGuestNickname(oldMember, newMember) {
+    if (!CONFIG.ROLES.GUEST || !oldMember || !newMember || newMember.user?.bot) return false;
+    const hadGuest = oldMember.roles?.cache?.has(CONFIG.ROLES.GUEST);
+    const hasGuest = newMember.roles?.cache?.has(CONFIG.ROLES.GUEST);
+    if (hadGuest || !hasGuest) return false;
+
+    const guestNick = buildGuestNickname(newMember.displayName || newMember.user?.username);
+    if (newMember.displayName === guestNick) return false;
+
+    const me = newMember.guild?.members?.me || await newMember.guild?.members?.fetchMe().catch(() => null);
+    if (me && me.roles.highest.comparePositionTo(newMember.roles.highest) <= 0) {
+        console.warn(`[GUEST MANUAL WARN] Cannot update guest nickname for ${newMember.displayName}. Role hierarchy too low.`);
+        return false;
+    }
+
+    await newMember.setNickname(guestNick, 'Guest role manually assigned').catch(e => {
+        console.error('[GUEST MANUAL NICK ERROR]', e);
+    });
+
+    await writeDayOffLog([
+        '게스트 역할 수동 부여 감지',
+        `대상: ${newMember.displayName}`,
+        `ID: ${newMember.id}`,
+        `닉네임 변경: ${guestNick}`
+    ].join('\n'));
+    return true;
+}
+
+function getWorkerNicknameBase(displayName) {
+    return String(displayName || 'Unknown')
+        .replace(/\s*-\s*[PH]\s*(?:Day|Night)\s*Time\s*$/i, '')
+        .replace(/\s*-\s*(?:Heine|Paagrio)\s*(?:Day|Night)\s*Time\s*$/i, '')
+        .replace(/\s+-\s+Guest$/i, '')
+        .trim() || 'Unknown';
+}
+
+function getWorkerRoleProfileFromMember(member) {
+    if (!member?.roles?.cache) return null;
+    const hasHeine = member.roles.cache.has(CONFIG.ROLES.HEINE);
+    const hasPaagrio = member.roles.cache.has(CONFIG.ROLES.PAAGRIO);
+    const hasDay = member.roles.cache.has(CONFIG.ROLES.DAY);
+    const hasNight = member.roles.cache.has(CONFIG.ROLES.NIGHT);
+    if (hasHeine === hasPaagrio || hasDay === hasNight) return null;
+    return {
+        server: hasHeine ? 'HEINE' : 'PAAGRIO',
+        shift: hasDay ? 'DAY' : 'NIGHT'
+    };
+}
+
+function getWorkerRoleProfileFromNickname(displayName) {
+    const name = String(displayName || '');
+    const match = name.match(/\s-\s*([PH])\s*(Day|Night)\s*Time\s*$/i);
+    if (!match) return null;
+    return {
+        server: match[1].toUpperCase() === 'H' ? 'HEINE' : 'PAAGRIO',
+        shift: match[2].toUpperCase() === 'DAY' ? 'DAY' : 'NIGHT'
+    };
+}
+
+function buildWorkerNickname(displayName, profile) {
+    const base = getWorkerNicknameBase(displayName);
+    const serverCode = profile.server === 'HEINE' ? 'H' : 'P';
+    const shiftText = profile.shift === 'DAY' ? 'Day Time' : 'Night Time';
+    const suffix = ` - ${serverCode} ${shiftText}`;
+    return `${base.slice(0, 32 - suffix.length)}${suffix}`;
+}
+
+async function canManageMemberNickname(member) {
+    const me = member?.guild?.members?.me || await member?.guild?.members?.fetchMe().catch(() => null);
+    if (me && me.roles.highest.comparePositionTo(member.roles.highest) <= 0) {
+        console.warn(`[NICK ROLE SYNC WARN] Cannot update nickname for ${member.displayName}. Role hierarchy too low.`);
+        return false;
+    }
+    return true;
+}
+
+async function syncNicknameFromAssignedRoles(oldMember, newMember) {
+    const oldProfile = getWorkerRoleProfileFromMember(oldMember);
+    const newProfile = getWorkerRoleProfileFromMember(newMember);
+    if (!newProfile) return false;
+    const roleProfileChanged = !oldProfile ||
+        oldProfile.server !== newProfile.server ||
+        oldProfile.shift !== newProfile.shift;
+    if (!roleProfileChanged) return false;
+
+    const targetNick = buildWorkerNickname(newMember.displayName || newMember.user?.username, newProfile);
+    if (newMember.displayName === targetNick) return false;
+    if (!await canManageMemberNickname(newMember)) return false;
+
+    await newMember.setNickname(targetNick, 'Worker roles manually assigned').catch(e => {
+        console.error('[WORKER ROLE NICK ERROR]', e);
+    });
+    if (CONFIG.ROLES.GUEST && newMember.roles.cache.has(CONFIG.ROLES.GUEST)) {
+        await newMember.roles.remove(CONFIG.ROLES.GUEST, 'Worker role assigned; remove guest role').catch(e => {
+            console.error('[WORKER GUEST ROLE REMOVE ERROR]', e);
+        });
+    }
+    await writeDayOffLog([
+        '역할 수동 부여에 따른 닉네임 자동 변경',
+        `대상: ${newMember.displayName}`,
+        `ID: ${newMember.id}`,
+        `서버: ${newProfile.server}`,
+        `근무조: ${newProfile.shift}`,
+        `닉네임 변경: ${targetNick}`
+    ].join('\n'));
+    return true;
+}
+
+async function syncRolesFromStructuredNickname(newMember) {
+    const profile = getWorkerRoleProfileFromNickname(newMember.displayName);
+    if (!profile) return false;
+
+    const serverRole = profile.server === 'HEINE' ? CONFIG.ROLES.HEINE : CONFIG.ROLES.PAAGRIO;
+    const otherServerRole = profile.server === 'HEINE' ? CONFIG.ROLES.PAAGRIO : CONFIG.ROLES.HEINE;
+    const shiftRole = profile.shift === 'DAY' ? CONFIG.ROLES.DAY : CONFIG.ROLES.NIGHT;
+    const otherShiftRole = profile.shift === 'DAY' ? CONFIG.ROLES.NIGHT : CONFIG.ROLES.DAY;
+
+    let changed = false;
+    if (!newMember.roles.cache.has(serverRole)) {
+        await newMember.roles.add(serverRole, 'Nickname worker profile sync').catch(e => console.error('[NICK ROLE ADD ERROR]', e));
+        changed = true;
+    }
+    if (newMember.roles.cache.has(otherServerRole)) {
+        await newMember.roles.remove(otherServerRole, 'Nickname worker profile sync').catch(e => console.error('[NICK ROLE REMOVE ERROR]', e));
+        changed = true;
+    }
+    if (!newMember.roles.cache.has(shiftRole)) {
+        await newMember.roles.add(shiftRole, 'Nickname worker profile sync').catch(e => console.error('[NICK SHIFT ADD ERROR]', e));
+        changed = true;
+    }
+    if (newMember.roles.cache.has(otherShiftRole)) {
+        await newMember.roles.remove(otherShiftRole, 'Nickname worker profile sync').catch(e => console.error('[NICK SHIFT REMOVE ERROR]', e));
+        changed = true;
+    }
+    if (CONFIG.ROLES.GUEST && newMember.roles.cache.has(CONFIG.ROLES.GUEST)) {
+        await newMember.roles.remove(CONFIG.ROLES.GUEST, 'Nickname worker profile sync; remove guest role').catch(e => console.error('[NICK GUEST REMOVE ERROR]', e));
+        changed = true;
+    }
+
+    if (changed) {
+        const u = ensureUserData(newMember, profile.shift === 'DAY' ? 'day' : 'night');
+        if (u) u.shift = profile.shift === 'DAY' ? 'day' : 'night';
+        await writeDayOffLog([
+            '닉네임 형식 감지에 따른 역할 자동 동기화',
+            `대상: ${newMember.displayName}`,
+            `ID: ${newMember.id}`,
+            `서버: ${profile.server}`,
+            `근무조: ${profile.shift}`
+        ].join('\n'));
+    }
     return changed;
 }
 
@@ -3965,16 +4281,17 @@ async function checkDayOffReservations() {
         if (!reservation || reservation.status !== 'approved') continue;
         const logicalDate = getDayOffLogicalDateForShift(reservation.shift, now);
         if (reservation.leaveDate !== logicalDate) continue;
+        const reservationBounds = buildShiftBoundsForBusinessDate(
+            reservation.shift,
+            moment.tz(reservation.leaveDate, 'YYYY-MM-DD', CONFIG.TIMEZONE)
+        );
+        if (reservationBounds?.end && now.isSameOrAfter(reservationBounds.end)) continue;
 
         const member = await guild.members.fetch(reservation.userId).catch(() => null);
         const u = ensureUserData(member || { id: reservation.userId, displayName: reservation.name }, reservation.shift);
         if (!u) continue;
         if (reservation.appliedDate === logicalDate && u.dayOff) continue;
         const alreadyCounted = reservation.appliedDate === logicalDate;
-        const reservationBounds = buildShiftBoundsForBusinessDate(
-            reservation.shift,
-            moment.tz(reservation.leaveDate, 'YYYY-MM-DD', CONFIG.TIMEZONE)
-        );
 
         u.shift = reservation.shift;
         u.dayOff = true;
@@ -4017,8 +4334,12 @@ client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
     try {
         const m = newState.member || oldState.member;
         if (!m || m.user?.bot) return;
+        const activityChanged = markMemberActivity(m, 'voice_state');
         const s = determineShift(m);
-        if (!s) return;
+        if (!s) {
+            if (activityChanged) await saveSystemAsync();
+            return;
+        }
         const u = ensureUserData(m, s);
         if (!u) return;
         const now = moment().tz(CONFIG.TIMEZONE);
@@ -4032,6 +4353,8 @@ client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
         if (changed) {
             await saveSystemAsync();
             renderDashboardCore();
+        } else if (activityChanged) {
+            await saveSystemAsync();
         }
     } catch (e) {
         console.error('[VOICE AUTOMATION ERROR]', e);
@@ -4043,6 +4366,15 @@ client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
         if (!CONFIG.NICKNAME_ROLE_SYNC) return;
         if (!newMember || newMember.user?.bot) return;
         if (CONFIG.EXCEPTIONS.SHARED_SEAT_USER && newMember.id === CONFIG.EXCEPTIONS.SHARED_SEAT_USER) return;
+        if (await syncManualGuestNickname(oldMember, newMember)) return;
+
+        const existing = attendanceData[newMember.id];
+        if (existing?.checkedIn || existing?.disconnected || existing?.dayOff) {
+            await writeDayOffLog(`닉네임/역할 자동동기화 보류\n대상: ${newMember.displayName}\n사유: 근무/휴무/DC 상태 중에는 역할을 자동 변경하지 않습니다.`);
+            return;
+        }
+
+        if (await syncNicknameFromAssignedRoles(oldMember, newMember)) return;
         if (oldMember.displayName === newMember.displayName) return;
 
         const hasBothShiftRoles = newMember.roles.cache.has(CONFIG.ROLES.DAY) && newMember.roles.cache.has(CONFIG.ROLES.NIGHT);
@@ -4051,9 +4383,9 @@ client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
             return;
         }
 
-        const existing = attendanceData[newMember.id];
-        if (existing?.checkedIn || existing?.disconnected || existing?.dayOff) {
-            await writeDayOffLog(`닉네임/역할 자동동기화 보류\n대상: ${newMember.displayName}\n사유: 근무/휴무/DC 상태 중에는 역할을 자동 변경하지 않습니다.`);
+        if (await syncRolesFromStructuredNickname(newMember)) {
+            await saveSystemAsync();
+            renderDashboardCore();
             return;
         }
 
@@ -4140,6 +4472,9 @@ client.on(Events.GuildMemberRemove, async member => {
 
 client.on(Events.MessageCreate, async message => {
     try {
+        if (message.member && !message.author?.bot && markMemberActivity(message.member, 'message')) {
+            await saveSystemAsync();
+        }
         await processDayOffMessage(message);
     } catch (e) {
         console.error('[DAYOFF MESSAGE ERROR]', e);
@@ -4200,6 +4535,13 @@ client.on(Events.InteractionCreate, async i => {
     const autoDel = (ms = 3000) => setTimeout(() => i.deleteReply().catch(() => {}), ms);
     try {
         if (i.isChatInputCommand()) {
+            const rawReply = i.reply.bind(i);
+            const rawEditReply = i.editReply.bind(i);
+            const rawDeferReply = i.deferReply.bind(i);
+            i.reply = (payload) => rawReply(withCommandStatusPayload(payload)).catch(e => handleInteractionReplyError(e, 'reply'));
+            i.editReply = (payload) => rawEditReply(withCommandStatusPayload(payload)).catch(e => handleInteractionReplyError(e, 'editReply'));
+            i.deferReply = (payload) => rawDeferReply(payload).catch(e => handleInteractionReplyError(e, 'deferReply'));
+            if (i.member && markMemberActivity(i.member, 'command')) await saveSystemAsync();
             const isAdmin = i.member.permissions.has(PermissionFlagsBits.Administrator);
             const isDayOffManager = isAdmin || i.user.id === CONFIG.DAYOFF_REVIEWER_ID || isOwnerId(i.user.id);
             const now = moment().tz(CONFIG.TIMEZONE);
@@ -4295,6 +4637,13 @@ client.on(Events.InteractionCreate, async i => {
             if (n('data-audit') || n('데이터검사')) {
                 if (!isAdmin) return i.reply({ content: 'No perms.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
                 return i.reply({ embeds: [buildDataAuditEmbed()], flags: MessageFlags.Ephemeral });
+            }
+            if (n('inactive-candidates') || n('비활동검사')) {
+                if (!isAdmin) return i.reply({ content: 'No perms.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
+                const days = i.options.getInteger('days') || i.options.getInteger('일수') || CONFIG.INACTIVE_CANDIDATE_DAYS;
+                await i.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => null);
+                if (!i.deferred && !i.replied) return;
+                return i.editReply({ embeds: [await buildInactiveCandidatesEmbed(i.guild, days)] });
             }
             if (n('status-audit') || n('상태검사')) {
                 if (!isAdmin) return i.reply({ content: 'No perms.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
@@ -4573,12 +4922,13 @@ client.on(Events.InteractionCreate, async i => {
                 renderDashboardCore();
                 return i.reply({ content: 'Roles cleared.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
             }
-            if (n('reset-user') || n('개인리셋')) {
-                if (!isAdmin) return i.reply({ content: 'No perms.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
+            if (n('reset-user') || n('리셋') || n('개인리셋')) {
+                if (!isAdmin) return i.reply({ content: failText('No perms.'), flags: MessageFlags.Ephemeral }).then(() => autoDel());
                 await i.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => null);
                 if (!i.deferred && !i.replied) return;
+                await i.editReply({ content: pendingText('개인 리셋 처리 중입니다. 백업을 만들고 데이터를 정리하고 있습니다.') }).catch(() => null);
                 const t = getTargetMember();
-                if (!t) return i.editReply({ content: 'Member not found.' }).then(() => autoDel());
+                if (!t) return i.editReply({ content: failText('Member not found.') }).then(() => autoDel());
                 await createBackupSnapshot('before-user-reset');
                 delete attendanceData[t.id];
                 overtimeUsers = overtimeUsers.filter(o => o.id !== t.id);
@@ -4587,13 +4937,14 @@ client.on(Events.InteractionCreate, async i => {
                 await writeAdminActionLog('RESET_USER', i.member, t, ['backup=before-user-reset']);
                 await saveSystemAsync();
                 await renderDashboardCore({ forceMemberRefresh: true });
-                return i.editReply({ content: '✅ 개인 리셋 완료.' }).then(() => autoDel());
+                return i.editReply({ content: okText(`개인 리셋 완료: ${t.displayName}`) }).then(() => autoDel());
             }
             if (n('reset-all') || n('전체리셋')) {
-                if (!isAdmin) return i.reply({ content: 'No perms.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
+                if (!isAdmin) return i.reply({ content: failText('No perms.'), flags: MessageFlags.Ephemeral }).then(() => autoDel());
                 if (!isOwnerId(i.user.id)) return ownerOnlyReply(i);
                 await i.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => null);
                 if (!i.deferred && !i.replied) return;
+                await i.editReply({ content: pendingText('전체 리셋 처리 중입니다. 백업을 만들고 전체 출석 데이터를 정리하고 있습니다.') }).catch(() => null);
                 await createBackupSnapshot('before-full-reset');
                 attendanceData = {};
                 overtimeUsers = [];
@@ -4602,7 +4953,7 @@ client.on(Events.InteractionCreate, async i => {
                 await writeAdminActionLog('RESET_ALL', i.member, null, ['backup=before-full-reset']);
                 await saveSystemAsync();
                 await renderDashboardCore({ forceMemberRefresh: true });
-                return i.editReply({ content: '✅ 전체 리셋 완료. 출석 데이터와 OT 상태를 초기화했습니다.' }).then(() => autoDel());
+                return i.editReply({ content: okText('전체 리셋 완료. 출석 데이터와 OT 상태를 초기화했습니다.') }).then(() => autoDel());
             }
             if (n('my-info') || n('내정보')) {
                 const u = attendanceData[i.user.id];
@@ -4621,6 +4972,7 @@ client.on(Events.InteractionCreate, async i => {
         if (i.isButton()) {
             await refreshGuildMembers(i.guild, { force: true, minIntervalMs: 0 });
             const m = await i.guild.members.fetch({ user: i.user.id, force: true }).catch(() => i.member);
+            if (markMemberActivity(m, 'button')) await saveSystemAsync();
             const s = determineShift(m);
             if (!s) return i.reply({ content: 'No role.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
             const u = ensureUserData(m, s);
@@ -4783,7 +5135,7 @@ client.on(Events.InteractionCreate, async i => {
         }
     } catch (error) {
         console.error('[INTERACTION ERROR]', error);
-        const content = '❌ 명령어를 처리하는 중 오류가 발생했습니다. 콘솔 로그를 확인해주세요.';
+        const content = failText('명령어를 처리하는 중 오류가 발생했습니다. 콘솔 로그를 확인해주세요.');
         if (i.deferred || i.replied) {
             await i.editReply({ content, embeds: [], components: [] }).catch(() => null);
         } else {
@@ -4810,6 +5162,8 @@ client.once(Events.ClientReady, async () => {
         new SlashCommandBuilder().setName('워킹동기화').setDescription('Sync WORKING roles'), new SlashCommandBuilder().setName('sync-working').setDescription('Sync WORKING roles'),
         new SlashCommandBuilder().setName('권한진단').setDescription('Permission check'), new SlashCommandBuilder().setName('permission-check').setDescription('Permission check'),
         new SlashCommandBuilder().setName('데이터검사').setDescription('Data audit'), new SlashCommandBuilder().setName('data-audit').setDescription('Data audit'),
+        new SlashCommandBuilder().setName('비활동검사').setDescription('Inactive kick candidate report').addIntegerOption(o=>o.setName('일수').setDescription('Inactive days').setMinValue(1).setMaxValue(30)),
+        new SlashCommandBuilder().setName('inactive-candidates').setDescription('Inactive kick candidate report').addIntegerOption(o=>o.setName('days').setDescription('Inactive days').setMinValue(1).setMaxValue(30)),
         new SlashCommandBuilder().setName('상태검사').setDescription('Recorded status audit'), new SlashCommandBuilder().setName('status-audit').setDescription('Recorded status audit'),
         new SlashCommandBuilder().setName('시간검사').setDescription('Time logic audit'), new SlashCommandBuilder().setName('time-audit').setDescription('Time logic audit'),
         new SlashCommandBuilder().setName('휴무로그').setDescription('Day off audit log').addIntegerOption(o=>o.setName('갯수').setDescription('Limit').setMinValue(1).setMaxValue(30)),
@@ -4830,6 +5184,7 @@ client.once(Events.ClientReady, async () => {
         new SlashCommandBuilder().setName('강제휴무').setDescription('Force off').addUserOption(o=>o.setName('대상').setRequired(true).setDescription('Target')), new SlashCommandBuilder().setName('force-off').setDescription('Force off').addUserOption(o=>o.setName('target').setRequired(true).setDescription('Target')),
         new SlashCommandBuilder().setName('강제연장').setDescription('Force OT').addUserOption(o=>o.setName('대상').setRequired(true).setDescription('Target')), new SlashCommandBuilder().setName('force-ot').setDescription('Force OT').addUserOption(o=>o.setName('target').setRequired(true).setDescription('Target')),
         new SlashCommandBuilder().setName('개인리셋').setDescription('Reset one user').addUserOption(o=>o.setName('대상').setRequired(true).setDescription('Target')), new SlashCommandBuilder().setName('reset-user').setDescription('Reset one user').addUserOption(o=>o.setName('target').setRequired(true).setDescription('Target')),
+        new SlashCommandBuilder().setName('리셋').setDescription('Reset one user').addUserOption(o=>o.setName('target').setRequired(true).setDescription('Target')),
         new SlashCommandBuilder().setName('전체리셋').setDescription('Reset all attendance data'), new SlashCommandBuilder().setName('reset-all').setDescription('Reset all attendance data'),
         new SlashCommandBuilder().setName('내정보').setDescription('My info'), new SlashCommandBuilder().setName('my-info').setDescription('My info'),
         new SlashCommandBuilder().setName('진단').setDescription('Diagnostics'), new SlashCommandBuilder().setName('diagnostics').setDescription('Diagnostics'),
