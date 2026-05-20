@@ -1,4 +1,4 @@
-require('dotenv').config();
+﻿require('dotenv').config();
 
 const fsSync = require('fs');
 const fs = require('fs').promises;
@@ -25,8 +25,8 @@ const {
  *
  */
 const CONFIG = {
-    VERSION: '2500.95-FINISHED-WAITING-RECOVERY',
-    RELEASE_NOTE: 'Prevent stale finished state and compact active dashboard rows',
+    VERSION: '2500.96-ACTIVE-LIST-SINGLE-COLUMN',
+    RELEASE_NOTE: 'Use single-column active list to prevent Discord wrapping',
     GUILD_ID: '1502598521294028830',
     LOG_CHANNEL: '1503681085618262158',
     STATUS_CHANNEL: '1503681415407992962',
@@ -1579,15 +1579,11 @@ function getDashboardName(user) {
 function renderCleanGrid(arr, icon) {
     if (!arr || arr.length === 0) return 'NONE';
     const sorted = [...arr].sort((a, b) => getDashboardName(a).localeCompare(getDashboardName(b)));
-    const fixN = (u) => padWidth(truncateWidth(getDashboardName(u), 8), 9);
+    const fixN = (u) => padWidth(truncateWidth(getDashboardName(u), 16), 17);
     const fixT = (t) => padWidth(String(t || '00:00').replace(/\s?[AP]M$/i, '').trim(), 6);
     let lines = "```\n";
-    for (let i = 0; i < sorted.length; i += 2) {
-        const left = sorted[i];
-        const right = sorted[i + 1];
-        let row = icon + " " + fixT(left.checkInTime) + " " + fixN(left);
-        if (right) row += " " + icon + " " + fixT(right.checkInTime) + " " + fixN(right);
-        lines += row + "\n";
+    for (const user of sorted) {
+        lines += `${icon} ${fixT(user.checkInTime)} ${fixN(user)}\n`;
     }
     return lines + "```";
 }
@@ -1983,32 +1979,32 @@ async function renderDashboardCore({ forceMemberRefresh = false } = {}) {
         embed.addFields(
             {
                 name: '📊 OVERVIEW',
-                value: '```' + '\n' + [
-                    `TOTAL      ${totalUsers}`,
-                    `ACTIVE     ${active.length}`,
-                    `FINISHED   ${finished.length}`,
-                    '           '
-                ].join('\n') + '\n' + '```',
+                value: '```\n' + [
+                    `TOTAL     ${String(totalUsers).padStart(2, ' ')}`,
+                    `ACTIVE    ${String(active.length).padStart(2, ' ')}`,
+                    `FINISHED  ${String(finished.length).padStart(2, ' ')}`,
+                    '            ' // 다른 박스와 높이를 맞추기 위한 빈 줄 (공백 12칸)
+                ].join('\n') + '\n```',
                 inline: true
             },
             {
                 name: '⚠️ ATTENTION',
-                value: '```' + '\n' + [
-                    `LIVE OFF   ${liveOff.length}`,
-                    `DC         ${disconnected.length}`,
-                    `ABSENT     ${absent.length}`,
-                    `WAITING    ${standby.length}`
-                ].join('\n') + '\n' + '```',
+                value: '```\n' + [
+                    `LIVE OFF  ${String(liveOff.length).padStart(2, ' ')}`,
+                    `DC        ${String(disconnected.length).padStart(2, ' ')}`,
+                    `ABSENT    ${String(absent.length).padStart(2, ' ')}`,
+                    `WAITING   ${String(standby.length).padStart(2, ' ')}`
+                ].join('\n') + '\n```',
                 inline: true
             },
             {
                 name: '📌 ETC',
-                value: '```' + '\n' + [
-                    `OFF        ${leave.length}`,
-                    `OT         ${dashboardOvertimeUsers.length}`,
-                    `EXCEPTION  ${liveExceptionUsers.length}`,
-                    '           '
-                ].join('\n') + '\n' + '```',
+                value: '```\n' + [
+                    `OFF       ${String(leave.length).padStart(2, ' ')}`,
+                    `OT        ${String(dashboardOvertimeUsers.length).padStart(2, ' ')}`,
+                    `EXCEPTION ${String(liveExceptionUsers.length).padStart(2, ' ')}`,
+                    '            ' // 다른 박스와 높이를 맞추기 위한 빈 줄 (공백 12칸)
+                ].join('\n') + '\n```',
                 inline: true
             }
         );
