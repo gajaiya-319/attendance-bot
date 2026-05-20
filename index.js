@@ -1979,32 +1979,32 @@ async function renderDashboardCore({ forceMemberRefresh = false } = {}) {
         embed.addFields(
             {
                 name: '📊 OVERVIEW',
-                value: '```\n' + [
-                    `TOTAL     ${String(totalUsers).padStart(2, ' ')}`,
-                    `ACTIVE    ${String(active.length).padStart(2, ' ')}`,
-                    `FINISHED  ${String(finished.length).padStart(2, ' ')}`,
-                    '            ' // 다른 박스와 높이를 맞추기 위한 빈 줄 (공백 12칸)
-                ].join('\n') + '\n```',
+                value: '```text\n' +
+                       `TOTAL     ${String(totalUsers).padStart(2, ' ')}\n` +
+                       `ACTIVE    ${String(active.length).padStart(2, ' ')}\n` +
+                       `FINISHED  ${String(finished.length).padStart(2, ' ')}\n` +
+                       `          \n` +
+                       '```',
                 inline: true
             },
             {
                 name: '⚠️ ATTENTION',
-                value: '```\n' + [
-                    `LIVE OFF  ${String(liveOff.length).padStart(2, ' ')}`,
-                    `DC        ${String(disconnected.length).padStart(2, ' ')}`,
-                    `ABSENT    ${String(absent.length).padStart(2, ' ')}`,
-                    `WAITING   ${String(standby.length).padStart(2, ' ')}`
-                ].join('\n') + '\n```',
+                value: '```text\n' +
+                       `LIVE OFF  ${String(liveOff.length).padStart(2, ' ')}\n` +
+                       `DC        ${String(disconnected.length).padStart(2, ' ')}\n` +
+                       `ABSENT    ${String(absent.length).padStart(2, ' ')}\n` +
+                       `WAITING   ${String(standby.length).padStart(2, ' ')}\n` +
+                       '```',
                 inline: true
             },
             {
                 name: '📌 ETC',
-                value: '```\n' + [
-                    `OFF       ${String(leave.length).padStart(2, ' ')}`,
-                    `OT        ${String(dashboardOvertimeUsers.length).padStart(2, ' ')}`,
-                    `EXCEPTION ${String(liveExceptionUsers.length).padStart(2, ' ')}`,
-                    '            ' // 다른 박스와 높이를 맞추기 위한 빈 줄 (공백 12칸)
-                ].join('\n') + '\n```',
+                value: '```text\n' +
+                       `OFF       ${String(leave.length).padStart(2, ' ')}\n` +
+                       `OT        ${String(dashboardOvertimeUsers.length).padStart(2, ' ')}\n` +
+                       `EXCEPTION ${String(liveExceptionUsers.length).padStart(2, ' ')}\n` +
+                       `          \n` +
+                       '```',
                 inline: true
             }
         );
