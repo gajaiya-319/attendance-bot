@@ -25,8 +25,8 @@ const {
  *
  */
 const CONFIG = {
-    VERSION: '2500.96-ACTIVE-LIST-SINGLE-COLUMN',
-    RELEASE_NOTE: 'Use single-column active list to prevent Discord wrapping',
+    VERSION: '2500.97-COMPACT-SUMMARY-BOXES',
+    RELEASE_NOTE: 'Keep dashboard summary counts on one line in narrow embeds',
     GUILD_ID: '1502598521294028830',
     LOG_CHANNEL: '1503681085618262158',
     STATUS_CHANNEL: '1503681415407992962',
@@ -1629,6 +1629,10 @@ function renderShiftSummary(label, groups) {
     return `${label} | ABSENT ${groups.absent.length} | DC ${groups.disconnected.length} | WAITING ${groups.standby.length} | ACTIVE ${groups.active.length} | OFF ${groups.leave.length}`;
 }
 
+function renderSummaryBox(rows) {
+    return `\`\`\`text\n${rows.map(([label, value]) => `${label} ${value}`).join('\n')}\n\`\`\``;
+}
+
 function renderOvertimeList(now, source = overtimeUsers) {
     if (!source.length) return 'NONE';
     const lines = source
@@ -1980,32 +1984,30 @@ async function renderDashboardCore({ forceMemberRefresh = false } = {}) {
         embed.addFields(
     {
         name: '📊 OVERVIEW',
-        value: '```text\n' +
-               'TOTAL'.padEnd(10) + String(totalUsers).padStart(4, ' ') + '\n' +
-               'ACTIVE'.padEnd(10) + String(active.length).padStart(4, ' ') + '\n' +
-               'FINISHED'.padEnd(10) + String(finished.length).padStart(4, ' ') + '\n' +
-               '          ' + // 4번째 줄 공백
-               '```',
+        value: renderSummaryBox([
+            ['TOTAL', totalUsers],
+            ['ACTIVE', active.length],
+            ['FINISHED', finished.length]
+        ]),
         inline: true
     },
     {
         name: '⚠️ ATTENTION',
-        value: '```text\n' +
-               'LIVE OFF'.padEnd(10) + String(liveOff.length).padStart(4, ' ') + '\n' +
-               'DC'.padEnd(10) + String(disconnected.length).padStart(4, ' ') + '\n' +
-               'ABSENT'.padEnd(10) + String(absent.length).padStart(4, ' ') + '\n' +
-               'WAITING'.padEnd(10) + String(standby.length).padStart(4, ' ') + '\n' +
-               '```',
+        value: renderSummaryBox([
+            ['LIVE OFF', liveOff.length],
+            ['DC', disconnected.length],
+            ['ABSENT', absent.length],
+            ['WAITING', standby.length]
+        ]),
         inline: true
     },
     {
         name: '📌 ETC',
-        value: '```text\n' +
-               'OFF'.padEnd(10) + String(leave.length).padStart(4, ' ') + '\n' +
-               'OT'.padEnd(10) + String(dashboardOvertimeUsers.length).padStart(4, ' ') + '\n' +
-               'EXCEPTION'.padEnd(10) + String(liveExceptionUsers.length).padStart(4, ' ') + '\n' +
-               '          ' + // 4번째 줄 공백
-               '```',
+        value: renderSummaryBox([
+            ['OFF', leave.length],
+            ['OT', dashboardOvertimeUsers.length],
+            ['EXCEPTION', liveExceptionUsers.length]
+        ]),
         inline: true
     }
 );
