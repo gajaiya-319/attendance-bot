@@ -96,9 +96,10 @@ function createTimeLogic({ CONFIG, SHIFT_SCHEDULE, MAINTENANCE_WINDOWS, moment }
     }
 
     function getDashboardShift(now = moment().tz(CONFIG.TIMEZONE)) {
+        if (isWithinPreShiftWindow('day', now)) return 'day';
+        if (isWithinPreShiftWindow('night', now)) return 'night';
         const operationalShift = getOperationalShift(now);
         if (operationalShift) return operationalShift;
-        if (isWithinPreShiftWindow('day', now)) return 'day';
         return 'night';
     }
 

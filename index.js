@@ -1,6 +1,5 @@
 ﻿require('dotenv').config();
 
-const fsSync = require('fs');
 const fs = require('fs').promises;
 const moment = require('moment-timezone');
 const cron = require('node-cron');
@@ -14,7 +13,6 @@ const {
     Events,
     REST,
     Routes,
-    SlashCommandBuilder,
     MessageFlags,
     PermissionFlagsBits,
     Partials
@@ -24,70 +22,37 @@ const {
  * [ CONFIGURATION ]
  *
  */
-const CONFIG = {
-    VERSION: '2500.97-COMPACT-SUMMARY-BOXES',
-    RELEASE_NOTE: 'Keep dashboard summary counts on one line in narrow embeds',
-    GUILD_ID: '1502598521294028830',
-    LOG_CHANNEL: '1503681085618262158',
-    STATUS_CHANNEL: '1503681415407992962',
-    ANNOUNCE_CHANNEL: '1502609571456356545',
-    DAYOFF_CHANNEL: process.env.DAYOFF_CHANNEL_ID || '1502729397336018964',
-    DAYOFF_REVIEWER_ID: process.env.DAYOFF_REVIEWER_ID || '280301228716589058',
-    OWNER_IDS: (process.env.OWNER_IDS || '280301228716589058').split(',').map(id => id.trim()).filter(Boolean),
-    LIVE_EXCEPTION_MANAGER_ROLE_IDS: (process.env.LIVE_EXCEPTION_MANAGER_ROLE_IDS || '1502599381105246388,1502715137667235870').split(',').map(id => id.trim()).filter(Boolean),
-    ANNOUNCEMENT_MANAGER_ROLE_IDS: (process.env.ANNOUNCEMENT_MANAGER_ROLE_IDS || process.env.LIVE_EXCEPTION_MANAGER_ROLE_IDS || '1502599381105246388,1502715137667235870').split(',').map(id => id.trim()).filter(Boolean),
-    DAY_CHAN: '1503405274935853126',
-    NIGHT_CHAN: '1503405331118821426',
-    ROLES: {
-        DAY: '1502714263742185492',
-        NIGHT: '1502713144311677098',
-        HEINE: '1503141947877888020',
-        PAAGRIO: '1503142843177504959',
-        WORKING: process.env.WORKING_ROLE_ID || '1505261436983574528',
-        GUEST: process.env.GUEST_ROLE_ID || '1502715825767977030'
-    },
-    FILES: {
-        DATA: './attendanceData.json',
-        BACKUP: './attendanceData.json.bak',
-        BACKUP_DIR: './backups',
-        DAYOFF_LOG: './logs/dayoff-logs.jsonl',
-        MAX_BACKUPS: 30
-    },
-    POINTS: { NORMAL_IN: 10, LATE: -5, EARLY_OUT: -10, OT: 15, ABSENT: -20 },
-    TIMEZONE: 'Asia/Manila',
-    PURGE_NORMAL: 14,
-    PURGE_MANUAL_OT: 40,
-    // ✨ [업데이트] 유예 기간 20분 -> 10분으로 축소
-    GRACE_PERIOD_MINS: 10,
-    LIVE_OFF_DM_AFTER_MINS: 10,
-    LIVE_OFF_CLOCK_OUT_MINS: 10,
-    CLOCK_OUT_GRACE_MINS: 5,
-    AUTO_OT_AFTER_MINS: 5,
-    PRE_SHIFT_LIVE_BUFFER_MINS: 10,
-    FINISHED_VISIBLE_AFTER_MINS: 30,
-    AUTO_TIMEOUT_RESUME_WINDOW_MINS: 60,
-    GUEST_ASSIGN_AFTER_HOURS: 24,
-    INACTIVE_CANDIDATE_DAYS: 3,
-    NICKNAME_ROLE_SYNC: true,
-    EXCEPTIONS: {
-        SHARED_SEAT_USER: process.env.SHARED_SEAT_USER_ID || null
-    }
-};
-
-const SHIFT_SCHEDULE = {
-    day: {
-        default: { start: '09:00', end: '21:00', endOffsetDays: 0 },
-        Tuesday: { start: '09:00', end: '19:00', endOffsetDays: 0 }
-    },
-    night: {
-        default: { start: '21:00', end: '09:00', endOffsetDays: 1 },
-        Tuesday: { start: '19:00', end: '04:00', endOffsetDays: 1 }
-    }
-};
-
-const MAINTENANCE_WINDOWS = [
-    { day: 'Wednesday', start: '04:00', end: '09:00' }
-];
+const {
+    CONFIG,
+    SHIFT_SCHEDULE,
+    MAINTENANCE_WINDOWS
+} = require('./src/config/constants');
+const createDashboardStateUtils = require('./src/utils/dashboardState');
+const dataStore = require('./src/services/dataStore');
+const { createAttendanceService } = require('./src/services/attendanceService');
+const createRoleService = require('./src/services/roleService');
+const createDayOffService = require('./src/services/dayoffService');
+const createAdminService = require('./src/services/adminService');
+const { buildCommandDefinitions, hiddenCommandAliases } = require('./src/commands/definitions');
+const {
+    createAutoDelete,
+    patchCommandReplies,
+    createCommandOptionHelpers
+} = require('./src/utils/interactionHelpers');
+const {
+    okText,
+    failText,
+    pendingText,
+    commandStatusText,
+    withCommandStatusPayload
+} = require('./src/utils/commandStatus');
+const createPermissionUtils = require('./src/utils/permissions');
+const {
+    padWidth,
+    truncateWidth,
+    formatDuration,
+    formatExactWidth
+} = require('./src/utils/textFormat');
 
 const {
     applyClockTime,
@@ -184,14 +149,79 @@ let announceData = { 1: null, 2: null, 3: null, 4: null, 5: null, 6: null };
 let dayOffReservations = {};
 let liveExceptions = {};
 
-let isSaving = false;
-let pendingSave = false;
 let renderingDashboard = false;
 let pendingDashboardRender = false;
 let lastSavedAt = null;
 let lastBackupAt = null;
 let lastMemberFetchAt = 0;
 let memberFetchPromise = null;
+const dashboardStateUtils = createDashboardStateUtils({
+    CONFIG,
+    moment,
+    getScheduledEndMoment,
+    getRecentMaintenanceEnd,
+    isWithinPreShiftWindow,
+    getMemberShiftRole,
+    getActiveLiveException,
+    getOvertimeUsers: () => overtimeUsers
+});
+const attendanceService = createAttendanceService({
+    CONFIG,
+    moment,
+    getAttendanceData: () => attendanceData,
+    getOvertimeUsers: () => overtimeUsers,
+    determineShift,
+    getShiftSessionKey,
+    getShiftBounds
+});
+const roleService = createRoleService({ CONFIG });
+const dayOffService = createDayOffService({
+    CONFIG,
+    moment,
+    EmbedBuilder,
+    padWidth,
+    truncateWidth,
+    getReservations: () => dayOffReservations
+});
+const adminService = createAdminService({
+    getAnnounceData: () => announceData,
+    truncateWidth
+});
+const {
+    isOwnerId,
+    hasWorkerServerRole,
+    isAssignedWorker,
+    hasManagedAttendanceRole,
+    canManageLiveException,
+    canManageAnnouncements
+} = createPermissionUtils({ CONFIG, PermissionFlagsBits });
+
+function collectSystemState() {
+    return {
+        attendanceData,
+        overtimeUsers,
+        statusMessageId,
+        panelInfo,
+        announceData,
+        dayOffReservations,
+        liveExceptions
+    };
+}
+
+function applySystemState(state = dataStore.db) {
+    attendanceData = state.attendanceData || {};
+    overtimeUsers = state.overtimeUsers || [];
+    statusMessageId = state.statusMessageId || null;
+    panelInfo = state.panelInfo || panelInfo;
+    announceData = state.announceData || announceData;
+    dayOffReservations = state.dayOffReservations || {};
+    liveExceptions = state.liveExceptions || {};
+}
+
+function syncDataStoreMeta() {
+    lastSavedAt = dataStore.meta.lastSavedAt;
+    lastBackupAt = dataStore.meta.lastBackupAt;
+}
 
 /**
  * [ CORE HELPERS ]
@@ -231,129 +261,8 @@ function determineShift(member) {
     return hasD ? 'day' : 'night';
 }
 
-function hasWorkerServerRole(member) {
-    if (!member?.roles?.cache) return false;
-    return member.roles.cache.has(CONFIG.ROLES.HEINE) || member.roles.cache.has(CONFIG.ROLES.PAAGRIO);
-}
-
-function isAssignedWorker(member) {
-    if (!member || member.user?.bot) return false;
-    if (CONFIG.EXCEPTIONS.SHARED_SEAT_USER && member.id === CONFIG.EXCEPTIONS.SHARED_SEAT_USER) return true;
-    const hasShiftRole = member.roles.cache.has(CONFIG.ROLES.DAY) || member.roles.cache.has(CONFIG.ROLES.NIGHT);
-    if (isOwnerId(member.id)) return hasShiftRole;
-    return hasShiftRole && hasWorkerServerRole(member);
-}
-
-function hasManagedAttendanceRole(member) {
-    if (!member?.roles?.cache) return false;
-    return [
-        CONFIG.ROLES.DAY,
-        CONFIG.ROLES.NIGHT,
-        CONFIG.ROLES.HEINE,
-        CONFIG.ROLES.PAAGRIO,
-        CONFIG.ROLES.WORKING,
-        CONFIG.ROLES.GUEST
-    ].filter(Boolean).some(roleId => member.roles.cache.has(roleId));
-}
-
 function ensureUserData(member, shift = null) {
-    if (!member) return null;
-    const s = shift || determineShift(member);
-    if (!attendanceData[member.id]) {
-        attendanceData[member.id] = {
-            id: member.id,
-            name: member.displayName || member.user?.username || 'Unknown',
-            shift: s,
-            checkedIn: false,
-            dayOff: false,
-            attendanceStatus: 'PRE_SHIFT',
-            voiceStatus: 'OFFLINE',
-            attendanceStatusChangedAt: null,
-            voiceStatusChangedAt: null,
-            dayOffExpireAt: null,
-            disconnected: false,
-            disconnectedAt: null,
-            isFinished: false,
-            strikes: 0,
-            points: 0,
-            totalNormal: 0,
-            totalLate: 0,
-            totalAbsent: 0,
-            totalEarly: 0,
-            totalOT: 0,
-            dcCount: 0,
-            offCount: 0,
-            voiceJoinedAt: null,
-            liveOffStartedAt: null,
-            lastLiveOnAt: null,
-            lastLiveOffAt: null,
-            preShiftLiveAt: null,
-            pendingClockOut: null,
-            attendanceEvents: [],
-            lastEventKey: null,
-            lastEventAt: null,
-            lastPreShiftWaitLogKey: null,
-            dayOffPresenceNotifiedFor: null,
-            afterFinishPresenceNotifiedFor: null,
-            finishedPresence: null,
-            finalLeftAt: null,
-            activeSessionId: null,
-            sessions: [],
-            pendingManualOT: false,
-            manualResumeRequired: false,
-            manualResumeRequiredSince: null,
-            manualResumeRequiredReason: null,
-            lastManualResumePromptKey: null,
-            reversibleEarlyPenaltyKey: null,
-            reversibleEarlyPenaltyAppliedAt: null,
-            reversibleEarlyPenaltyPoints: null,
-            liveOffWarnedFor: null,
-            lastFinishedReturnPromptKey: null,
-            lastActivityAt: null,
-            lastActivitySource: null,
-            lastActivityDisplayName: member.displayName || member.user?.username || 'Unknown',
-            lastActionAt: 0
-        };
-    }
-    // ✨ [업데이트] Username cannot be blank 버그 수정 (member.name 대신 member.user?.username)
-    attendanceData[member.id].name = member.displayName || member.user?.username || attendanceData[member.id].name || 'Unknown';
-    if (s) attendanceData[member.id].shift = s;
-    attendanceData[member.id].offCount = attendanceData[member.id].offCount || 0;
-    attendanceData[member.id].totalOT = attendanceData[member.id].totalOT || 0;
-    attendanceData[member.id].points = attendanceData[member.id].points || 0;
-    if (!Object.prototype.hasOwnProperty.call(attendanceData[member.id], 'attendanceStatus')) attendanceData[member.id].attendanceStatus = null;
-    if (!Object.prototype.hasOwnProperty.call(attendanceData[member.id], 'voiceStatus')) attendanceData[member.id].voiceStatus = null;
-    if (!Object.prototype.hasOwnProperty.call(attendanceData[member.id], 'attendanceStatusChangedAt')) attendanceData[member.id].attendanceStatusChangedAt = null;
-    if (!Object.prototype.hasOwnProperty.call(attendanceData[member.id], 'voiceStatusChangedAt')) attendanceData[member.id].voiceStatusChangedAt = null;
-    if (!Object.prototype.hasOwnProperty.call(attendanceData[member.id], 'dayOffExpireAt')) attendanceData[member.id].dayOffExpireAt = null;
-    if (!Object.prototype.hasOwnProperty.call(attendanceData[member.id], 'liveOffStartedAt')) attendanceData[member.id].liveOffStartedAt = null;
-    if (!Object.prototype.hasOwnProperty.call(attendanceData[member.id], 'lastLiveOnAt')) attendanceData[member.id].lastLiveOnAt = null;
-    if (!Object.prototype.hasOwnProperty.call(attendanceData[member.id], 'lastLiveOffAt')) attendanceData[member.id].lastLiveOffAt = null;
-    if (!Object.prototype.hasOwnProperty.call(attendanceData[member.id], 'preShiftLiveAt')) attendanceData[member.id].preShiftLiveAt = null;
-    if (!Object.prototype.hasOwnProperty.call(attendanceData[member.id], 'pendingClockOut')) attendanceData[member.id].pendingClockOut = null;
-    if (!Array.isArray(attendanceData[member.id].attendanceEvents)) attendanceData[member.id].attendanceEvents = [];
-    if (!Object.prototype.hasOwnProperty.call(attendanceData[member.id], 'lastEventKey')) attendanceData[member.id].lastEventKey = null;
-    if (!Object.prototype.hasOwnProperty.call(attendanceData[member.id], 'lastEventAt')) attendanceData[member.id].lastEventAt = null;
-    if (!Object.prototype.hasOwnProperty.call(attendanceData[member.id], 'lastPreShiftWaitLogKey')) attendanceData[member.id].lastPreShiftWaitLogKey = null;
-    if (!Object.prototype.hasOwnProperty.call(attendanceData[member.id], 'dayOffPresenceNotifiedFor')) attendanceData[member.id].dayOffPresenceNotifiedFor = null;
-    if (!Object.prototype.hasOwnProperty.call(attendanceData[member.id], 'afterFinishPresenceNotifiedFor')) attendanceData[member.id].afterFinishPresenceNotifiedFor = null;
-    if (!Object.prototype.hasOwnProperty.call(attendanceData[member.id], 'finishedPresence')) attendanceData[member.id].finishedPresence = null;
-    if (!Object.prototype.hasOwnProperty.call(attendanceData[member.id], 'finalLeftAt')) attendanceData[member.id].finalLeftAt = null;
-    if (!Array.isArray(attendanceData[member.id].sessions)) attendanceData[member.id].sessions = [];
-    if (!Object.prototype.hasOwnProperty.call(attendanceData[member.id], 'activeSessionId')) attendanceData[member.id].activeSessionId = null;
-    if (!Object.prototype.hasOwnProperty.call(attendanceData[member.id], 'pendingManualOT')) attendanceData[member.id].pendingManualOT = false;
-    if (!Object.prototype.hasOwnProperty.call(attendanceData[member.id], 'manualResumeRequired')) attendanceData[member.id].manualResumeRequired = false;
-    if (!Object.prototype.hasOwnProperty.call(attendanceData[member.id], 'manualResumeRequiredSince')) attendanceData[member.id].manualResumeRequiredSince = null;
-    if (!Object.prototype.hasOwnProperty.call(attendanceData[member.id], 'manualResumeRequiredReason')) attendanceData[member.id].manualResumeRequiredReason = null;
-    if (!Object.prototype.hasOwnProperty.call(attendanceData[member.id], 'lastManualResumePromptKey')) attendanceData[member.id].lastManualResumePromptKey = null;
-    if (!Object.prototype.hasOwnProperty.call(attendanceData[member.id], 'reversibleEarlyPenaltyKey')) attendanceData[member.id].reversibleEarlyPenaltyKey = null;
-    if (!Object.prototype.hasOwnProperty.call(attendanceData[member.id], 'reversibleEarlyPenaltyAppliedAt')) attendanceData[member.id].reversibleEarlyPenaltyAppliedAt = null;
-    if (!Object.prototype.hasOwnProperty.call(attendanceData[member.id], 'reversibleEarlyPenaltyPoints')) attendanceData[member.id].reversibleEarlyPenaltyPoints = null;
-    if (!Object.prototype.hasOwnProperty.call(attendanceData[member.id], 'lastFinishedReturnPromptKey')) attendanceData[member.id].lastFinishedReturnPromptKey = null;
-    if (!Object.prototype.hasOwnProperty.call(attendanceData[member.id], 'lastActivityAt')) attendanceData[member.id].lastActivityAt = null;
-    if (!Object.prototype.hasOwnProperty.call(attendanceData[member.id], 'lastActivitySource')) attendanceData[member.id].lastActivitySource = null;
-    if (!Object.prototype.hasOwnProperty.call(attendanceData[member.id], 'lastActivityDisplayName')) attendanceData[member.id].lastActivityDisplayName = attendanceData[member.id].name;
-    return attendanceData[member.id];
+    return attendanceService.ensureUserData(member, shift);
 }
 
 function isCooldown(user) {
@@ -376,26 +285,6 @@ function markMemberActivity(member, source = 'unknown', at = moment().tz(CONFIG.
     return true;
 }
 
-function isOwnerId(id) {
-    return CONFIG.OWNER_IDS.includes(String(id));
-}
-
-function canManageLiveException(member) {
-    if (!member) return false;
-    if (isOwnerId(member.id)) return true;
-    if (member.permissions?.has(PermissionFlagsBits.Administrator)) return true;
-    if (member.permissions?.has(PermissionFlagsBits.ManageMessages)) return true;
-    return CONFIG.LIVE_EXCEPTION_MANAGER_ROLE_IDS.some(roleId => member.roles?.cache?.has(roleId));
-}
-
-function canManageAnnouncements(member) {
-    if (!member) return false;
-    if (isOwnerId(member.id)) return true;
-    if (member.permissions?.has(PermissionFlagsBits.Administrator)) return true;
-    if (member.permissions?.has(PermissionFlagsBits.ManageMessages)) return true;
-    return CONFIG.ANNOUNCEMENT_MANAGER_ROLE_IDS.some(roleId => member.roles?.cache?.has(roleId));
-}
-
 function ownerOnlyReply(i) {
     return i.reply({
         content: failText('Owner only command.'),
@@ -403,56 +292,8 @@ function ownerOnlyReply(i) {
     }).then(() => setTimeout(() => i.deleteReply().catch(() => {}), 3000));
 }
 
-function okText(content) {
-    const text = String(content || 'Completed.');
-    return /^[✅❌⏳]/u.test(text) ? text : `✅ ${text}`;
-}
-
-function failText(content) {
-    const text = String(content || 'Failed.');
-    return /^[✅❌⏳]/u.test(text) ? text : `❌ ${text}`;
-}
-
-function pendingText(content) {
-    const text = String(content || 'Processing...');
-    return /^[✅❌⏳]/u.test(text) ? text : `⏳ ${text}`;
-}
-
-function commandStatusText(content) {
-    const text = String(content || '');
-    if (!text || /^[✅❌⏳]/u.test(text)) return text;
-    const failPattern = /no perms|admin only|owner only|not found|not checked in|no role|invalid|failed|fail|cannot|could not|restore failed|backup failed|찾지 못|없습니다|권한|올바르지|실패|오류/i;
-    return failPattern.test(text) ? failText(text) : okText(text);
-}
-
-function withCommandStatusPayload(payload) {
-    if (typeof payload === 'string') return commandStatusText(payload);
-    if (!payload || typeof payload !== 'object' || !Object.prototype.hasOwnProperty.call(payload, 'content')) return payload;
-    return {
-        ...payload,
-        content: commandStatusText(payload.content)
-    };
-}
-
 function addOvertimeUser(user, type = 'AUTO', startedAt = null) {
-    if (!user || overtimeUsers.some(o => o.id === user.id)) return false;
-    const otStartedAt = startedAt
-        ? moment(startedAt).tz(CONFIG.TIMEZONE)
-        : moment().tz(CONFIG.TIMEZONE);
-    overtimeUsers.push({
-        id: user.id,
-        name: user.name,
-        type,
-        shift: user.shift || null,
-        shiftSessionKey: user.shift ? getShiftSessionKey(user.shift, moment().tz(CONFIG.TIMEZONE)) : null,
-        startedAt: otStartedAt.toISOString()
-    });
-    const session = getOpenSession(user);
-    if (session) {
-        session.otType = type;
-        session.otStartedAt = otStartedAt.toISOString();
-    }
-    return true;
+    return attendanceService.addOvertimeUser(user, type, startedAt);
 }
 
 async function updateWorkingRole(member, shouldAdd) {
@@ -467,126 +308,37 @@ async function updateWorkingRole(member, shouldAdd) {
 }
 
 async function saveSystemAsync() {
-    if (isSaving) {
-        pendingSave = true;
-        return;
-    }
-    isSaving = true;
-    try {
-        const payload = JSON.stringify({ attendanceData, overtimeUsers, statusMessageId, panelInfo, announceData, dayOffReservations, liveExceptions }, null, 2);
-        const tmpDataPath = CONFIG.FILES.DATA + '.tmp';
-        const tmpBackupPath = CONFIG.FILES.BACKUP + '.tmp';
-        await fs.writeFile(tmpDataPath, payload);
-        await fs.rename(tmpDataPath, CONFIG.FILES.DATA);
-        await fs.writeFile(tmpBackupPath, payload);
-        await fs.rename(tmpBackupPath, CONFIG.FILES.BACKUP);
-        lastSavedAt = moment().tz(CONFIG.TIMEZONE).toISOString();
-    } catch (e) {
-        console.error('[SAVE ERROR]', e);
-    } finally {
-        isSaving = false;
-        if (pendingSave) {
-            pendingSave = false;
-            saveSystemAsync();
-        }
-    }
+    await dataStore.saveSystemAsync(collectSystemState());
+    syncDataStoreMeta();
 }
 
 async function createBackupSnapshot(reason = 'manual') {
-    try {
-        await fs.mkdir(CONFIG.FILES.BACKUP_DIR, { recursive: true });
-        const stamp = moment().tz(CONFIG.TIMEZONE).format('YYYY-MM-DD-HH-mm-ss');
-        const fileName = `attendanceData-${stamp}-${reason}.json`;
-        const backupPath = `${CONFIG.FILES.BACKUP_DIR}/${fileName}`;
-        const payload = JSON.stringify({
-            attendanceData,
-            overtimeUsers,
-            statusMessageId,
-            panelInfo,
-            announceData,
-            dayOffReservations,
-            liveExceptions,
-            backupReason: reason,
-            createdAt: moment().tz(CONFIG.TIMEZONE).toISOString()
-        }, null, 2);
-
-        await fs.writeFile(backupPath, payload);
-        lastBackupAt = moment().tz(CONFIG.TIMEZONE).toISOString();
-
-        const files = (await fs.readdir(CONFIG.FILES.BACKUP_DIR))
-            .filter(name => name.startsWith('attendanceData-') && name.endsWith('.json'))
-            .sort();
-        const overflow = files.length - CONFIG.FILES.MAX_BACKUPS;
-        if (overflow > 0) {
-            for (const oldFile of files.slice(0, overflow)) {
-                await fs.unlink(`${CONFIG.FILES.BACKUP_DIR}/${oldFile}`).catch(() => {});
-            }
-        }
-        return backupPath;
-    } catch (e) {
-        console.error('[BACKUP ERROR]', e);
-        return null;
-    }
+    const backupPath = await dataStore.createBackupSnapshot(reason, collectSystemState());
+    syncDataStoreMeta();
+    return backupPath;
 }
 
 async function createScheduledBackupIfDue() {
-    const now = moment().tz(CONFIG.TIMEZONE);
-    if (lastBackupAt && now.diff(moment(lastBackupAt), 'hours') < 6) return;
-    await createBackupSnapshot('auto');
+    await dataStore.createScheduledBackupIfDue(collectSystemState());
+    syncDataStoreMeta();
 }
 
 async function listBackupSnapshots() {
-    try {
-        await fs.mkdir(CONFIG.FILES.BACKUP_DIR, { recursive: true });
-        return (await fs.readdir(CONFIG.FILES.BACKUP_DIR))
-            .filter(name => name.startsWith('attendanceData-') && name.endsWith('.json'))
-            .sort()
-            .reverse();
-    } catch (e) {
-        console.error('[BACKUP LIST ERROR]', e);
-        return [];
-    }
+    return dataStore.listBackupSnapshots();
 }
 
 async function restoreBackupSnapshot(fileName = null) {
-    try {
-        const backups = await listBackupSnapshots();
-        const targetName = fileName || backups[0];
-        if (!targetName || !backups.includes(targetName)) return false;
-
-        await createBackupSnapshot('pre-restore');
-        const raw = await fs.readFile(`${CONFIG.FILES.BACKUP_DIR}/${targetName}`, 'utf8');
-        const restored = JSON.parse(raw);
-        attendanceData = restored.attendanceData || {};
-        overtimeUsers = restored.overtimeUsers || [];
-        statusMessageId = restored.statusMessageId || null;
-        panelInfo = restored.panelInfo || panelInfo;
-        announceData = restored.announceData || announceData;
-        dayOffReservations = restored.dayOffReservations || {};
-        liveExceptions = restored.liveExceptions || {};
-        await saveSystemAsync();
-        return targetName;
-    } catch (e) {
-        console.error('[BACKUP RESTORE ERROR]', e);
-        return false;
-    }
+    const restored = await dataStore.restoreBackupSnapshot(fileName, collectSystemState());
+    if (restored) applySystemState(dataStore.getState());
+    syncDataStoreMeta();
+    return restored;
 }
 
 function loadSystem() {
-    try {
-        if (fsSync.existsSync(CONFIG.FILES.DATA)) {
-            const d = JSON.parse(fsSync.readFileSync(CONFIG.FILES.DATA, 'utf8'));
-            attendanceData = d.attendanceData || {};
-            overtimeUsers = d.overtimeUsers || [];
-            statusMessageId = d.statusMessageId || null;
-            panelInfo = d.panelInfo || panelInfo;
-            announceData = d.announceData || announceData;
-            dayOffReservations = d.dayOffReservations || {};
-            liveExceptions = d.liveExceptions || {};
-        }
-    } catch (e) {
-        console.error('[LOAD ERROR]', e);
-    }
+    dataStore.assignState(collectSystemState());
+    dataStore.loadSystem();
+    applySystemState(dataStore.getState());
+    syncDataStoreMeta();
 }
 
 function expireDayOffSessions(now = moment().tz(CONFIG.TIMEZONE)) {
@@ -619,27 +371,6 @@ function cleanupOldDayOffReservations(now = moment().tz(CONFIG.TIMEZONE)) {
 /**
  * [ UTILITIES ]
  */
-const getStrWidth = (str) => {
-    if (!str) return 0;
-    let width = 0;
-    for (const char of str) width += char.codePointAt(0) > 255 ? 2 : 1;
-    return width;
-};
-const padWidth = (str, len) => str + ' '.repeat(Math.max(0, len - getStrWidth(str)));
-const truncateWidth = (str, maxW) => {
-    let w = 0;
-    let res = '';
-    for (const char of str) {
-        const charW = char.codePointAt(0) > 255 ? 2 : 1;
-        if (w + charW > maxW - 2) return res + '..';
-        res += char;
-        w += charW;
-    }
-    return res;
-};
-const formatDuration = (mins) => `${Math.floor(mins / 60)}시간 ${mins % 60}분`;
-const formatExactWidth = (str, width) => padWidth(truncateWidth(str, width), width);
-
 /**
  * [ TIME LOGIC ]
  */
@@ -665,288 +396,86 @@ function getRecentMaintenanceEnd(now = moment().tz(CONFIG.TIMEZONE), graceMins =
 }
 
 function shouldShowPostMaintenanceFinished(member, user, activeShift, now = moment().tz(CONFIG.TIMEZONE)) {
-    if (!member?.roles?.cache || !user || !activeShift) return false;
-    if (user.dayOff || user.checkedIn || user.disconnected || overtimeUsers.some(ot => ot.id === member.id)) return false;
-    if (!getRecentMaintenanceEnd(now)) return false;
-    const previousShift = activeShift === 'day' ? 'night' : 'day';
-    const previousRoleId = previousShift === 'day' ? CONFIG.ROLES.DAY : CONFIG.ROLES.NIGHT;
-    const activeRoleId = activeShift === 'day' ? CONFIG.ROLES.DAY : CONFIG.ROLES.NIGHT;
-    if (!member.roles.cache.has(previousRoleId) || member.roles.cache.has(activeRoleId)) return false;
-    const voiceState = member.guild?.voiceStates?.cache?.get(member.id);
-    return Boolean(member.voice?.channelId || voiceState?.channelId);
+    return dashboardStateUtils.shouldShowPostMaintenanceFinished(member, user, activeShift, now);
+}
+
+function getDashboardMemberRelation(member, activeShift) {
+    const memberShift = getMemberShiftRole(member);
+    if (!memberShift || !activeShift) return 'unknown';
+    if (memberShift === activeShift) return 'current';
+    return 'previous-or-other';
+}
+
+function shouldHidePreviousShiftWaiting(member, activeShift, state) {
+    return getDashboardMemberRelation(member, activeShift) === 'previous-or-other' && state === 'WAITING';
 }
 
 function shouldShowAsPreShiftStandby(member, user, now) {
-    const shift = user?.shift || getMemberShiftRole(member);
-    if (!shift || user?.dayOff || user?.isFinished) return false;
-    const voiceState = member.guild?.voiceStates?.cache?.get(member.id);
-    const isVoiceConnected = Boolean(member.voice?.channelId || voiceState?.channelId);
-    const hasPreShiftLive = Boolean(user?.preShiftLiveAt);
-    return isWithinPreShiftWindow(shift, now) && (isVoiceConnected || hasPreShiftLive);
+    return dashboardStateUtils.shouldShowAsPreShiftStandby(member, user, now);
 }
 
 function ensureSessionStore(user) {
-    if (!Array.isArray(user.sessions)) user.sessions = [];
-    if (!Object.prototype.hasOwnProperty.call(user, 'activeSessionId')) user.activeSessionId = null;
+    return attendanceService.ensureSessionStore(user);
 }
 
 function appendAttendanceEvent(user, type, at, source = 'system', meta = {}) {
-    if (!user) return false;
-    if (!Array.isArray(user.attendanceEvents)) user.attendanceEvents = [];
-    const eventAt = moment(at).tz(CONFIG.TIMEZONE);
-    const key = `${type}:${source}`;
-    if (
-        user.lastEventKey === key &&
-        user.lastEventAt &&
-        Math.abs(eventAt.diff(moment(user.lastEventAt).tz(CONFIG.TIMEZONE), 'seconds')) < 30
-    ) {
-        return false;
-    }
-    user.lastEventKey = key;
-    user.lastEventAt = eventAt.toISOString();
-    user.attendanceEvents.push({
-        at: eventAt.toISOString(),
-        type,
-        source,
-        meta
-    });
-    if (user.attendanceEvents.length > 100) {
-        user.attendanceEvents = user.attendanceEvents.slice(-100);
-    }
-    return true;
+    return attendanceService.appendAttendanceEvent(user, type, at, source, meta);
 }
 
 function transitionRecordedStatus(user, next = {}, now = moment().tz(CONFIG.TIMEZONE), source = 'system', reason = null) {
-    if (!user) return false;
-    const at = moment(now).tz(CONFIG.TIMEZONE);
-    let changed = false;
-    const meta = { reason };
-
-    if (next.attendanceStatus && user.attendanceStatus !== next.attendanceStatus) {
-        meta.attendanceStatus = {
-            from: user.attendanceStatus || null,
-            to: next.attendanceStatus
-        };
-        user.attendanceStatus = next.attendanceStatus;
-        user.attendanceStatusChangedAt = at.toISOString();
-        changed = true;
-    }
-
-    if (next.voiceStatus && user.voiceStatus !== next.voiceStatus) {
-        meta.voiceStatus = {
-            from: user.voiceStatus || null,
-            to: next.voiceStatus
-        };
-        user.voiceStatus = next.voiceStatus;
-        user.voiceStatusChangedAt = at.toISOString();
-        changed = true;
-    }
-
-    if (changed) {
-        appendAttendanceEvent(user, 'recorded_status_changed', at, source, meta);
-    }
-    return changed;
+    return attendanceService.transitionRecordedStatus(user, next, now, source, reason);
 }
 
 function getOpenSession(user) {
-    ensureSessionStore(user);
-    return user.sessions.find(s => s.id === user.activeSessionId && !s.clockOutAt) ||
-        user.sessions.slice().reverse().find(s => !s.clockOutAt) ||
-        null;
+    return attendanceService.getOpenSession(user);
 }
 
 function getRelevantSessionForTime(user, at) {
-    if (!user || !Array.isArray(user.sessions)) return null;
-    const ref = moment(at).tz(CONFIG.TIMEZONE);
-    return user.sessions
-        .filter(s => s?.scheduledEndAt && s.clockInAt && moment(s.clockInAt).tz(CONFIG.TIMEZONE).isSameOrBefore(ref))
-        .sort((a, b) => moment(b.clockInAt).valueOf() - moment(a.clockInAt).valueOf())[0] || null;
+    return attendanceService.getRelevantSessionForTime(user, at);
 }
 
-function getScheduledEndMoment(user, fallbackAt = moment().tz(CONFIG.TIMEZONE)) {
-    const openSession = getOpenSession(user);
-    const relevantSession = openSession || getRelevantSessionForTime(user, fallbackAt);
-    if (relevantSession?.scheduledEndAt) {
-        return moment(relevantSession.scheduledEndAt).tz(CONFIG.TIMEZONE);
-    }
-    if (!user || !['day', 'night'].includes(user.shift)) return null;
-    const reference = user.checkInRaw
-        ? moment(user.checkInRaw).tz(CONFIG.TIMEZONE)
-        : moment(fallbackAt).tz(CONFIG.TIMEZONE);
-    return getShiftBounds(user.shift, reference).end;
+function getScheduledEndMoment(user, fallbackAt = moment().tz(CONFIG.TIMEZONE), options = {}) {
+    return attendanceService.getScheduledEndMoment(user, fallbackAt, options);
 }
 
 function normalizeOpenSessions(user, now = moment().tz(CONFIG.TIMEZONE)) {
-    ensureSessionStore(user);
-    const openSessions = user.sessions.filter(s => !s.clockOutAt);
-    if (openSessions.length <= 1) return;
-    const keep = openSessions.slice().sort((a, b) => moment(a.clockInAt).valueOf() - moment(b.clockInAt).valueOf()).pop();
-    for (const session of openSessions) {
-        if (session.id === keep.id) continue;
-        const closeAt = moment.min(moment(now).tz(CONFIG.TIMEZONE), moment(keep.clockInAt).tz(CONFIG.TIMEZONE));
-        session.clockOutAt = closeAt.toISOString();
-        session.clockOutDetectedAt = moment(now).tz(CONFIG.TIMEZONE).toISOString();
-        session.clockOutSource = 'session-repair';
-        session.clockOutReason = '중복 열린 세션 자동 정리';
-        session.workedMinutes = Math.max(0, closeAt.diff(moment(session.clockInAt).tz(CONFIG.TIMEZONE), 'minutes'));
-    }
-    user.activeSessionId = keep.id;
+    return attendanceService.normalizeOpenSessions(user, now);
 }
 
 function startAttendanceSession(user, shift, now, source = 'unknown') {
-    ensureSessionStore(user);
-    normalizeOpenSessions(user, now);
-    const open = getOpenSession(user);
-    if (open) {
-        user.activeSessionId = open.id;
-        return open;
-    }
-
-    const bounds = getShiftBounds(shift, now);
-    const session = {
-        id: `${shift}:${bounds.start.format('YYYY-MM-DD-HH-mm')}:${now.valueOf()}`,
-        shift,
-        sessionKey: getShiftSessionKey(shift, now),
-        scheduledStartAt: bounds.start.toISOString(),
-        scheduledEndAt: bounds.end.toISOString(),
-        clockInAt: now.toISOString(),
-        clockInDetectedAt: now.toISOString(),
-        clockInSource: source,
-        clockOutAt: null,
-        clockOutDetectedAt: null,
-        clockOutSource: null,
-        clockOutReason: null,
-        workedMinutes: 0,
-        liveOffPeriods: [],
-        dcPeriods: [],
-        otType: null
-    };
-    user.sessions.push(session);
-    user.activeSessionId = session.id;
-    return session;
+    return attendanceService.startAttendanceSession(user, shift, now, source);
 }
 
 function finishAttendanceSession(user, outMoment, source = 'unknown', reason = null, detectedAt = null) {
-    const session = getOpenSession(user);
-    if (!session) return null;
-    const outAt = moment(outMoment).tz(CONFIG.TIMEZONE);
-    const confirmedAt = detectedAt ? moment(detectedAt).tz(CONFIG.TIMEZONE) : moment().tz(CONFIG.TIMEZONE);
-    const inAt = moment(session.clockInAt).tz(CONFIG.TIMEZONE);
-    closeOpenSessionPeriod(session.liveOffPeriods, outAt);
-    closeOpenSessionPeriod(session.dcPeriods, outAt);
-    session.clockOutAt = outAt.toISOString();
-    session.clockOutDetectedAt = confirmedAt.toISOString();
-    session.clockOutSource = source;
-    session.clockOutReason = reason;
-    session.workedMinutes = Math.max(0, outAt.diff(inAt, 'minutes'));
-    const workedSummary = calculateSessionWorkedMinutes(session, outAt);
-    session.grossMinutes = workedSummary.grossMinutes;
-    session.liveOffMinutes = workedSummary.liveOffMinutes;
-    session.dcMinutes = workedSummary.dcMinutes;
-    session.creditedMinutes = workedSummary.creditedMinutes;
-    user.activeSessionId = null;
-    return session;
+    return attendanceService.finishAttendanceSession(user, outMoment, source, reason, detectedAt);
 }
 
 function startSessionPeriod(periods, startedAt, reason = null) {
-    if (!Array.isArray(periods)) return;
-    if (periods.some(p => !p.endedAt)) return;
-    periods.push({
-        startedAt: moment(startedAt).tz(CONFIG.TIMEZONE).toISOString(),
-        endedAt: null,
-        minutes: 0,
-        reason
-    });
+    return attendanceService.startSessionPeriod(periods, startedAt, reason);
 }
 
 function closeOpenSessionPeriod(periods, endedAt) {
-    if (!Array.isArray(periods)) return;
-    const open = periods.slice().reverse().find(p => !p.endedAt);
-    if (!open) return;
-    const end = moment(endedAt).tz(CONFIG.TIMEZONE);
-    open.endedAt = end.toISOString();
-    open.minutes = Math.max(0, end.diff(moment(open.startedAt).tz(CONFIG.TIMEZONE), 'minutes'));
+    return attendanceService.closeOpenSessionPeriod(periods, endedAt);
 }
 
 function sumSessionPeriods(periods, fallbackEnd) {
-    if (!Array.isArray(periods)) return 0;
-    const end = moment(fallbackEnd).tz(CONFIG.TIMEZONE);
-    return periods.reduce((total, period) => {
-        if (!period?.startedAt) return total;
-        const started = moment(period.startedAt).tz(CONFIG.TIMEZONE);
-        const ended = period.endedAt ? moment(period.endedAt).tz(CONFIG.TIMEZONE) : end;
-        const minutes = Math.max(0, ended.diff(started, 'minutes'));
-        return total + minutes;
-    }, 0);
+    return attendanceService.sumSessionPeriods(periods, fallbackEnd);
 }
 
 function calculateSessionWorkedMinutes(session, now = moment().tz(CONFIG.TIMEZONE)) {
-    if (!session?.clockInAt) {
-        return {
-            grossMinutes: 0,
-            liveOffMinutes: 0,
-            dcMinutes: 0,
-            creditedMinutes: 0
-        };
-    }
-    const end = session.clockOutAt
-        ? moment(session.clockOutAt).tz(CONFIG.TIMEZONE)
-        : moment(now).tz(CONFIG.TIMEZONE);
-    const start = moment(session.clockInAt).tz(CONFIG.TIMEZONE);
-    const grossMinutes = Math.max(0, end.diff(start, 'minutes'));
-    const liveOffMinutes = Math.min(grossMinutes, sumSessionPeriods(session.liveOffPeriods, end));
-    const dcMinutes = Math.min(grossMinutes, sumSessionPeriods(session.dcPeriods, end));
-    const creditedMinutes = Math.max(0, grossMinutes - liveOffMinutes - dcMinutes);
-    return {
-        grossMinutes,
-        liveOffMinutes,
-        dcMinutes,
-        creditedMinutes
-    };
+    return attendanceService.calculateSessionWorkedMinutes(session, now);
 }
 
 function getUserLatestSessionSummary(user, now = moment().tz(CONFIG.TIMEZONE)) {
-    if (!user || !Array.isArray(user.sessions) || user.sessions.length === 0) return null;
-    const session = getOpenSession(user) ||
-        user.sessions.slice().sort((a, b) => {
-            const aAt = moment(a.clockInAt || a.scheduledStartAt || 0).valueOf();
-            const bAt = moment(b.clockInAt || b.scheduledStartAt || 0).valueOf();
-            return bAt - aAt;
-        })[0];
-    if (!session) return null;
-    return {
-        session,
-        ...calculateSessionWorkedMinutes(session, now)
-    };
+    return attendanceService.getUserLatestSessionSummary(user, now);
 }
 
 function createPendingClockOut(user, source, at, graceMins, reason = null) {
-    if (!user) return false;
-    const start = moment(at).tz(CONFIG.TIMEZONE);
-    const existing = user.pendingClockOut;
-    if (existing && !existing.recoveredAt && existing.source === source) return false;
-    user.pendingClockOut = {
-        source,
-        at: start.toISOString(),
-        expiresAt: start.clone().add(graceMins, 'minutes').toISOString(),
-        detectedAt: null,
-        recoveredAt: null,
-        reason
-    };
-    appendAttendanceEvent(user, 'clockout_candidate', start, source, {
-        expiresAt: user.pendingClockOut.expiresAt,
-        reason
-    });
-    return true;
+    return attendanceService.createPendingClockOut(user, source, at, graceMins, reason);
 }
 
 function recoverPendingClockOut(user, recoveredAt, reason = 'recovered') {
-    if (!user?.pendingClockOut || user.pendingClockOut.recoveredAt) return false;
-    const recovered = moment(recoveredAt).tz(CONFIG.TIMEZONE);
-    user.pendingClockOut.recoveredAt = recovered.toISOString();
-    appendAttendanceEvent(user, 'clockout_candidate_recovered', recovered, user.pendingClockOut.source, { reason });
-    user.pendingClockOut = null;
-    return true;
+    return attendanceService.recoverPendingClockOut(user, recoveredAt, reason);
 }
 
 function getClockOutStatus(user, outMoment) {
@@ -980,12 +509,50 @@ function setFinishedPresence(user, nextPresence, now, source = 'system') {
 }
 
 function getOvertimeStartMoment(user, now = moment().tz(CONFIG.TIMEZONE)) {
-    return getScheduledEndMoment(user, now);
+    return attendanceService.getOvertimeStartMoment(user, now);
 }
 
 function canStartOvertimeNow(user, now = moment().tz(CONFIG.TIMEZONE)) {
-    const overtimeStart = getOvertimeStartMoment(user, now);
-    return Boolean(overtimeStart && moment(now).tz(CONFIG.TIMEZONE).isSameOrAfter(overtimeStart));
+    return attendanceService.canStartOvertimeNow(user, now);
+}
+
+function canStartPreShiftOvertime(user, now = moment().tz(CONFIG.TIMEZONE)) {
+    return attendanceService.canStartPreShiftOvertime(user, now);
+}
+
+async function startPreShiftOvertime(member, user, shift, now, source = 'button-or-command') {
+    const result = attendanceService.applyPreShiftOvertimeCore(member, user, shift, now, source);
+    if (!result.ok) return false;
+    await updateWorkingRole(member, true);
+    await recordLog(user, 'ot', `사전 OT 시작 (정규 출근 ${result.shiftStart.format('hh:mm A')} 전)`);
+    return true;
+}
+
+function isOvertimeEntryStillValid(ot, user, member, now = moment().tz(CONFIG.TIMEZONE)) {
+    if (!ot || !user || !member) return false;
+    if (user.dayOff || user.isFinished) return false;
+    if (!user.checkedIn && ot.type !== 'PRE_OT') return false;
+    if (ot.type === 'FORCED') return true;
+
+    const activeException = getActiveLiveException(ot.id, now);
+    const voiceState = member.guild?.voiceStates?.cache?.get(ot.id);
+    const isStreaming = Boolean(member.voice?.streaming || voiceState?.streaming);
+    const isConnected = Boolean(member.voice?.channelId || voiceState?.channelId);
+    const isDisconnectedInGrace = Boolean(
+        user.disconnected &&
+        user.pendingClockOut?.source === 'voice_leave' &&
+        user.pendingClockOut.expiresAt &&
+        now.isBefore(moment(user.pendingClockOut.expiresAt).tz(CONFIG.TIMEZONE))
+    );
+    const isLiveOffInGrace = Boolean(
+        user.voiceStatus === 'LIVE_OFF' &&
+        user.pendingClockOut?.source === 'live_off' &&
+        user.pendingClockOut.expiresAt &&
+        now.isBefore(moment(user.pendingClockOut.expiresAt).tz(CONFIG.TIMEZONE))
+    );
+
+    if (ot.type === 'PRE_OT') return Boolean(isStreaming || activeException || (isConnected && isLiveOffInGrace) || isDisconnectedInGrace);
+    return Boolean(isStreaming || activeException || (isConnected && isLiveOffInGrace) || isDisconnectedInGrace);
 }
 
 function isFinishedBeforeCurrentShift(user, shift, now = moment().tz(CONFIG.TIMEZONE)) {
@@ -1007,160 +574,37 @@ function isCurrentShiftRegularWorker(member, now = moment().tz(CONFIG.TIMEZONE))
 }
 
 function getLatestOvertimeSession(user) {
-    if (!user || !Array.isArray(user.sessions)) return null;
-    return user.sessions
-        .filter(session => session?.otStartedAt || session?.otType)
-        .sort((a, b) => moment(b.clockInAt || b.otStartedAt || b.scheduledEndAt || 0).valueOf() -
-            moment(a.clockInAt || a.otStartedAt || a.scheduledEndAt || 0).valueOf())[0] || null;
+    return attendanceService.getLatestOvertimeSession(user);
 }
 
 function getRestorableOvertimeSession(user, shift, now = moment().tz(CONFIG.TIMEZONE)) {
-    if (!user?.isFinished || user.checkedIn || user.dayOff || overtimeUsers.some(ot => ot.id === user.id)) return null;
-    const session = getLatestOvertimeSession(user);
-    if (!session) return null;
-
-    const otStartedAt = moment(session.otStartedAt || session.scheduledEndAt || session.clockOutAt).tz(CONFIG.TIMEZONE);
-    if (!otStartedAt.isValid() || now.isBefore(otStartedAt)) return null;
-    if (now.diff(otStartedAt, 'hours', true) > CONFIG.PURGE_MANUAL_OT) return null;
-
-    const currentBounds = getShiftBounds(shift || user.shift, now);
-    const previousEnd = session.scheduledEndAt ? moment(session.scheduledEndAt).tz(CONFIG.TIMEZONE) : null;
-    if (
-        currentBounds?.start &&
-        previousEnd &&
-        currentBounds.start.isAfter(previousEnd) &&
-        now.isSameOrAfter(currentBounds.start)
-    ) {
-        return null;
-    }
-
-    return { session, otStartedAt };
+    return attendanceService.getRestorableOvertimeSession(user, shift, now);
 }
 
 async function restoreOvertimeAfterFinish(member, user, shift, now, source = 'voice_snapshot') {
     if (isCurrentShiftRegularWorker(member, now)) return false;
-    const restorable = getRestorableOvertimeSession(user, shift, now);
-    if (!restorable) return false;
-
-    const otType = restorable.session.otType || 'AUTO';
-    const otStartedAt = restorable.otStartedAt;
-    user.checkedIn = true;
-    user.dayOff = false;
-    user.isFinished = false;
-    user.disconnected = false;
-    user.disconnectedAt = null;
-    user.voiceJoinedAt = null;
-    user.liveOffStartedAt = null;
-    user.liveOffWarnedFor = null;
-    user.pendingClockOut = null;
-    user.manualResumeRequired = false;
-    user.manualResumeRequiredSince = null;
-    user.manualResumeRequiredReason = null;
-    user.finishedPresence = null;
-    user.finalLeftAt = null;
-    user.lastLiveOnAt = now.toISOString();
-    user.shift = shift || user.shift;
-
-    const session = startAttendanceSession(user, user.shift, now, 'overtime-restore');
-    if (session) {
-        session.scheduledStartAt = now.toISOString();
-        session.scheduledEndAt = now.toISOString();
-        session.otType = otType;
-        session.otStartedAt = otStartedAt.toISOString();
-        session.restoredFromSessionId = restorable.session.id || null;
-    }
-
-    addOvertimeUser(user, otType, otStartedAt);
-    transitionRecordedStatus(user, {
-        attendanceStatus: 'OVERTIME',
-        voiceStatus: 'LIVE_ON'
-    }, now, source, 'overtime-restored-after-finish');
-    appendAttendanceEvent(user, 'overtime_restored_after_finish', now, source, {
-        restoredFromSessionId: restorable.session.id || null,
-        otStartedAt: otStartedAt.toISOString(),
-        otType
-    });
+    const result = attendanceService.applyRestoreOvertimeAfterFinishCore(user, shift, now, source);
+    if (!result.ok) return false;
     await updateWorkingRole(member, true);
     await recordLog(user, 'ot', 'Overtime restored after bot restart / finished state recovery');
     return true;
 }
 
 async function activatePendingManualOvertime(user, now) {
-    if (!user?.pendingManualOT) return false;
-    if (!canStartOvertimeNow(user, now)) return false;
-    const overtimeStart = getOvertimeStartMoment(user, now);
-    const otStart = overtimeStart || moment(now).tz(CONFIG.TIMEZONE);
-    const added = addOvertimeUser(user, 'MANUAL', overtimeStart || now);
-    user.pendingManualOT = false;
-    if (added) {
-        user.checkedIn = true;
-        user.dayOff = false;
-        user.isFinished = false;
-        user.disconnected = false;
-        user.disconnectedAt = null;
-        user.liveOffStartedAt = null;
-        user.pendingClockOut = null;
-        user.checkInTime = user.checkInTime || otStart.format('hh:mm A');
-        user.checkInRaw = user.checkInRaw || otStart.toISOString();
-        const session = startAttendanceSession(user, user.shift, otStart, 'manual-ot');
-        if (session) {
-            session.scheduledStartAt = otStart.toISOString();
-            session.scheduledEndAt = otStart.toISOString();
-            session.otType = 'MANUAL';
-            session.otStartedAt = otStart.toISOString();
-        }
-        transitionRecordedStatus(user, {
-            attendanceStatus: 'OVERTIME',
-            voiceStatus: 'LIVE_ON'
-        }, otStart, 'manual-ot', 'pending-manual-ot-activated');
-        user.totalOT = (user.totalOT || 0) + 1;
-        user.points = (user.points || 0) + CONFIG.POINTS.OT;
-        const member = client.guilds.cache.get(CONFIG.GUILD_ID)?.members.cache.get(user.id);
-        if (member) await updateWorkingRole(member, true);
-        await recordLog(user, 'ot', '수동 연장 근무 시작');
-        return true;
-    }
-    return false;
+    const result = attendanceService.applyPendingManualOvertimeCore(user, now);
+    if (!result.ok) return false;
+    const member = client.guilds.cache.get(CONFIG.GUILD_ID)?.members.cache.get(user.id);
+    if (member) await updateWorkingRole(member, true);
+    await recordLog(user, 'ot', '수동 연장 근무 시작');
+    return true;
 }
 
 function markLiveOffState(user, now) {
-    if (!user) return false;
-    let changed = false;
-    const wasLiveOff = Boolean(user.liveOffStartedAt);
-    if (transitionRecordedStatus(user, {
-        voiceStatus: 'LIVE_OFF'
-    }, now, 'voice-state', 'live-off')) changed = true;
-    const session = getOpenSession(user);
-    if (session) startSessionPeriod(session.liveOffPeriods, now, 'live-off');
-    if (user.checkedIn) {
-        if (createPendingClockOut(user, 'live_off', now, CONFIG.LIVE_OFF_CLOCK_OUT_MINS, '라이브 OFF 유예 시작')) changed = true;
-    }
-    if (!user.liveOffStartedAt) {
-        user.liveOffStartedAt = now.toISOString();
-        changed = true;
-    }
-    user.lastLiveOffAt = now.toISOString();
-    if (!user.voiceJoinedAt) {
-        user.voiceJoinedAt = now.toISOString();
-        changed = true;
-    }
-    if (!wasLiveOff) user.liveOffWarnedFor = null;
-    return changed;
+    return attendanceService.markLiveOffState(user, now);
 }
 
 function clearLiveOffState(user, now) {
-    if (!user) return false;
-    const session = getOpenSession(user);
-    if (session) closeOpenSessionPeriod(session.liveOffPeriods, now);
-    recoverPendingClockOut(user, now, 'live_on_recovered');
-    const changed = Boolean(user.voiceJoinedAt || user.liveOffStartedAt || user.liveOffWarnedFor);
-    transitionRecordedStatus(user, {
-        voiceStatus: 'LIVE_ON'
-    }, now, 'voice-state', 'live-on-recovered');
-    user.voiceJoinedAt = null;
-    user.liveOffStartedAt = null;
-    user.liveOffWarnedFor = null;
-    return changed;
+    return attendanceService.clearLiveOffState(user, now);
 }
 
 async function recordLiveConfirmation(member, user, shift, now, text = '라이브 방송 확인 (출근 상태 동기화)') {
@@ -1259,89 +703,40 @@ async function notifyFinishedReturnToVoice(member, user, shift, now, action = 'R
     return true;
 }
 
-async function normalizeCurrentShiftSession(member, user, shift, now) {
+async function notifyStandbyClockInRequired(member, user, shift, now, action = 'Standby voice presence') {
     if (!member || !user || !shift) return false;
-    const sessionKey = getShiftSessionKey(shift, now);
-    if (user.shiftSessionKey === sessionKey) return false;
+    const key = `${getShiftSessionKey(shift, now)}:${action}`;
+    if (user.standbyClockInPromptKey === key) return false;
+    user.standbyClockInPromptKey = key;
+    appendAttendanceEvent(user, 'standby_clockin_required', now, 'voice_snapshot', {
+        action,
+        result: 'standby_kept'
+    });
+    await member.send([
+        '🌿 Attendance reminder',
+        '',
+        'Your live stream is ON, but your attendance has not been counted yet.',
+        'Please go to the attendance channel and press the CLOCK IN button.',
+        '',
+        '✅ Please make sure to press CLOCK IN so your work time is recorded.'
+    ].join('\n')).catch(() => null);
+    await recordLog(user, 'reconnect', '대기중 음성채널 접속 감지 - 라이브 ON 후 CLOCK IN 버튼 필요');
+    return true;
+}
 
-    const previousShift = user.shift || null;
-    const shiftChanged = Boolean(previousShift && previousShift !== shift);
-    user.shiftSessionKey = sessionKey;
-    user.shift = shift;
-    user.status = null;
-    user.strikeReceivedThisShift = false;
-    user.disconnected = false;
-    user.disconnectedAt = null;
-    user.voiceJoinedAt = null;
-    user.liveOffStartedAt = null;
-    user.liveOffWarnedFor = null;
-    user.lastLiveLogKey = null;
-    overtimeUsers = overtimeUsers.filter(ot => ot.id !== member.id);
-    const bounds = getShiftBounds(shift, now);
-    const alreadyCheckedThisSession = Boolean(
-        user.checkedIn &&
-        user.checkInRaw &&
-        moment(user.checkInRaw).tz(CONFIG.TIMEZONE).isSameOrAfter(bounds.start)
-    );
-    const alreadyFinishedThisSession = Boolean(
-        user.isFinished &&
-        !shiftChanged &&
-        user.checkOutRaw &&
-        moment(user.checkOutRaw).tz(CONFIG.TIMEZONE).isSameOrAfter(bounds.start)
-    );
-    const finishedBeforeCurrentSession = Boolean(
-        user.isFinished &&
-        user.checkOutRaw &&
-        moment(user.checkOutRaw).tz(CONFIG.TIMEZONE).isBefore(bounds.start)
-    );
-
-    if (alreadyFinishedThisSession) {
-        user.checkedIn = false;
-        user.disconnected = false;
-        user.disconnectedAt = null;
-        user.voiceJoinedAt = null;
-        user.liveOffStartedAt = null;
-        user.liveOffWarnedFor = null;
+async function normalizeCurrentShiftSession(member, user, shift, now) {
+    const result = attendanceService.normalizeCurrentShiftSessionCore(member, user, shift, now);
+    if (!result.changed) return false;
+    if (result.action === 'working-role-off') {
         await updateWorkingRole(member, false);
         return true;
     }
-    user.isFinished = false;
-    if (finishedBeforeCurrentSession || user.attendanceStatus === 'FINISHED') {
-        transitionRecordedStatus(user, {
-            attendanceStatus: 'PRE_SHIFT',
-            voiceStatus: member.voice?.channelId ? (member.voice?.streaming ? 'LIVE_ON' : 'LIVE_OFF') : 'OFFLINE'
-        }, now, 'shift-normalize', 'previous-finished-reset-for-new-shift');
-        user.finishedPresence = null;
-        user.finalLeftAt = null;
-    }
-
-    if (user.dayOff) {
-        user.checkedIn = false;
-        await updateWorkingRole(member, false);
+    if (result.action === 'working-role-on') {
+        await updateWorkingRole(member, true);
         return true;
     }
-
-    if (member.voice?.streaming) {
-        if (alreadyCheckedThisSession) {
-            user.checkedIn = true;
-            user.isFinished = false;
-            user.lastLiveLogKey = getShiftSessionKey(shift, now);
-            await updateWorkingRole(member, true);
-        } else {
-            await handleClockIn(member, user, shift, now, true);
-        }
-    } else {
-        if (alreadyCheckedThisSession) {
-            user.checkedIn = true;
-            user.isFinished = false;
-            if (member.voice?.channelId && !user.voiceJoinedAt) {
-                user.voiceJoinedAt = now.toISOString();
-            }
-            await updateWorkingRole(member, true);
-        } else {
-            user.checkedIn = false;
-            await updateWorkingRole(member, false);
-        }
+    if (result.action === 'clock-in') {
+        await handleClockIn(member, user, shift, now, true);
     }
     return true;
 }
@@ -1433,130 +828,31 @@ async function recordLog(user, actionType, customText = null, earlyOverrideTime 
 async function handleClockIn(member, user, shift, now, isAuto = false) {
     const u = ensureUserData(member, shift) || user;
     const clockInRule = getRecognizedClockInMoment(shift, now);
-    appendAttendanceEvent(u, 'clock_in_attempt', now, isAuto ? 'live_on' : 'button_or_command', { shift });
-    if (!clockInRule.ok) {
-        u.shift = shift;
-        u.preShiftLiveAt = now.toISOString();
-        u.isFinished = false;
-        u.dayOff = false;
-        u.disconnected = false;
-        u.disconnectedAt = null;
-        const waitLogKey = `${shift}:${clockInRule.bounds.start.format('YYYY-MM-DD HH:mm')}:too-early`;
-        if (u.lastPreShiftWaitLogKey !== waitLogKey) {
-            u.lastPreShiftWaitLogKey = waitLogKey;
-            await recordLog(u, 'reconnect', `사전 대기 감지 (${clockInRule.bounds.start.format('HH:mm')} 출근 시작 전)`);
+    const result = attendanceService.applyClockInCore(u, member, shift, now, clockInRule, isAuto);
+    if (!result.ok) {
+        if (result.shouldLogPreShiftWait) {
+            await recordLog(u, 'reconnect', `사전 대기 감지 (${result.preShiftStart.format('HH:mm')} 출근 시작 전)`);
         }
         return false;
-    }
-    const recognizedAt = clockInRule.recognizedAt;
-    overtimeUsers = overtimeUsers.filter(o => o.id !== member.id);
-    u.checkedIn = true;
-    u.dayOff = false;
-    u.dayOffExpireAt = null;
-    u.isFinished = false;
-    transitionRecordedStatus(u, {
-        attendanceStatus: 'WORKING',
-        voiceStatus: 'LIVE_ON'
-    }, recognizedAt, isAuto ? 'live-on' : 'button-or-command', clockInRule.preShift ? 'pre-shift-clock-in' : 'clock-in');
-    u.finishedPresence = null;
-    u.finalLeftAt = null;
-    u.earlyOut = false;
-    u.disconnected = false;
-    u.disconnectedAt = null;
-    u.liveOffStartedAt = null;
-    u.pendingClockOut = null;
-    u.manualResumeRequired = false;
-    u.manualResumeRequiredSince = null;
-    u.manualResumeRequiredReason = null;
-    u.preShiftLiveAt = clockInRule.preShift ? now.toISOString() : null;
-    u.lastPreShiftWaitLogKey = null;
-    u.lastLiveOnAt = now.toISOString();
-    u.shift = shift;
-    u.checkInTime = recognizedAt.format('hh:mm A');
-    u.checkInRaw = recognizedAt.toISOString();
-    const session = startAttendanceSession(u, shift, recognizedAt, clockInRule.preShift ? 'pre-shift-live' : (isAuto ? 'live-on' : 'button-or-command'));
-    if (session) {
-        session.clockInDetectedAt = now.toISOString();
-        if (clockInRule.preShift) session.firstLiveOnAt = now.toISOString();
-    }
-    appendAttendanceEvent(u, 'clock_in_confirmed', recognizedAt, isAuto ? 'live_on' : 'button_or_command', {
-        detectedAt: now.toISOString(),
-        preShift: clockInRule.preShift
-    });
-
-    if (shift) {
-        const diffMins = recognizedAt.diff(getShiftBounds(shift, recognizedAt).start, 'minutes');
-        if (diffMins > 120) {
-            u.status = 'absent';
-            if (!u.strikeReceivedThisShift) {
-                u.strikes = (u.strikes || 0) + 1;
-                u.points = (u.points || 0) + CONFIG.POINTS.ABSENT;
-                u.totalAbsent = (u.totalAbsent || 0) + 1;
-                u.strikeReceivedThisShift = true;
-            }
-        } else if (diffMins > 5) {
-            u.status = 'late';
-            if (!u.strikeReceivedThisShift) {
-                u.strikes = (u.strikes || 0) + 1;
-                u.points = (u.points || 0) + CONFIG.POINTS.LATE;
-                u.totalLate = (u.totalLate || 0) + 1;
-                u.strikeReceivedThisShift = true;
-            }
-        } else {
-            u.status = 'ontime';
-            u.points = (u.points || 0) + CONFIG.POINTS.NORMAL_IN;
-            u.totalNormal = (u.totalNormal || 0) + 1;
-        }
     }
 
     await updateWorkingRole(member, true);
     if (isAuto) {
-        u.lastLiveLogKey = getShiftSessionKey(shift, recognizedAt);
+        u.lastLiveLogKey = getShiftSessionKey(shift, result.recognizedAt);
         const statusText = u.status === 'late' ? '지각' : (u.status === 'absent' ? '초과 시간 지각' : '정상');
-        const preText = clockInRule.preShift ? `사전 라이브 대기 ${now.format('HH:mm')} / 인정 출근 ${recognizedAt.format('HH:mm')}` : `디스코드 자동 출근 (${statusText})`;
-        await recordLog(u, 'in', preText, null, { effectiveTime: recognizedAt });
+        const preText = result.preShift ? `사전 라이브 대기 ${now.format('HH:mm')} / 인정 출근 ${result.recognizedAt.format('HH:mm')}` : `디스코드 자동 출근 (${statusText})`;
+        await recordLog(u, 'in', preText, null, { effectiveTime: result.recognizedAt });
     } else {
-        await recordLog(u, 'in', clockInRule.preShift ? `사전 출근 대기 / 인정 출근 ${recognizedAt.format('HH:mm')}` : null, null, { effectiveTime: recognizedAt });
+        await recordLog(u, 'in', result.preShift ? `사전 출근 대기 / 인정 출근 ${result.recognizedAt.format('HH:mm')}` : null, null, { effectiveTime: result.recognizedAt });
     }
     return true;
 }
 
 async function handleClockOut(member, user, now, customLogText = null, earlyOverrideTime = null, options = {}) {
-    const memberId = member?.id || member;
-    if (!user) return;
-    if (!user.checkedIn && !user.disconnected) return;
-    const outMoment = options.effectiveTime ? moment(options.effectiveTime).tz(CONFIG.TIMEZONE) : now;
-    const detectedAt = options.detectedAt ? moment(options.detectedAt).tz(CONFIG.TIMEZONE) : now;
-
-    user.checkedIn = false;
-    user.isFinished = true;
-    transitionRecordedStatus(user, {
-        attendanceStatus: 'FINISHED',
-        voiceStatus: member?.voice?.channelId ? (member.voice?.streaming ? 'LIVE_ON' : 'LIVE_OFF') : 'OFFLINE'
-    }, outMoment, options.clockOutSource || 'clock-out', customLogText || 'clock-out');
-    user.disconnected = false;
-    user.disconnectedAt = null;
-    user.voiceJoinedAt = null;
-    user.liveOffStartedAt = null;
-    user.liveOffWarnedFor = null;
-    user.pendingClockOut = null;
-    user.checkOutTime = outMoment.format('hh:mm A');
-    user.checkOutRaw = outMoment.toISOString();
-    user.lastClockOutSource = options.clockOutSource || 'clock-out';
-    user.lastClockOutReason = customLogText || null;
-    user.lastClockOutDetectedAt = detectedAt.toISOString();
-    const reversibleEarlyPenaltyKey = ['dc-timeout', 'live-off-timeout'].includes(options.clockOutSource)
-        ? `${options.clockOutSource}:${outMoment.toISOString()}`
-        : null;
-    setFinishedPresence(user, member?.voice?.channelId ? 'in_voice' : 'left_voice', outMoment, options.clockOutSource || 'clock-out');
-    finishAttendanceSession(user, outMoment, options.clockOutSource || 'clock-out', customLogText, detectedAt);
-    appendAttendanceEvent(user, 'clock_out_confirmed', outMoment, options.clockOutSource || 'clock-out', {
-        detectedAt: detectedAt.toISOString(),
-        reason: customLogText || null
-    });
-    overtimeUsers = overtimeUsers.filter(o => o.id !== memberId);
+    const result = attendanceService.applyClockOutCore(member, user, now, customLogText, earlyOverrideTime, options);
+    if (!result.ok) return;
     await updateWorkingRole(member, false);
-    await recordLog(user, 'out', customLogText, earlyOverrideTime || outMoment, { ...options, reversibleEarlyPenaltyKey, effectiveTime: outMoment });
+    await recordLog(user, 'out', customLogText, result.recordLogTime, result.recordLogOptions);
 }
 
 /**
@@ -1579,11 +875,14 @@ function getDashboardName(user) {
 function renderCleanGrid(arr, icon) {
     if (!arr || arr.length === 0) return 'NONE';
     const sorted = [...arr].sort((a, b) => getDashboardName(a).localeCompare(getDashboardName(b)));
-    const fixN = (u) => padWidth(truncateWidth(getDashboardName(u), 16), 17);
-    const fixT = (t) => padWidth(String(t || '00:00').replace(/\s?[AP]M$/i, '').trim(), 6);
+    const fixN = (u) => padWidth(truncateWidth(getDashboardName(u), 10), 11);
+    const fixT = (t) => padWidth(String(t || '00:00').replace(/\s?[AP]M$/i, '').trim(), 5);
+    const formatCell = (u) => `${icon} ${fixT(u.checkInTime)} ${fixN(u)}`;
     let lines = "```\n";
-    for (const user of sorted) {
-        lines += `${icon} ${fixT(user.checkInTime)} ${fixN(user)}\n`;
+    for (let i = 0; i < sorted.length; i += 2) {
+        const left = sorted[i];
+        const right = sorted[i + 1];
+        lines += formatCell(left) + (right ? `  ${formatCell(right)}` : '') + "\n";
     }
     return lines + "```";
 }
@@ -1630,7 +929,19 @@ function renderShiftSummary(label, groups) {
 }
 
 function renderSummaryBox(rows) {
-    return `\`\`\`text\n${rows.map(([label, value]) => `${label} ${value}`).join('\n')}\n\`\`\``;
+    const labelWidth = 10;
+    const valueWidth = 3;
+    const height = 4;
+    const width = labelWidth + valueWidth;
+    const lines = rows.map(([label, value]) => `${padWidth(label, labelWidth)}${String(value).padStart(valueWidth)}`);
+    while (lines.length < height) lines.push(' '.repeat(width));
+    return `\`\`\`text\n${lines.slice(0, height).join('\n')}\n\`\`\``;
+}
+
+function renderDashboardHeader(now, maintenance = false) {
+    const dateStr = now.format('ddd, MMM DD, YYYY').toUpperCase();
+    const status = maintenance ? '[ MAINTENANCE - WORK CLOSED ]' : `[ ${dateStr} ]`;
+    return `> # ⏱️ PH TIME: **${now.format('hh:mm:ss A')}**\n>  ㅤ ㅤ     **[${status}](https://-)**`;
 }
 
 function renderOvertimeList(now, source = overtimeUsers) {
@@ -1641,7 +952,7 @@ function renderOvertimeList(now, source = overtimeUsers) {
             const name = padWidth(truncateWidth(getDashboardName(u), 16), 17);
             const otStartedAt = ot.startedAt || u.otStartedAt || u.checkInRaw;
             const mins = otStartedAt ? now.diff(moment(otStartedAt).tz(CONFIG.TIMEZONE), 'minutes') : 0;
-            const typeLabel = ot.type === 'MANUAL' ? 'M-OT' : ot.type === 'AUTO' ? 'A-OT' : 'OT';
+            const typeLabel = ot.type === 'PRE_OT' ? 'P-OT' : ot.type === 'FORCED' ? 'F-OT' : ot.type === 'MANUAL' ? 'M-OT' : ot.type === 'AUTO' ? 'A-OT' : 'OT';
             return `${padWidth(typeLabel, 5)} ${name} ${mins > 0 ? formatDuration(mins) : ''}`;
         })
         .sort();
@@ -1649,72 +960,43 @@ function renderOvertimeList(now, source = overtimeUsers) {
 }
 
 function getLegacyDashboardState(user, context) {
-    const {
-        isVoiceLiveOff,
-        isPreShift,
-        isStreaming,
-        isVoiceConnected,
-        hasLiveOffVoice,
-        liveException,
-        bounds,
-        now
-    } = context;
+    return dashboardStateUtils.getLegacyDashboardState(user, context);
+}
 
-    if (user.dayOff) return 'LEAVE';
-    if (user.isFinished) return 'FINISHED';
-    if (isVoiceLiveOff && !isPreShift && user.checkedIn) return 'LIVE_OFF';
-    if (user.disconnected) return 'DISCONNECTED';
-    if (liveException) return 'LIVE_EXCEPTION';
-    if (user.checkedIn && !isStreaming) return 'LIVE_OFF';
-    if ((hasLiveOffVoice || (isVoiceConnected && !isStreaming)) && user.checkedIn) return isPreShift ? 'WAITING' : 'LIVE_OFF';
-    if (user.checkedIn) return user.status === 'late' ? 'LATE' : 'ACTIVE';
-    return now.isAfter(bounds.start) && now.diff(bounds.start, 'minutes') > 120 ? 'ABSENT' : 'WAITING';
+function buildExclusiveDashboardGroups(visibleUsers, dashboardOvertimeUsers) {
+    const byId = new Map(visibleUsers.map(user => [user.id, user]));
+    const used = new Set();
+    const takeUsers = (predicate) => visibleUsers.filter(user => {
+        if (!user?.id || used.has(user.id)) return false;
+        if (!predicate(user)) return false;
+        used.add(user.id);
+        return true;
+    });
+
+    const leave = takeUsers(user => user.fState === 'LEAVE' || user.dayOff);
+    const overtime = dashboardOvertimeUsers.filter(ot => {
+        const user = byId.get(ot.id);
+        if (!user || used.has(ot.id) || user.dayOff) return false;
+        used.add(ot.id);
+        return true;
+    });
+
+    return {
+        leave,
+        overtime,
+        liveExceptionUsers: takeUsers(user => user.fState === 'LIVE_EXCEPTION'),
+        disconnected: takeUsers(user => user.fState === 'DISCONNECTED'),
+        liveOff: takeUsers(user => user.fState === 'LIVE_OFF'),
+        absent: takeUsers(user => user.fState === 'ABSENT'),
+        active: takeUsers(user => ['ACTIVE', 'LATE'].includes(user.fState)),
+        finished: takeUsers(user => user.fState === 'FINISHED'),
+        standby: takeUsers(user => user.fState === 'WAITING')
+    };
 }
 
 // ✨ [업데이트] 정규 퇴근 시간이 지났고 연장 근무(OT)가 아니면 FINISHED 처리
 function getHybridDashboardState(user, context) {
-    const legacy = getLegacyDashboardState(user, context);
-    const attendanceStatus = user.attendanceStatus || null;
-    const voiceStatus = user.voiceStatus || null;
-    const { now, bounds } = context;
-
-    // ✨ [핵심 수정] 봇의 현재 시간이 아닌, '유저의 실제 출근 시간'을 기준으로 퇴근 시점을 정확히 계산합니다.
-    const shiftEnd = getScheduledEndMoment(user, now);
-    const isShiftEnded = shiftEnd && now.isSameOrAfter(shiftEnd);
-    const isWithinCurrentShiftBounds = Boolean(
-        bounds?.start &&
-        bounds?.end &&
-        now.isSameOrAfter(bounds.start) &&
-        now.isBefore(bounds.end)
-    );
-    const isOT = overtimeUsers.some(ot => ot.id === user.id);
-    const finishedAt = user.checkOutRaw || user.attendanceStatusChangedAt || null;
-    const finishedVisibleExpired = Boolean(
-        user.isFinished &&
-        finishedAt &&
-        now.diff(moment(finishedAt).tz(CONFIG.TIMEZONE), 'minutes') > CONFIG.FINISHED_VISIBLE_AFTER_MINS
-    );
-
-    if (!attendanceStatus && !voiceStatus) return legacy;
-    if (user.dayOff || attendanceStatus === 'DAY_OFF') return 'LEAVE';
-    if (finishedVisibleExpired && isWithinCurrentShiftBounds && !user.checkedIn && !isOT) return 'WAITING';
-    if (attendanceStatus === 'FINISHED' || user.isFinished) return 'FINISHED';
-
-    if (isShiftEnded && !isWithinCurrentShiftBounds && !isOT && user.checkedIn) {
-        return 'FINISHED';
-    }
-
-    if (voiceStatus === 'EXCEPTION' || context.liveException) return 'LIVE_EXCEPTION';
-    if (voiceStatus === 'DISCONNECTED' || user.disconnected) return 'DISCONNECTED';
-
-    if (attendanceStatus === 'OVERTIME' || attendanceStatus === 'WORKING') {
-        if (voiceStatus === 'LIVE_OFF') return 'LIVE_OFF';
-        if (voiceStatus === 'LIVE_ON') return user.status === 'late' ? 'LATE' : 'ACTIVE';
-        if (voiceStatus === 'OFFLINE') return user.checkedIn ? legacy : 'WAITING';
-    }
-
-    if (attendanceStatus === 'PRE_SHIFT') return 'WAITING';
-    return legacy;
+    return dashboardStateUtils.getHybridDashboardState(user, context);
 }
 
 function getActiveLiveException(userId, now = moment().tz(CONFIG.TIMEZONE)) {
@@ -1871,6 +1153,20 @@ async function renderDashboardCore({ forceMemberRefresh = false } = {}) {
             if (shouldNormalizeCurrentShift && await normalizeCurrentShiftSession(member, user, activeDisplayShift, now)) {
                 sessionChanged = true;
             }
+            const memberShift = getMemberShiftRole(member);
+            const isPreviousShiftMember = memberShift && memberShift !== activeDisplayShift && !overtimeUsers.some(ot => ot.id === member.id);
+            const activeLiveException = getActiveLiveException(member.id, now);
+            if (isPreviousShiftMember && !activeLiveException && user && (user.checkedIn || user.disconnected)) {
+                const previousBounds = getShiftBounds(memberShift, now);
+                if (previousBounds?.end && now.isSameOrAfter(previousBounds.end)) {
+                    await handleClockOut(member, user, previousBounds.end, '이전 근무조 예정 종료 시간 도달 - 교대 자동 퇴근', previousBounds.end, {
+                        skipEarlyPenalty: true,
+                        clockOutSource: 'shift-handoff-auto-finish',
+                        detectedAt: now
+                    });
+                    sessionChanged = true;
+                }
+            }
         }
         const dashboardNameCounts = new Map();
         for (const member of currentShiftMembers.values()) {
@@ -1880,17 +1176,34 @@ async function renderDashboardCore({ forceMemberRefresh = false } = {}) {
         }
         const overtimeBeforeCleanup = overtimeUsers.length;
         overtimeUsers = overtimeUsers.filter(ot => {
-            if (!currentRoleMemberIds.has(ot.id)) return true;
             const user = attendanceData[ot.id];
             const member = guild.members.cache.get(ot.id);
             if (!user || !member || user.dayOff) return false;
+            if (!isOvertimeEntryStillValid(ot, user, member, now)) {
+                if (user.attendanceStatus === 'OVERTIME') {
+                    transitionRecordedStatus(user, {
+                        attendanceStatus: user.checkedIn ? 'WORKING' : 'FINISHED',
+                        voiceStatus: user.disconnected ? 'DISCONNECTED' : (member.voice?.channelId ? (member.voice?.streaming ? 'LIVE_ON' : 'LIVE_OFF') : 'OFFLINE')
+                    }, now, 'dashboard-overtime-cleanup', 'invalid-overtime-entry-removed');
+                }
+                return false;
+            }
+            if (!currentRoleMemberIds.has(ot.id)) return true;
             const bounds = getShiftBounds(activeDisplayShift, now);
             const isMainShiftTime = now.isBetween(bounds.start, bounds.end, null, '[]');
+            if (ot.type === 'PRE_OT' && isMainShiftTime) {
+                user.pendingManualOT = false;
+                transitionRecordedStatus(user, {
+                    attendanceStatus: 'WORKING',
+                    voiceStatus: member.voice?.streaming ? 'LIVE_ON' : (member.voice?.channelId ? 'LIVE_OFF' : 'OFFLINE')
+                }, now, 'dashboard-overtime-cleanup', 'pre-shift-ot-ended-regular-shift-started');
+                return false;
+            }
             if (ot.type === 'MANUAL' && isMainShiftTime) {
                 user.pendingManualOT = true;
                 return false;
             }
-            if (ot.type === 'MANUAL') return true;
+            if (['MANUAL', 'PRE_OT'].includes(ot.type)) return true;
             if (!isMainShiftTime) return true;
             user.shift = activeDisplayShift;
             user.isFinished = false;
@@ -1918,8 +1231,8 @@ async function renderDashboardCore({ forceMemberRefresh = false } = {}) {
                 member &&
                 user?.checkedIn &&
                 !user?.dayOff &&
-                (!isCurrentShiftMember || ot.type === 'MANUAL') &&
-                (isStreamingNow || hasLiveException)
+                (!isCurrentShiftMember || ['MANUAL', 'FORCED', 'PRE_OT'].includes(ot.type)) &&
+                (isStreamingNow || hasLiveException || ot.type === 'FORCED')
             );
         });
         const dashboardOvertimeIds = new Set(dashboardOvertimeUsers.map(ot => ot.id));
@@ -1948,6 +1261,7 @@ async function renderDashboardCore({ forceMemberRefresh = false } = {}) {
                     sessionChanged = true;
                 }
                 const postMaintenanceFinished = shouldShowPostMaintenanceFinished(m, u, activeDisplayShift, now);
+                const isDashboardOvertime = dashboardOvertimeIds.has(m.id);
                 u.fState = postMaintenanceFinished ? 'FINISHED' : getHybridDashboardState(u, {
                     isVoiceLiveOff,
                     isPreShift,
@@ -1958,27 +1272,35 @@ async function renderDashboardCore({ forceMemberRefresh = false } = {}) {
                     bounds,
                     now
                 });
-                u.isOT = dashboardOvertimeIds.has(m.id);
+                if (isDashboardOvertime) {
+                    u.fState = 'OVERTIME';
+                } else if (shouldHidePreviousShiftWaiting(m, activeDisplayShift, u.fState)) {
+                    u.fState = 'OUT_OF_SCOPE';
+                }
+                u.isOT = isDashboardOvertime;
                 return u;
             });
 
-        const active = users.filter(u => ['ACTIVE', 'LATE'].includes(u.fState) && !u.isOT);
-        const liveExceptionUsers = users.filter(u => u.fState === 'LIVE_EXCEPTION' && !u.isOT);
-        const disconnected = users.filter(u => u.fState === 'DISCONNECTED');
-        const finished = users.filter(u => u.fState === 'FINISHED' && !u.isOT);
-        const liveOff = users.filter(u => u.fState === 'LIVE_OFF');
-        const standby = users.filter(u => u.fState === 'WAITING' && !u.isOT);
-        const absent = users.filter(u => u.fState === 'ABSENT' && !u.isOT);
-        const leave = users.filter(u => u.fState === 'LEAVE');
+        const visibleUsers = users.filter(u => u.fState !== 'OUT_OF_SCOPE');
+        const groups = buildExclusiveDashboardGroups(visibleUsers, dashboardOvertimeUsers);
+        const {
+            active,
+            liveExceptionUsers,
+            disconnected,
+            finished,
+            liveOff,
+            standby,
+            absent,
+            leave,
+            overtime: exclusiveOvertimeUsers
+        } = groups;
 
-        const totalUsers = users.length;
+        const totalUsers = visibleUsers.length;
 
         const embed = new EmbedBuilder()
             .setColor(embedColor)
             .setTitle('🖥️ INTEGRATED OPS CONTROL CENTER')
-            .setDescription(dashboardMaintenance
-                ? `> # ⏱️ PH TIME: **${now.format('hh:mm:ss A')}**\n> ## [ MAINTENANCE - WORK CLOSED ]`
-                : `> # ⏱️ PH TIME: **${now.format('hh:mm:ss A')}**\n> ## [ LIVE MONITORING ]`);
+            .setDescription(renderDashboardHeader(now, dashboardMaintenance));
 
      
         embed.addFields(
@@ -2005,7 +1327,7 @@ async function renderDashboardCore({ forceMemberRefresh = false } = {}) {
         name: '📌 ETC',
         value: renderSummaryBox([
             ['OFF', leave.length],
-            ['OT', dashboardOvertimeUsers.length],
+            ['OT', exclusiveOvertimeUsers.length],
             ['EXCEPTION', liveExceptionUsers.length]
         ]),
         inline: true
@@ -2021,13 +1343,13 @@ async function renderDashboardCore({ forceMemberRefresh = false } = {}) {
             { name: `🟣 LIVE EXCEPTION (${liveExceptionUsers.length}명)`, value: renderStatusList(liveExceptionUsers, '🟣', now, 'exception'), inline: false },
             { name: `❌ ABSENT (${absent.length}명)`, value: renderStatusList(absent, '❌', now, 'absent'), inline: false },
             { name: `⏳ STANDBY (${standby.length}명)`, value: renderStatusList(standby, '⏳', now, 'standby'), inline: false },
-            { name: `⚪ FINISHED (${finished.length}명)`, value: renderStatusList(finished, '⚪', now, 'finished'), inline: false },
+            { name: `⏹️ FINISHED (${finished.length}명)`, value: renderStatusList(finished, '⏹️', now, 'finished'), inline: false },
             { name: `🔵 DAY OFF (${leave.length}명)`, value: renderStatusList(leave, '🔵', now), inline: false }
         );
 
         embed.addFields({
-            name: `🔥 OVERTIME (${dashboardOvertimeUsers.length}명)`,
-            value: renderOvertimeList(now, dashboardOvertimeUsers),
+            name: `🔥 OVERTIME (${exclusiveOvertimeUsers.length}명)`,
+            value: renderOvertimeList(now, exclusiveOvertimeUsers),
             inline: false
         });
 
@@ -2094,7 +1416,29 @@ async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().
         if (setFinishedPresence(user, 'in_voice', now, source)) changed = true;
     }
 
+    const activeLiveException = getActiveLiveException(member.id, now);
+
     if (!isConnected) {
+        if (activeLiveException) {
+            if (user.checkedIn || user.disconnected || user.isFinished || user.voiceStatus !== 'OFFLINE') {
+                user.checkedIn = false;
+                user.disconnected = false;
+                user.disconnectedAt = null;
+                user.isFinished = false;
+                user.voiceJoinedAt = null;
+                user.liveOffStartedAt = null;
+                user.liveOffWarnedFor = null;
+                user.pendingClockOut = null;
+                transitionRecordedStatus(user, {
+                    attendanceStatus: 'WORKING',
+                    voiceStatus: 'OFFLINE'
+                }, now, source, 'live-exception-left-voice-standby');
+                await updateWorkingRole(member, false);
+                await recordLog(user, 'disconnect', '라이브 예외 중 음성채널 이탈 - 대기 상태 전환');
+                return true;
+            }
+            return false;
+        }
         if (user.voiceJoinedAt || user.liveOffStartedAt || user.liveOffWarnedFor) {
             user.voiceJoinedAt = null;
             user.liveOffStartedAt = null;
@@ -2135,6 +1479,33 @@ async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().
             return await notifyDayOffPresence(member, user, shift, now, action);
         }
         return false;
+    }
+
+    if (activeLiveException) {
+        const wasCheckedIn = Boolean(user.checkedIn);
+        user.checkedIn = true;
+        user.dayOff = false;
+        user.disconnected = false;
+        user.disconnectedAt = null;
+        user.isFinished = false;
+        user.shift = shift;
+        user.status = 'exception';
+        user.checkInTime = user.checkInTime || now.format('hh:mm A');
+        user.checkInRaw = user.checkInRaw || now.toISOString();
+        user.voiceJoinedAt = null;
+        user.liveOffStartedAt = null;
+        user.liveOffWarnedFor = null;
+        user.pendingClockOut = null;
+        user.lastLiveOnAt = now.toISOString();
+        transitionRecordedStatus(user, {
+            attendanceStatus: 'WORKING',
+            voiceStatus: 'EXCEPTION'
+        }, now, source, 'live-exception-voice-connected');
+        await updateWorkingRole(member, true);
+        if (!wasCheckedIn || joinedVoice) {
+            await recordLog(user, 'reconnect', '라이브 예외 근무 인정 - 음성채널 접속 확인');
+        }
+        return true;
     }
 
     if (isStreaming && isFinishedBeforeCurrentShift(user, shift, now)) {
@@ -2195,6 +1566,11 @@ async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().
         user.liveOffStartedAt = null;
         user.liveOffWarnedFor = null;
         user.pendingClockOut = null;
+        user.manualResumeRequired = false;
+        user.manualResumeRequiredSince = null;
+        user.manualResumeRequiredReason = null;
+        user.lastManualResumePromptKey = null;
+        user.manualResumePromptMarks = [];
         user.finishedPresence = null;
         user.finalLeftAt = null;
         user.lastLiveOnAt = now.toISOString();
@@ -2220,28 +1596,43 @@ async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().
     if (shouldPromptManualResume) {
         const promptKey = `${lastClockOutSource}:${lastClockOutAt}:manual-resume-required`;
         user.manualResumeRequired = true;
-        user.manualResumeRequiredSince = now.toISOString();
         user.manualResumeRequiredReason = lastClockOutSource;
         if (user.lastManualResumePromptKey !== promptKey) {
             user.lastManualResumePromptKey = promptKey;
+            user.manualResumeRequiredSince = now.toISOString();
+            user.manualResumePromptMarks = [];
+        }
+        const promptStartedAt = user.manualResumeRequiredSince
+            ? moment(user.manualResumeRequiredSince).tz(CONFIG.TIMEZONE)
+            : now.clone();
+        const promptElapsedMins = Math.max(0, now.diff(promptStartedAt, 'minutes'));
+        const reminderMark = Math.floor(promptElapsedMins / 10) * 10;
+        const allowedReminderMarks = [0, 10, 20];
+        if (allowedReminderMarks.includes(reminderMark) && !user.manualResumePromptMarks.includes(reminderMark)) {
+            user.manualResumePromptMarks.push(reminderMark);
+            const reminderNumber = allowedReminderMarks.indexOf(reminderMark) + 1;
             appendAttendanceEvent(user, 'manual_resume_required', now, source, {
                 clockOutSource: lastClockOutSource,
                 clockOutAt: lastClockOutAt,
-                minutesSinceClockOut: autoTimeoutResumeMins
+                minutesSinceClockOut: autoTimeoutResumeMins,
+                reminderNumber,
+                reminderMark
             });
             await member.send([
-                'IMPORTANT: Your attendance is NOT active right now.',
+                '🌿 Attendance reminder',
+                `Reminder ${reminderNumber}/3`,
                 '',
+                'Your live stream is ON, but your attendance is NOT active right now.',
                 'Your previous attendance was already closed because the DC/LIVE OFF grace period was exceeded.',
                 '',
                 'Since more than 60 minutes have passed, the bot will not resume your shift automatically.',
                 '',
-                'You MUST press the CLOCK IN button on the attendance panel while your live stream is ON.',
-                'If you do not press CLOCK IN, your attendance will NOT be counted.',
+                '✅ Please press the CLOCK IN button on the attendance panel while your live stream is ON.',
+                '⚠️ If you do not press CLOCK IN, your work time will NOT be counted.',
                 '',
-                'If this was a mistake, please contact an admin.'
+                'If this was a mistake, please contact an admin. 🙂'
             ].join('\n')).catch(() => null);
-            await recordLog(user, 'reconnect', '자동 조기퇴근 후 60분 초과 복귀 감지 (CLOCK IN 버튼 필요)');
+            await recordLog(user, 'reconnect', `자동 조기퇴근 후 60분 초과 복귀 감지 (CLOCK IN 버튼 필요, 안내 ${reminderNumber}/3)`);
         }
         return true;
     }
@@ -2265,6 +1656,10 @@ async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().
         }, now, source, 'finished-presence-kept')) changed = true;
         if (joinedVoice) {
             const notified = await notifyFinishedReturnToVoice(member, user, shift, now, 'Returned to voice after clock-out');
+            if (notified) changed = true;
+        }
+        if (!isStreaming && isConnected) {
+            const notified = await notifyStandbyClockInRequired(member, user, shift, now, 'Finished user in voice without live');
             if (notified) changed = true;
         }
         if (isStreaming) {
@@ -2304,7 +1699,6 @@ async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().
             const started = markLiveOffState(user, now);
             const liveOffAt = user.liveOffStartedAt || user.voiceJoinedAt;
             const liveOffMins = liveOffAt ? now.diff(moment(liveOffAt).tz(CONFIG.TIMEZONE), 'minutes') : 0;
-            const warnKey = `${shift}:${liveOffAt ? moment(liveOffAt).format('YYYY-MM-DD HH:mm') : now.format('YYYY-MM-DD HH:mm')}`;
             const pendingLiveOffClockOutAt = user.pendingClockOut?.source === 'live_off' && user.pendingClockOut.expiresAt
                 ? moment(user.pendingClockOut.expiresAt).tz(CONFIG.TIMEZONE)
                 : (liveOffAt ? moment(liveOffAt).tz(CONFIG.TIMEZONE).add(CONFIG.LIVE_OFF_CLOCK_OUT_MINS, 'minutes') : null);
@@ -2313,17 +1707,27 @@ async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().
                 await recordLog(user, 'disconnect', stoppedStreaming ? '라이브 OFF 시작 - 방송 종료' : '라이브 OFF 시작 - 음성채널 접속 상태');
                 changed = true;
             }
-            if (!isLiveOffClockOutDue && liveOffMins >= CONFIG.LIVE_OFF_DM_AFTER_MINS && user.liveOffWarnedFor !== warnKey) {
+            const warningMark = Math.floor(liveOffMins / CONFIG.LIVE_OFF_DM_INTERVAL_MINS) * CONFIG.LIVE_OFF_DM_INTERVAL_MINS;
+            const liveOffReminderMarks = [10, 20];
+            if (
+                !isLiveOffClockOutDue &&
+                liveOffReminderMarks.includes(warningMark) &&
+                !user.liveOffWarningMarks.includes(warningMark)
+            ) {
+                const reminderNumber = liveOffReminderMarks.indexOf(warningMark) + 1;
                 await member.send([
                     '🌿 Gentle reminder',
+                    `Reminder ${reminderNumber}/3`,
                     '',
                     'You are in the voice channel, but your live stream appears to be OFF.',
                     'When you are ready, please turn your live stream back on so your work time can keep counting.',
                     '',
-                    `If it stays off for about ${CONFIG.LIVE_OFF_CLOCK_OUT_MINS} minutes, the bot may clock you out automatically.`,
+                    `Live OFF time: about ${warningMark} minutes.`,
+                    `If it stays off for ${CONFIG.LIVE_OFF_CLOCK_OUT_MINS} minutes, the bot may clock you out automatically.`,
                     'Thank you. 🙂'
                 ].join('\n')).catch(() => null);
-                user.liveOffWarnedFor = warnKey;
+                user.liveOffWarningMarks.push(warningMark);
+                user.liveOffWarnedFor = `${shift}:${liveOffAt ? moment(liveOffAt).format('YYYY-MM-DD HH:mm') : now.format('YYYY-MM-DD HH:mm')}:${warningMark}`;
                 changed = true;
             }
         } else if (!user.checkedIn && isWithinPreShiftWindow(shift, now)) {
@@ -2331,6 +1735,9 @@ async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().
                 user.voiceJoinedAt = now.toISOString();
                 changed = true;
             }
+        } else if (!user.checkedIn && !user.isFinished && isConnected && now.isSameOrAfter(bounds.start)) {
+            const notified = await notifyStandbyClockInRequired(member, user, shift, now, 'Standby voice without live');
+            if (notified) changed = true;
         }
         return changed;
     }
@@ -2446,28 +1853,45 @@ async function syncVoiceStates() {
 const getNoticeEmbed = (type) => {
     const isDay = type.toUpperCase() === 'DAY';
     const now = moment().tz(CONFIG.TIMEZONE);
+    const noticeWidth = 44;
+    const divider = '-'.repeat(noticeWidth);
     const clockLine = [
         '```ansi',
-        `\u001b[1;37m⏱️ PH TIME: ${now.format('hh:mm:ss A')}\u001b[0m   \u001b[1;36m[ LIVE MONITORING ]\u001b[0m`,
+        `\u001b[1;37m${padWidth(`⏱️ PH TIME: ${now.format('hh:mm:ss A')}`, noticeWidth)}\u001b[0m`,
+        `   \u001b[1;36m${padWidth('[ LIVE MONITORING ]', noticeWidth - 3)}\u001b[0m`,
         '```'
     ].join('\n');
-    const regularDays = padWidth('MON / WED - SUN', 15);
-    const tueUpdate = padWidth('TUE (UPDATE)', 15);
-    const workingHours = isDay
-        ? `📅 ${regularDays}: 09:00 AM - 09:00 PM (12h)\n🚨 ${tueUpdate}: 09:00 AM - 07:00 PM (10h)`
-        : `📅 ${regularDays}: 09:00 PM - 09:00 AM (12h)\n🚨 ${tueUpdate}: 07:00 PM - 04:00 AM (9h)`;
+    const formatHoursLine = (icon, label, timeText) => `${icon} ${padWidth(label, 13)}: ${timeText}`;
+    const regularLine = isDay
+        ? formatHoursLine('📅', 'MON/WED-SUN', '09:00AM-09:00PM (12h)')
+        : formatHoursLine('📅', 'MON/WED-SUN', '09:00PM-09:00AM (12h)');
+    const tueLine = isDay
+        ? formatHoursLine('🚨', 'TUE UPDATE', '09:00AM-07:00PM (10h)')
+        : formatHoursLine('🚨', 'TUE UPDATE', '07:00PM-04:00AM (9h)');
+    const workingHours = [
+        padWidth(regularLine, noticeWidth),
+        padWidth(tueLine, noticeWidth)
+    ].join('\n');
     const tueNote = isDay ? 'Early Out.' : 'Early Start & Out.';
-    const rules = '> ⛔ **NO-SHOW** : **IMMEDIATE FIRE**\n> ❌ **ABSENCE** : **TERMINATED IMMEDIATELY**\n> ⏳ **LATE 2H** : **TREATED AS NO-SHOW**\n\n⚠️ **2 WARNINGS** = **INSTANT KICK**\n🛑 **Absence/Tardiness 2 times** = **DISMISSAL**';
+    const formatRuleLine = (icon, label, text) => `${icon} **${padWidth(label, 10)}:** **${text}**`;
+    const rules = [
+        formatRuleLine('⛔', 'NO-SHOW', 'IMMEDIATE FIRE'),
+        formatRuleLine('❌', 'ABSENCE', 'TERMINATED IMMEDIATELY'),
+        formatRuleLine('⏳', 'LATE 2H', 'TREATED AS NO-SHOW'),
+        '',
+        '⚠️ **2 WARNINGS** = **INSTANT KICK**',
+        '🛑 **Absence/Tardiness 2 times** = **DISMISSAL**'
+    ].join('\n');
     const buttonGuide = [
-        '🟢 **IN**: Start shift',
-        '🔴 **OUT**: End shift',
-        '🔵 **OFF**: Approved leave',
-        '🔥 **OT**: Extra hours'
+        '🟢 **IN   :** **Start shift**',
+        '🔴 **OUT  :** **End shift**',
+        '🔵 **OFF  :** **Approved leave**',
+        '🔥 **OT   :** **Extra hours**'
     ].join('\n');
 
     return new EmbedBuilder()
         .setTitle(isDay ? '☀️ ELITE DAY SHIFT PROTOCOL' : '🌙 ELITE NIGHT SHIFT PROTOCOL')
-        .setDescription(`${clockLine}\n\n--------------------------------\n### ⏰ WORKING HOURS\n\`\`\`yaml\n${workingHours}\n\`\`\`\n> ⚠️ **TUE Note**: ${tueNote}\n--------------------------------\n### 🚨 OPERATIONAL RULES\n${rules}\n\n⏳ **STRICT PUNCTUALITY**\n📢 Be ready **BEFORE** the shift starts.\n--------------------------------\n### 💡 BUTTON INSTRUCTIONS\n${buttonGuide}`)
+        .setDescription(`${clockLine}\n\n${divider}\n### ⏰ WORKING HOURS\n\`\`\`yaml\n${workingHours}\n\`\`\`\n⚠️ **TUE Note :** **${tueNote}**\n${divider}\n### 🚨 OPERATIONAL RULES\n${rules}\n\n⏳ **STRICT PUNCTUALITY**\n📢 **Be ready BEFORE the shift starts.**\n${divider}\n### 💡 BUTTON INSTRUCTIONS\n${buttonGuide}`)
         .setColor(isDay ? '#F1C40F' : '#3498DB')
         .setFooter({ text: 'BE BRIGHT. BE PROFESSIONAL. ✨' });
 };
@@ -2736,16 +2160,34 @@ async function buildInactiveCandidatesEmbed(guild, days = CONFIG.INACTIVE_CANDID
         ? candidates.slice(0, 30).map(c => {
             const name = padWidth(truncateWidth(c.name, 18), 19);
             return `${name} | ${String(c.days).padStart(2)}d | ${c.lastAt.format('MM/DD HH:mm')} | ${c.source}`;
-        }).join('\n')
-        : 'No inactive kick candidates.';
+        })
+        : ['No inactive kick candidates.'];
 
-    return new EmbedBuilder()
+    const embed = new EmbedBuilder()
         .setTitle('Inactive Kick Candidate Report')
         .setColor(candidates.length ? '#E67E22' : '#2ECC71')
         .setDescription(`기준: 마지막 관찰 활동 ${thresholdDays}일 이상 없음\n주의: 아직 자동 추방하지 않고 후보만 표시합니다.`)
-        .addFields({ name: `Candidates (${candidates.length})`, value: `\`\`\`\n${rows}\n\`\`\``, inline: false })
         .setFooter({ text: 'Activity sources: message | voice_state | command | button | joined' })
         .setTimestamp();
+
+    let chunk = [];
+    let chunkLength = 8;
+    let page = 1;
+    for (const row of rows) {
+        const nextLength = chunkLength + row.length + 1;
+        if (chunk.length && nextLength > 950) {
+            embed.addFields({ name: `Candidates (${candidates.length}) #${page}`, value: `\`\`\`\n${chunk.join('\n')}\n\`\`\``, inline: false });
+            chunk = [];
+            chunkLength = 8;
+            page++;
+        }
+        chunk.push(row);
+        chunkLength += row.length + 1;
+    }
+    if (chunk.length) {
+        embed.addFields({ name: `Candidates (${candidates.length}) #${page}`, value: `\`\`\`\n${chunk.join('\n')}\n\`\`\``, inline: false });
+    }
+    return embed;
 }
 
 async function syncWorkingRoles({ dryRun = false } = {}) {
@@ -2885,21 +2327,13 @@ async function autoAssignGuestForUnassignedMembers(guild) {
     return changed;
 }
 
-function buildGuestNickname(displayName) {
-    const suffix = ' - Guest';
-    const base = String(displayName || 'Guest')
-        .replace(/\s+-\s+Guest$/i, '')
-        .trim() || 'Guest';
-    return `${base.slice(0, 32 - suffix.length)}${suffix}`;
-}
-
 async function syncManualGuestNickname(oldMember, newMember) {
     if (!CONFIG.ROLES.GUEST || !oldMember || !newMember || newMember.user?.bot) return false;
     const hadGuest = oldMember.roles?.cache?.has(CONFIG.ROLES.GUEST);
     const hasGuest = newMember.roles?.cache?.has(CONFIG.ROLES.GUEST);
     if (hadGuest || !hasGuest) return false;
 
-    const guestNick = buildGuestNickname(newMember.displayName || newMember.user?.username);
+    const guestNick = roleService.buildGuestNickname(newMember.displayName || newMember.user?.username);
     if (newMember.displayName === guestNick) return false;
 
     const me = newMember.guild?.members?.me || await newMember.guild?.members?.fetchMe().catch(() => null);
@@ -2920,48 +2354,12 @@ async function syncManualGuestNickname(oldMember, newMember) {
     ].join('\n'));
     return true;
 }
-
-function getWorkerNicknameBase(displayName) {
-    return String(displayName || 'Unknown')
-        .replace(/\s*-\s*[PH]\s*(?:Day|Night)\s*Time\s*$/i, '')
-        .replace(/\s*-\s*(?:Heine|Paagrio)\s*(?:Day|Night)\s*Time\s*$/i, '')
-        .replace(/\s+-\s+Guest$/i, '')
-        .trim() || 'Unknown';
-}
-
-function getWorkerRoleProfileFromMember(member) {
-    if (!member?.roles?.cache) return null;
-    const hasHeine = member.roles.cache.has(CONFIG.ROLES.HEINE);
-    const hasPaagrio = member.roles.cache.has(CONFIG.ROLES.PAAGRIO);
-    const hasDay = member.roles.cache.has(CONFIG.ROLES.DAY);
-    const hasNight = member.roles.cache.has(CONFIG.ROLES.NIGHT);
-    if (hasHeine === hasPaagrio || hasDay === hasNight) return null;
-    return {
-        server: hasHeine ? 'HEINE' : 'PAAGRIO',
-        shift: hasDay ? 'DAY' : 'NIGHT'
-    };
-}
-
-function getWorkerRoleProfileFromNickname(displayName) {
-    const name = String(displayName || '');
-    const match = name.match(/\s-\s*([PH])\s*(Day|Night)\s*Time\s*$/i);
-    if (!match) return null;
-    return {
-        server: match[1].toUpperCase() === 'H' ? 'HEINE' : 'PAAGRIO',
-        shift: match[2].toUpperCase() === 'DAY' ? 'DAY' : 'NIGHT'
-    };
-}
-
-function buildWorkerNickname(displayName, profile) {
-    const base = getWorkerNicknameBase(displayName);
-    const serverCode = profile.server === 'HEINE' ? 'H' : 'P';
-    const shiftText = profile.shift === 'DAY' ? 'Day Time' : 'Night Time';
-    const suffix = ` - ${serverCode} ${shiftText}`;
-    return `${base.slice(0, 32 - suffix.length)}${suffix}`;
-}
-
 async function canManageMemberNickname(member) {
     const me = member?.guild?.members?.me || await member?.guild?.members?.fetchMe().catch(() => null);
+    if (member?.guild?.ownerId === member?.id) {
+        console.warn(`[NICK ROLE SYNC WARN] Cannot update nickname for ${member.displayName}. Target is the guild owner.`);
+        return false;
+    }
     if (me && me.roles.highest.comparePositionTo(member.roles.highest) <= 0) {
         console.warn(`[NICK ROLE SYNC WARN] Cannot update nickname for ${member.displayName}. Role hierarchy too low.`);
         return false;
@@ -2970,21 +2368,29 @@ async function canManageMemberNickname(member) {
 }
 
 async function syncNicknameFromAssignedRoles(oldMember, newMember) {
-    const oldProfile = getWorkerRoleProfileFromMember(oldMember);
-    const newProfile = getWorkerRoleProfileFromMember(newMember);
+    const oldProfile = roleService.getWorkerRoleProfileFromMember(oldMember);
+    const newProfile = roleService.getWorkerRoleProfileFromMember(newMember);
     if (!newProfile) return false;
     const roleProfileChanged = !oldProfile ||
         oldProfile.server !== newProfile.server ||
         oldProfile.shift !== newProfile.shift;
     if (!roleProfileChanged) return false;
 
-    const targetNick = buildWorkerNickname(newMember.displayName || newMember.user?.username, newProfile);
+    const targetNick = roleService.buildWorkerNickname(newMember.displayName || newMember.user?.username, newProfile);
     if (newMember.displayName === targetNick) return false;
     if (!await canManageMemberNickname(newMember)) return false;
 
-    await newMember.setNickname(targetNick, 'Worker roles manually assigned').catch(e => {
-        console.error('[WORKER ROLE NICK ERROR]', e);
-    });
+    const nicknameUpdated = await newMember.setNickname(targetNick, 'Worker roles manually assigned')
+        .then(() => true)
+        .catch(e => {
+            if (e?.code === 50013) {
+                console.warn(`[WORKER ROLE NICK WARN] Missing permission to rename ${newMember.displayName}. Move the bot role above this member's highest role, or rename manually.`);
+            } else {
+                console.error('[WORKER ROLE NICK ERROR]', e);
+            }
+            return false;
+        });
+    if (!nicknameUpdated) return false;
     if (CONFIG.ROLES.GUEST && newMember.roles.cache.has(CONFIG.ROLES.GUEST)) {
         await newMember.roles.remove(CONFIG.ROLES.GUEST, 'Worker role assigned; remove guest role').catch(e => {
             console.error('[WORKER GUEST ROLE REMOVE ERROR]', e);
@@ -3002,7 +2408,7 @@ async function syncNicknameFromAssignedRoles(oldMember, newMember) {
 }
 
 async function syncRolesFromStructuredNickname(newMember) {
-    const profile = getWorkerRoleProfileFromNickname(newMember.displayName);
+    const profile = roleService.getWorkerRoleProfileFromNickname(newMember.displayName);
     if (!profile) return false;
 
     const serverRole = profile.server === 'HEINE' ? CONFIG.ROLES.HEINE : CONFIG.ROLES.PAAGRIO;
@@ -3077,25 +2483,11 @@ function buildDataAuditEmbed() {
 }
 
 function deriveAttendanceStatusForAudit(user) {
-    if (!user) return 'UNKNOWN';
-    if (user.dayOff) return 'DAY_OFF';
-    if (overtimeUsers.some(ot => ot.id === user.id)) return 'OVERTIME';
-    if (user.checkedIn || user.disconnected) return 'WORKING';
-    if (user.isFinished) return 'FINISHED';
-    if (user.shift) return 'PRE_SHIFT';
-    return 'UNKNOWN';
+    return dashboardStateUtils.deriveAttendanceStatusForAudit(user);
 }
 
 function deriveVoiceStatusForAudit(member, user, now = moment().tz(CONFIG.TIMEZONE)) {
-    if (!user) return 'UNKNOWN';
-    if (getActiveLiveException(user.id, now)) return 'EXCEPTION';
-    if (user.disconnected) return 'DISCONNECTED';
-    const voiceState = member?.guild?.voiceStates?.cache?.get(user.id);
-    const isConnected = Boolean(member?.voice?.channelId || voiceState?.channelId);
-    const isStreaming = Boolean(member?.voice?.streaming || voiceState?.streaming);
-    if (isStreaming) return 'LIVE_ON';
-    if (isConnected) return 'LIVE_OFF';
-    return 'OFFLINE';
+    return dashboardStateUtils.deriveVoiceStatusForAudit(member, user, now);
 }
 
 async function buildStatusAuditEmbed(guild) {
@@ -3176,6 +2568,7 @@ function buildTimeAuditEmbed() {
 
 async function buildPermissionCheckEmbed(guild) {
     const me = guild?.members?.me || (guild ? await guild.members.fetchMe().catch(() => null) : null);
+    if (guild) await refreshGuildMembers(guild, { force: false, minIntervalMs: 5 * 60 * 1000 });
     const statusChannel = await client.channels.fetch(CONFIG.STATUS_CHANNEL).catch(() => null);
     const logChannel = await client.channels.fetch(CONFIG.LOG_CHANNEL).catch(() => null);
     const dayOffChannel = await client.channels.fetch(CONFIG.DAYOFF_CHANNEL).catch(() => null);
@@ -3183,28 +2576,67 @@ async function buildPermissionCheckEmbed(guild) {
     const botHighest = me?.roles?.highest;
     const canManageWorking = Boolean(workingRole && botHighest && botHighest.comparePositionTo(workingRole) > 0);
     const dayOffPerms = dayOffChannel && me ? dayOffChannel.permissionsFor(me) : null;
+    const guildManageRoles = Boolean(me?.permissions?.has(PermissionFlagsBits.ManageRoles));
+    const guildManageNicknames = Boolean(me?.permissions?.has(PermissionFlagsBits.ManageNicknames));
     const guildManageMessages = Boolean(me?.permissions?.has(PermissionFlagsBits.ManageMessages));
     const guildAddReactions = Boolean(me?.permissions?.has(PermissionFlagsBits.AddReactions));
     const dayOffManageMessages = Boolean(dayOffPerms?.has(PermissionFlagsBits.ManageMessages));
     const dayOffAddReactions = Boolean(dayOffPerms?.has(PermissionFlagsBits.AddReactions));
-    const healthy = canManageWorking && dayOffManageMessages && dayOffAddReactions;
+    const managedRoleIds = [
+        CONFIG.ROLES.DAY,
+        CONFIG.ROLES.NIGHT,
+        CONFIG.ROLES.HEINE,
+        CONFIG.ROLES.PAAGRIO,
+        CONFIG.ROLES.WORKING,
+        CONFIG.ROLES.GUEST
+    ].filter(Boolean);
+    const roleRows = managedRoleIds.map(roleId => {
+        const role = guild?.roles?.cache?.get(roleId);
+        const manageable = Boolean(role && botHighest && botHighest.comparePositionTo(role) > 0);
+        return `${padWidth(truncateWidth(role?.name || roleId, 18), 19)} ${manageable ? 'OK' : 'NO'}`;
+    });
+    const nicknameRiskMembers = guild?.members?.cache
+        ?.filter(member => {
+            if (!member || member.user?.bot) return false;
+            if (member.id === me?.id) return false;
+            if (member.id === guild.ownerId) return true;
+            return Boolean(botHighest && member.roles?.highest && botHighest.comparePositionTo(member.roles.highest) <= 0);
+        })
+        .map(member => {
+            const reason = member.id === guild.ownerId ? 'owner' : 'role';
+            return `${padWidth(truncateWidth(member.displayName || member.user?.username || member.id, 18), 19)} ${reason}`;
+        })
+        .slice(0, 15) || [];
+    const healthy = guildManageRoles && guildManageNicknames && canManageWorking && dayOffManageMessages && dayOffAddReactions && nicknameRiskMembers.length === 0;
     const rows = [
         `Bot member: ${me ? 'OK' : 'MISSING'}`,
         `Status channel: ${statusChannel ? 'OK' : 'MISSING'}`,
         `Log channel: ${logChannel ? 'OK' : 'MISSING'}`,
         `Day Off channel: ${dayOffChannel ? 'OK' : 'MISSING'}`,
         `WORKING role: ${workingRole ? 'OK' : 'MISSING'}`,
+        `Guild Manage Roles: ${guildManageRoles ? 'OK' : 'NO'}`,
+        `Guild Manage Nicknames: ${guildManageNicknames ? 'OK' : 'NO'}`,
         `Can manage WORKING: ${canManageWorking ? 'OK' : 'NO'}`,
         `Guild Manage Messages: ${guildManageMessages ? 'OK' : 'NO'}`,
         `Guild Add Reactions: ${guildAddReactions ? 'OK' : 'NO'}`,
         `Day Off Manage Messages: ${dayOffManageMessages ? 'OK' : 'NO'}`,
         `Day Off Add Reactions: ${dayOffAddReactions ? 'OK' : 'NO'}`
     ];
-    return new EmbedBuilder()
+    const notes = [
+        '닉네임 변경은 서버장 또는 봇보다 높은 역할 대상에게는 불가능합니다.',
+        '해결: Discord 역할 설정에서 봇 역할을 관리 대상 역할보다 위로 올려주세요.'
+    ];
+    const embed = new EmbedBuilder()
         .setTitle('Permission Check')
         .setColor(healthy ? '#2ECC71' : '#E67E22')
         .setDescription(`\`\`\`\n${rows.join('\n')}\n\`\`\``)
         .setTimestamp();
+    embed.addFields(
+        { name: 'Managed Role Hierarchy', value: `\`\`\`\n${roleRows.join('\n') || 'No managed roles configured.'}\n\`\`\``, inline: false },
+        { name: `Nickname Update Risks (${nicknameRiskMembers.length})`, value: `\`\`\`\n${nicknameRiskMembers.join('\n') || 'NONE'}\n\`\`\``, inline: false },
+        { name: 'Notes', value: notes.join('\n'), inline: false }
+    );
+    return embed;
 }
 
 async function buildDayOffLogEmbed(limit = 10) {
@@ -3221,61 +2653,6 @@ async function buildDayOffLogEmbed(limit = 10) {
         .setColor('#3B82F6')
         .setDescription(`\`\`\`json\n${truncateWidth(text, 3800)}\n\`\`\``)
         .setTimestamp();
-}
-
-function formatAnnouncementList() {
-    return Object.entries(announceData)
-        .map(([slot, d]) => {
-            if (!d) return `Slot ${slot}: empty`;
-            const state = d.active ? 'ON' : 'OFF';
-            const role = d.roleId ? ` role=<@&${d.roleId}>` : '';
-            const content = truncateWidth(d.content || '', 55);
-            return `Slot ${slot}: ${state} ${d.time || '--:--'}${role} - ${content}`;
-        })
-        .join('\n');
-}
-
-function applyManualAdjustment(user, field, value) {
-    const numericFields = {
-        points: 'points',
-        normal: 'totalNormal',
-        late: 'totalLate',
-        absent: 'totalAbsent',
-        early: 'totalEarly',
-        ot: 'totalOT',
-        off: 'offCount',
-        dc: 'dcCount',
-        strikes: 'strikes'
-    };
-    const booleanFields = {
-        'checked-in': 'checkedIn',
-        'day-off': 'dayOff',
-        disconnected: 'disconnected',
-        finished: 'isFinished'
-    };
-
-    if (numericFields[field]) {
-        const amount = Number(value);
-        if (!Number.isFinite(amount)) return false;
-        user[numericFields[field]] = amount;
-        return true;
-    }
-    if (booleanFields[field]) {
-        if (!['true', 'false'].includes(String(value).toLowerCase())) return false;
-        user[booleanFields[field]] = String(value).toLowerCase() === 'true';
-        return true;
-    }
-    if (field === 'status') {
-        if (!['ontime', 'late', 'absent', 'none'].includes(value)) return false;
-        user.status = value === 'none' ? null : value;
-        return true;
-    }
-    if (field === 'shift') {
-        if (!['day', 'night'].includes(value)) return false;
-        user.shift = value;
-        return true;
-    }
-    return false;
 }
 
 async function performSmartReset(targetShift) {
@@ -3339,6 +2716,20 @@ async function checkGracePeriods() {
                 effectiveOut,
                 { effectiveTime: effectiveOut, detectedAt: now, forceIcon: '🔴', clockOutSource: 'live-off-timeout' }
             );
+            if (m?.send) {
+                if (!u.liveOffWarningMarks.includes(CONFIG.LIVE_OFF_CLOCK_OUT_MINS)) {
+                    u.liveOffWarningMarks.push(CONFIG.LIVE_OFF_CLOCK_OUT_MINS);
+                }
+                await m.send([
+                    '🌿 Quick update',
+                    'Reminder 3/3',
+                    '',
+                    `Your live stream has been OFF for about ${CONFIG.LIVE_OFF_CLOCK_OUT_MINS} minutes.`,
+                    'The bot has clocked you out automatically because your work time could not be verified.',
+                    '',
+                    'To start working again, please turn your live stream ON and press the CLOCK IN button.'
+                ].join('\n')).catch(() => null);
+            }
             changed = true;
             continue;
         }
@@ -3387,6 +2778,31 @@ async function autoOvertimeCheck() {
     if (isMaintenanceWindow(now)) return;
     let changed = false;
     const guild = client.guilds.cache.get(CONFIG.GUILD_ID);
+
+    const preOtBefore = overtimeUsers.length;
+    overtimeUsers = overtimeUsers.filter(ot => {
+        if (ot.type !== 'PRE_OT') return true;
+        const u = attendanceData[ot.id];
+        const member = guild?.members.cache.get(ot.id);
+        if (!u || !member || u.dayOff || u.isFinished) return false;
+        const bounds = getShiftBounds(u.shift, now);
+        if (!bounds?.start || now.isBefore(bounds.start)) return true;
+
+        transitionRecordedStatus(u, {
+            attendanceStatus: 'WORKING',
+            voiceStatus: member.voice?.streaming || guild?.voiceStates.cache.get(ot.id)?.streaming
+                ? 'LIVE_ON'
+                : (member.voice?.channelId || guild?.voiceStates.cache.get(ot.id)?.channelId ? 'LIVE_OFF' : 'OFFLINE')
+        }, bounds.start, 'auto-overtime-check', 'pre-shift-ot-ended-regular-shift-started');
+        u.pendingManualOT = false;
+        u.isFinished = false;
+        u.checkedIn = true;
+        recordLog(u, 'in', '정시 근무 시작 (사전 OT 종료)', null, { effectiveTime: bounds.start });
+        changed = true;
+        return false;
+    });
+    if (overtimeUsers.length !== preOtBefore) changed = true;
+
     for (const id in attendanceData) {
         if (CONFIG.EXCEPTIONS.SHARED_SEAT_USER && id === CONFIG.EXCEPTIONS.SHARED_SEAT_USER) continue;
         const u = attendanceData[id];
@@ -3447,7 +2863,7 @@ async function autoOvertimeCheck() {
     }
 }
 
-async function grantLiveException(targetMember, hours, reason, approverMember) {
+async function grantLiveException(targetMember, hours = null, reason, approverMember) {
     const now = moment().tz(CONFIG.TIMEZONE);
     const shift = determineShift(targetMember);
     if (!shift) return { ok: false, message: '대상에게 DAY/NIGHT 역할이 없습니다.' };
@@ -3455,12 +2871,19 @@ async function grantLiveException(targetMember, hours, reason, approverMember) {
     const u = ensureUserData(targetMember, shift);
     if (!u) return { ok: false, message: '대상 데이터를 생성할 수 없습니다.' };
 
-    const expiresAt = now.clone().add(hours, 'hours');
+    const shiftEnd = getShiftBounds(shift, now).end;
+    const expiresAt = hours ? now.clone().add(hours, 'hours') : shiftEnd.clone();
+    if (!expiresAt || expiresAt.isSameOrBefore(now)) {
+        return { ok: false, message: '현재 근무 종료 시간을 계산할 수 없습니다. 시간을 직접 입력해주세요.' };
+    }
+    const approvedMinutes = Math.max(1, expiresAt.diff(now, 'minutes'));
     liveExceptions[targetMember.id] = {
         userId: targetMember.id,
         name: targetMember.displayName,
         shift,
-        hours,
+        hours: hours || null,
+        approvedMinutes,
+        mode: hours ? 'manual-hours' : 'shift-end',
         reason,
         approvedBy: approverMember.id,
         approvedByName: approverMember.displayName || approverMember.user?.username || 'Unknown',
@@ -3477,6 +2900,10 @@ async function grantLiveException(targetMember, hours, reason, approverMember) {
     u.isFinished = false;
     u.shift = shift;
     u.status = 'exception';
+    transitionRecordedStatus(u, {
+        attendanceStatus: 'WORKING',
+        voiceStatus: 'EXCEPTION'
+    }, now, 'live-exception-command', 'admin-approved-live-exception');
     u.checkInTime = u.checkInTime || now.format('hh:mm A');
     u.checkInRaw = u.checkInRaw || now.toISOString();
     u.voiceJoinedAt = null;
@@ -3489,7 +2916,7 @@ async function grantLiveException(targetMember, hours, reason, approverMember) {
     const logText = [
         `\`[${now.format('MM/DD HH:mm')}]\` 👑 관리자 라이브 예외 승인`,
         `👥 대상: **${targetMember.displayName}**`,
-        `⏰ 인정 시간: ${hours}시간`,
+        `⏰ 인정 범위: ${hours ? `${hours}시간` : '현재 근무 종료 시간까지'}`,
         `⏳ 만료 시간: ${formatKoreanDateTime(expiresAt)}`,
         `📝 사유: ${reason}`,
         `👑 승인자: ${liveExceptions[targetMember.id].approvedByName}`
@@ -3507,20 +2934,47 @@ async function checkLiveExceptions() {
 
     for (const [userId, exception] of Object.entries(liveExceptions)) {
         if (!exception || exception.status !== 'active') continue;
-        if (now.isBefore(moment(exception.expiresAt))) continue;
-
-        exception.status = 'expired';
-        exception.expiredAt = now.toISOString();
 
         const member = guild?.members.cache.get(userId) || null;
         const u = attendanceData[userId];
+        const exceptionExpiresAt = moment(exception.expiresAt).tz(CONFIG.TIMEZONE);
+        const scheduledEnd = u
+            ? (getScheduledEndMoment(u, now) || (exception.shift ? getShiftBounds(exception.shift, now).end : null))
+            : (exception.shift ? getShiftBounds(exception.shift, now).end : null);
+        const effectiveEnd = scheduledEnd && scheduledEnd.isBefore(exceptionExpiresAt)
+            ? scheduledEnd
+            : exceptionExpiresAt;
+        if (now.isBefore(effectiveEnd)) continue;
+
+        exception.status = 'expired';
+        exception.expiredAt = now.toISOString();
+        exception.expireReason = scheduledEnd && scheduledEnd.isSameOrBefore(exceptionExpiresAt) && now.isSameOrAfter(scheduledEnd)
+            ? 'scheduled-shift-end'
+            : 'exception-time-ended';
+
         if (u?.status === 'exception') {
-            u.checkedIn = false;
-            u.isFinished = false;
-            u.status = null;
-            u.checkOutTime = now.format('hh:mm A');
-            u.checkOutRaw = now.toISOString();
-            if (member) await updateWorkingRole(member, false);
+            if (member && (u.checkedIn || u.disconnected)) {
+                const outText = exception.expireReason === 'scheduled-shift-end'
+                    ? '예정 퇴근 시간 도달 - 라이브 예외 자동 퇴근'
+                    : '라이브 예외 시간 만료 - 자동 퇴근';
+                await handleClockOut(member, u, now, outText, now, {
+                    skipEarlyPenalty: true,
+                    clockOutSource: 'live-exception-expired'
+                });
+            } else {
+                u.checkedIn = false;
+                u.disconnected = false;
+                u.disconnectedAt = null;
+                u.isFinished = true;
+                u.status = null;
+                u.checkOutTime = now.format('hh:mm A');
+                u.checkOutRaw = now.toISOString();
+                transitionRecordedStatus(u, {
+                    attendanceStatus: 'FINISHED',
+                    voiceStatus: 'OFFLINE'
+                }, now, 'live-exception-expired', 'live-exception-expired-auto-finish');
+                if (member) await updateWorkingRole(member, false);
+            }
         }
 
         const logChan = await client.channels.fetch(CONFIG.LOG_CHANNEL).catch(() => null);
@@ -3528,7 +2982,9 @@ async function checkLiveExceptions() {
             await logChan.send([
                 `\`[${now.format('MM/DD HH:mm')}]\` ⏰ 라이브 예외 만료`,
                 `👥 대상: **${exception.name || userId}**`,
-                `⏳ 만료 시간: ${formatKoreanDateTime(exception.expiresAt)}`,
+                `⏳ 처리 기준: ${exception.expireReason === 'scheduled-shift-end' ? '예정 퇴근 시간' : '예외 만료 시간'}`,
+                `⏰ 예정 퇴근: ${scheduledEnd ? formatKoreanDateTime(scheduledEnd) : '계산 불가'}`,
+                `⏳ 예외 만료: ${formatKoreanDateTime(exception.expiresAt)}`,
                 '라이브 방송이 없으면 이제 출근 인정되지 않습니다.'
             ].join('\n')).catch(() => null);
         }
@@ -3537,7 +2993,7 @@ async function checkLiveExceptions() {
 
     if (changed) {
         await saveSystemAsync();
-        renderDashboardCore();
+        await renderDashboardCore({ forceMemberRefresh: true });
     }
 }
 
@@ -3575,118 +3031,6 @@ const DAYOFF_STATUS_EMOJIS = ['❌', '✅', '⏳', '🔁'];
 const DAYOFF_APPROVAL_EMOJI = '✅';
 const dayOffReactionCleanupLocks = new Set();
 
-function getDayOffChannelId() {
-    return CONFIG.DAYOFF_CHANNEL || CONFIG.DAYOFF_CHAN || null;
-}
-
-function isDayOffChannel(message) {
-    const channelId = getDayOffChannelId();
-    return Boolean(channelId && message?.guildId === CONFIG.GUILD_ID && message.channelId === channelId);
-}
-
-function getMonthNumber(monthText) {
-    const clean = (monthText || '').trim();
-    for (const fmt of ['MMMM', 'MMM']) {
-        const parsed = moment.tz(clean, fmt, true, CONFIG.TIMEZONE);
-        if (parsed.isValid()) return parsed.month();
-    }
-    return null;
-}
-
-function normalizeDayOffName(name) {
-    return String(name || '')
-        .toLowerCase()
-        .replace(/[^a-z0-9가-힣]/g, '');
-}
-
-function parseDayOffRequest(message) {
-    const content = message.content || '';
-    const contentText = content.toLowerCase();
-    const dayPattern = /\bday\s*time\b|\bday\b|낮|주간/;
-    const nightPattern = /\bnight\s*time\b|\bnight\b|밤|야간/;
-    const contentHasDay = dayPattern.test(contentText);
-    const contentHasNight = nightPattern.test(contentText);
-    const hasDayRole = Boolean(message.member?.roles?.cache?.has(CONFIG.ROLES.DAY));
-    const hasNightRole = Boolean(message.member?.roles?.cache?.has(CONFIG.ROLES.NIGHT));
-    let shift = null;
-
-    if (hasDayRole && !hasNightRole) {
-        shift = 'day';
-    } else if (hasNightRole && !hasDayRole) {
-        shift = 'night';
-    } else if (hasDayRole && hasNightRole) {
-        if (contentHasDay && !contentHasNight) shift = 'day';
-        if (contentHasNight && !contentHasDay) shift = 'night';
-    }
-
-    const shiftLabel = shift === 'day' ? 'Day Time' : shift === 'night' ? 'Night Time' : null;
-    const nameMatch = content.match(/^\s*name\s*:?\s*(.+)$/im);
-    const submittedName = nameMatch?.[1]?.trim() || null;
-    const displayName = (message.member?.displayName || message.author?.username || 'Unknown').trim();
-    const nameMismatch = Boolean(
-        submittedName &&
-        normalizeDayOffName(submittedName) &&
-        normalizeDayOffName(submittedName) !== normalizeDayOffName(displayName)
-    );
-    const leaveLine = content.match(/leave\s*date\s*:?\s*([A-Za-z]+)\s+(\d{1,2})(?:\s*,?\s*(\d{4}))?/i);
-
-    // ✨ [업데이트] 빈 이름 제출 차단 
-    if (!submittedName) {
-        return { 
-            ok: false, 
-            code: 'missing-name', 
-            emoji: '❌', 
-            displayName, 
-            submittedName, 
-            nameMismatch: false, 
-            shift, 
-            shiftLabel 
-        };
-    }
-
-    if (!leaveLine) {
-        const hasLeaveDate = /leave\s*date/i.test(content);
-        return {
-            ok: false,
-            code: hasLeaveDate ? 'invalid-month' : 'missing-date',
-            emoji: hasLeaveDate ? '❓' : '❌',
-            displayName,
-            submittedName,
-            nameMismatch,
-            shift,
-            shiftLabel
-        };
-    }
-
-    const month = getMonthNumber(leaveLine[1]);
-    if (month === null) {
-        return { ok: false, code: 'invalid-month', emoji: '❓', displayName, submittedName, nameMismatch, shift, shiftLabel };
-    }
-
-    const now = moment().tz(CONFIG.TIMEZONE);
-    const year = leaveLine[3] ? Number(leaveLine[3]) : now.year();
-    const date = moment.tz({ year, month, day: Number(leaveLine[2]), hour: 0, minute: 0 }, CONFIG.TIMEZONE);
-    if (!date.isValid() || date.month() !== month) {
-        return { ok: false, code: 'invalid-date', emoji: '❌', displayName, submittedName, nameMismatch, shift, shiftLabel };
-    }
-
-    if (!shift) {
-        return { ok: false, code: 'missing-shift', emoji: '❌', displayName, submittedName, nameMismatch, shift, shiftLabel };
-    }
-
-    return {
-        ok: true,
-        code: 'valid',
-        emoji: '⏳',
-        displayName,
-        submittedName,
-        nameMismatch,
-        shift,
-        shiftLabel,
-        leaveDate: date.format('YYYY-MM-DD')
-    };
-}
-
 async function sendTemporaryDayOffReply(message, content) {
     const reply = await message.reply({ content, allowedMentions: { users: [message.author.id], roles: [], repliedUser: true } })
         .catch(e => {
@@ -3699,7 +3043,7 @@ async function sendTemporaryDayOffReply(message, content) {
 async function setDayOffStatusEmoji(message, emoji) {
     await message.fetch().catch(() => null);
     dayOffReactionCleanupLocks.add(message.id);
-    for (const statusEmoji of DAYOFF_STATUS_EMOJIS) {
+    for (const statusEmoji of dayOffService.DAYOFF_STATUS_EMOJIS) {
         const reaction = message.reactions.cache.find(r => r.emoji.name === statusEmoji);
         if (reaction) {
             await reaction.remove().catch(async () => {
@@ -3793,39 +3137,6 @@ async function notifyDayOffReviewer(reservation) {
     return dmStatus;
 }
 
-function buildDayOffDm(reservation) {
-    return [
-        'Your day-off request has been approved.',
-        '',
-        `Name: ${reservation.name}`,
-        `Shift: ${reservation.shiftLabel}`,
-        `Leave Date: ${reservation.leaveDate}`,
-        '',
-        'Please make sure your schedule is adjusted accordingly.',
-        'Enjoy your day off and come back well rested.'
-    ].join('\n');
-}
-
-function buildDayOffRejectDm(reservation) {
-    const reason = reservation.rejectReason || 'Rejected by Graet';
-    return [
-        'Your day-off request has been rejected.',
-        '',
-        `Name: ${reservation.name}`,
-        `Shift: ${reservation.shiftLabel}`,
-        `Leave Date: ${reservation.leaveDate}`,
-        `Rejected by: ${reservation.rejectedByName || 'Management'}`,
-        `Reason: ${reason}`,
-        '',
-        'Please contact management if you need clarification.'
-    ].join('\n');
-}
-
-function hasApprovalReaction(message) {
-    const reaction = message.reactions.cache.find(r => r.emoji.name === DAYOFF_APPROVAL_EMOJI);
-    return Boolean(reaction && reaction.count > 0);
-}
-
 async function saveDayOffReservation(message, parsed, status, approver = null) {
     const previous = dayOffReservations[message.id] || {};
     const reservation = {
@@ -3851,8 +3162,8 @@ async function saveDayOffReservation(message, parsed, status, approver = null) {
 }
 
 async function processDayOffMessage(message, { silent = false } = {}) {
-    if (!isDayOffChannel(message) || message.author?.bot) return;
-    const parsed = parseDayOffRequest(message);
+    if (!dayOffService.isDayOffChannel(message) || message.author?.bot) return;
+    const parsed = dayOffService.parseDayOffRequest(message);
 
     if (!parsed.ok) {
         delete dayOffReservations[message.id];
@@ -3892,7 +3203,7 @@ async function processDayOffMessage(message, { silent = false } = {}) {
     }
 
     const existingReservation = dayOffReservations[message.id];
-    if (existingReservation?.status === 'approved' && hasApprovalReaction(message)) {
+    if (existingReservation?.status === 'approved' && dayOffService.hasApprovalReaction(message)) {
         await approveDayOffMessage(message, null, parsed, silent);
         return;
     }
@@ -3909,8 +3220,8 @@ async function processDayOffMessage(message, { silent = false } = {}) {
 }
 
 async function approveDayOffMessage(message, approverMember = null, parsed = null, silent = false) {
-    if (!isDayOffChannel(message) || message.author?.bot) return;
-    const freshParsed = parsed || parseDayOffRequest(message);
+    if (!dayOffService.isDayOffChannel(message) || message.author?.bot) return;
+    const freshParsed = parsed || dayOffService.parseDayOffRequest(message);
     if (!freshParsed.ok) {
         await processDayOffMessage(message, { silent });
         return;
@@ -3945,7 +3256,7 @@ async function approveDayOffMessage(message, approverMember = null, parsed = nul
     const dmKey = `${reservation.leaveDate}:${reservation.shift}:${reservation.userId}`;
     let dmStatus = 'DM 발송 완료';
     if (reservation.lastDmKey !== dmKey) {
-        await message.author.send(buildDayOffDm(reservation)).catch(e => {
+        await message.author.send(dayOffService.buildDayOffDm(reservation)).catch(e => {
             console.error('[DAYOFF DM ERROR]', e);
             dmStatus = 'DM 발송 실패';
         });
@@ -3974,7 +3285,7 @@ async function approveDayOffMessage(message, approverMember = null, parsed = nul
 }
 
 async function cancelDayOffApproval(message, cancelledBy = null) {
-    if (!isDayOffChannel(message) || message.author?.bot) return;
+    if (!dayOffService.isDayOffChannel(message) || message.author?.bot) return;
     const reservation = dayOffReservations[message.id];
     if (!reservation || reservation.status !== 'approved') {
         await processDayOffMessage(message, { silent: true });
@@ -4035,71 +3346,6 @@ async function markWorkedOnDayOff(member, user, shift, now) {
         reason: 'clock-in-or-live-on'
     });
     return reservation;
-}
-
-function parseDayOffCommandDate(input) {
-    const raw = (input || '').trim();
-    const formats = ['YYYY-MM-DD', 'YYYY/M/D', 'MMM D YYYY', 'MMMM D YYYY', 'MMM D', 'MMMM D'];
-    for (const fmt of formats) {
-        const parsed = moment.tz(raw, fmt, true, CONFIG.TIMEZONE);
-        if (parsed.isValid()) {
-            if (!/Y/.test(fmt)) parsed.year(moment().tz(CONFIG.TIMEZONE).year());
-            return parsed.format('YYYY-MM-DD');
-        }
-    }
-    return null;
-}
-
-function getDayOffReservationsByStatus(status = 'all') {
-    const today = moment().tz(CONFIG.TIMEZONE).format('YYYY-MM-DD');
-    return Object.values(dayOffReservations)
-        .filter(Boolean)
-        .filter(r => {
-            if (status === 'all') return true;
-            if (status === 'today') return r.leaveDate === today && ['approved', 'applied'].includes(r.status);
-            return r.status === status;
-        })
-        .sort((a, b) => `${a.leaveDate}${a.name}`.localeCompare(`${b.leaveDate}${b.name}`));
-}
-
-function formatDayOffReservationLine(reservation) {
-    const statusIcon = reservation.status === 'approved'
-        ? 'OK'
-        : reservation.status === 'pending'
-            ? 'WAIT'
-            : reservation.status === 'worked'
-                ? 'WORK'
-                : reservation.status === 'cancelled'
-                    ? 'CANCEL'
-                    : reservation.status === 'rejected'
-                        ? 'REJECT'
-                        : 'INFO';
-    return `${statusIcon} ${reservation.leaveDate} | ${padWidth(truncateWidth(reservation.name || 'Unknown', 14), 15)} | ${reservation.shiftLabel || '-'}`;
-}
-
-function buildDayOffListEmbed(status = 'all') {
-    const rows = getDayOffReservationsByStatus(status);
-    const statusName = {
-        all: 'All',
-        pending: 'Pending',
-        approved: 'Approved',
-        today: 'Today',
-        worked: 'Worked',
-        cancelled: 'Cancelled',
-        rejected: 'Rejected'
-    }[status] || 'All';
-
-    const content = rows.length
-        ? rows.slice(0, 30).map(formatDayOffReservationLine).join('\n')
-        : 'No day off reservations.';
-
-    return new EmbedBuilder()
-        .setTitle('DAY OFF Reservation List')
-        .setColor('#3B82F6')
-        .setDescription(`Status: ${statusName}\nCount: ${rows.length}`)
-        .addFields({ name: 'List', value: `\`\`\`\n${content}\n\`\`\``, inline: false })
-        .setFooter({ text: 'WAIT pending | OK approved | WORK worked | CANCEL cancelled | REJECT rejected' })
-        .setTimestamp();
 }
 
 async function cancelDayOffReservationByCommand(member, leaveDate, cancelledBy) {
@@ -4191,7 +3437,7 @@ async function rejectDayOffReservationByCommand(member, leaveDate, rejectedBy, r
     const message = channel ? await channel.messages.fetch(reservation.messageId).catch(() => null) : null;
     if (message) await setDayOffStatusEmoji(message, '❌');
 
-    await member.send(buildDayOffRejectDm(reservation)).catch(e => {
+    await member.send(dayOffService.buildDayOffRejectDm(reservation)).catch(e => {
         console.error('[DAYOFF REJECT DM ERROR]', e);
     });
 
@@ -4246,7 +3492,7 @@ async function approveDayOffReservationByCommand(member, leaveDate, approvedBy) 
     if (reservation.lastDmKey !== dmKey) {
         const targetUser = await client.users.fetch(reservation.userId).catch(() => null);
         if (targetUser) {
-            await targetUser.send(buildDayOffDm(reservation)).catch(e => {
+            await targetUser.send(dayOffService.buildDayOffDm(reservation)).catch(e => {
                 console.error('[DAYOFF DM ERROR]', e);
                 dmStatus = 'DM 발송 실패';
             });
@@ -4502,7 +3748,7 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
         if (reaction.partial) reaction = await reaction.fetch().catch(() => null);
         if (!reaction || reaction.emoji.name !== DAYOFF_APPROVAL_EMOJI) return;
         const message = reaction.message.partial ? await reaction.message.fetch().catch(() => null) : reaction.message;
-        if (!isDayOffChannel(message)) return;
+        if (!dayOffService.isDayOffChannel(message)) return;
         if (dayOffReactionCleanupLocks.has(message.id)) return;
 
         const member = await message.guild.members.fetch(user.id).catch(() => null);
@@ -4523,7 +3769,7 @@ client.on(Events.MessageReactionRemove, async (reaction, user) => {
         if (reaction.partial) reaction = await reaction.fetch().catch(() => null);
         if (!reaction || reaction.emoji.name !== DAYOFF_APPROVAL_EMOJI) return;
         const message = reaction.message.partial ? await reaction.message.fetch().catch(() => null) : reaction.message;
-        if (!isDayOffChannel(message)) return;
+        if (!dayOffService.isDayOffChannel(message)) return;
 
         const member = await message.guild.members.fetch(user.id).catch(() => null);
         const canCancel = member?.permissions?.has(PermissionFlagsBits.Administrator) ||
@@ -4538,25 +3784,22 @@ client.on(Events.MessageReactionRemove, async (reaction, user) => {
 });
 
 client.on(Events.InteractionCreate, async i => {
-    const autoDel = (ms = 3000) => setTimeout(() => i.deleteReply().catch(() => {}), ms);
+    const autoDel = createAutoDelete(i);
     try {
         if (i.isChatInputCommand()) {
-            const rawReply = i.reply.bind(i);
-            const rawEditReply = i.editReply.bind(i);
-            const rawDeferReply = i.deferReply.bind(i);
-            i.reply = (payload) => rawReply(withCommandStatusPayload(payload)).catch(e => handleInteractionReplyError(e, 'reply'));
-            i.editReply = (payload) => rawEditReply(withCommandStatusPayload(payload)).catch(e => handleInteractionReplyError(e, 'editReply'));
-            i.deferReply = (payload) => rawDeferReply(payload).catch(e => handleInteractionReplyError(e, 'deferReply'));
+            patchCommandReplies(i, { withCommandStatusPayload, handleInteractionReplyError });
             if (i.member && markMemberActivity(i.member, 'command')) await saveSystemAsync();
             const isAdmin = i.member.permissions.has(PermissionFlagsBits.Administrator);
             const isDayOffManager = isAdmin || i.user.id === CONFIG.DAYOFF_REVIEWER_ID || isOwnerId(i.user.id);
             const now = moment().tz(CONFIG.TIMEZONE);
-            const n = (cmd) => i.commandName === cmd;
-            const getTargetMember = () => i.options.getMember('target') || i.options.getMember('대상');
-            const getSlot = () => i.options.getInteger('slot') || i.options.getInteger('번호');
-            const getAnnounceTime = () => i.options.getString('time') || i.options.getString('시간');
-            const getAnnounceContent = () => i.options.getString('content') || i.options.getString('내용');
-            const getAnnounceRole = () => i.options.getRole('target') || i.options.getRole('대상') || i.options.getRole('role') || i.options.getRole('역할');
+            const {
+                n,
+                getTargetMember,
+                getSlot,
+                getAnnounceTime,
+                getAnnounceContent,
+                getAnnounceRole
+            } = createCommandOptionHelpers(i);
             const replyMemberNotFound = () => i.reply({ content: '대상을 찾을 수 없습니다.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
 
             if (n('live-exception') || n('라이브예외')) {
@@ -4569,13 +3812,13 @@ client.on(Events.InteractionCreate, async i => {
                 const hours = i.options.getInteger('hours') || i.options.getInteger('시간');
                 const reason = i.options.getString('reason') || i.options.getString('사유');
                 if (!t) return i.editReply({ content: 'Member not found.' }).then(() => autoDel());
-                if (!hours || hours < 1 || hours > 12) {
+                if (hours && (hours < 1 || hours > 12)) {
                     return i.editReply({ content: '시간은 1~12시간 사이로 입력해주세요.' }).then(() => autoDel());
                 }
                 const result = await grantLiveException(t, hours, reason, i.member);
                 if (!result.ok) return i.editReply({ content: result.message }).then(() => autoDel());
-                await renderDashboardCore();
-                return i.editReply({ content: `라이브 예외가 승인되었습니다. 대상: ${t.displayName}, 시간: ${hours}시간` }).then(() => autoDel());
+                await renderDashboardCore({ forceMemberRefresh: true });
+                return i.editReply({ content: `✅ 라이브 예외가 승인되었습니다. 대상: ${t.displayName}, 만료: ${formatKoreanDateTime(result.expiresAt)}` }).then(() => autoDel());
             }
 
             if (n('assign-roles') || n('역할')) {
@@ -4618,6 +3861,7 @@ client.on(Events.InteractionCreate, async i => {
             if (n('refresh') || n('현황판갱신')) {
                 await i.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => null);
                 if (!i.deferred && !i.replied) return;
+                await i.editReply({ content: '✅ Refresh started. Updating attendance panels and dashboard...' }).catch(() => null);
                 await refreshGuildMembers(i.guild, { force: true });
                 await reconcileAttendanceMembership(i.guild);
                 await syncVoiceStates();
@@ -4625,7 +3869,7 @@ client.on(Events.InteractionCreate, async i => {
                 await autoOvertimeCheck();
                 await syncAutoPanels();
                 await renderDashboardCore({ forceMemberRefresh: true });
-                return i.editReply({ content: 'UI Refreshed.' }).then(() => autoDel());
+                return i.editReply({ content: '✅ UI Refreshed.' }).then(() => autoDel());
             }
             if (n('sync-working') || n('워킹동기화')) {
                 if (!isAdmin) return i.reply({ content: 'No perms.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
@@ -4667,14 +3911,14 @@ client.on(Events.InteractionCreate, async i => {
             if (n('dayoff-list') || n('휴무목록')) {
                 if (!isAdmin) return i.reply({ content: 'No perms.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
                 const status = i.options.getString('status') || i.options.getString('상태') || 'all';
-                return i.reply({ embeds: [buildDayOffListEmbed(status)], flags: MessageFlags.Ephemeral });
+                return i.reply({ embeds: [dayOffService.buildDayOffListEmbed(status)], flags: MessageFlags.Ephemeral });
             }
             if (n('dayoff-approve') || n('휴무승인')) {
                 if (!isDayOffManager) return i.reply({ content: 'No perms.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
                 const t = getTargetMember();
                 if (!t) return replyMemberNotFound();
                 const dateInput = i.options.getString('date') || i.options.getString('날짜');
-                const leaveDate = parseDayOffCommandDate(dateInput);
+                const leaveDate = dayOffService.parseDayOffCommandDate(dateInput);
                 if (!leaveDate) {
                     return i.reply({ content: '날짜 형식이 올바르지 않습니다. 예: 2026-05-21 또는 May 21', flags: MessageFlags.Ephemeral }).then(() => autoDel());
                 }
@@ -4693,7 +3937,7 @@ client.on(Events.InteractionCreate, async i => {
                 const t = getTargetMember();
                 if (!t) return replyMemberNotFound();
                 const dateInput = i.options.getString('date') || i.options.getString('날짜');
-                const leaveDate = parseDayOffCommandDate(dateInput);
+                const leaveDate = dayOffService.parseDayOffCommandDate(dateInput);
                 if (!leaveDate) {
                     return i.reply({ content: '날짜 형식이 올바르지 않습니다. 예: 2026-05-21 또는 May 21', flags: MessageFlags.Ephemeral }).then(() => autoDel());
                 }
@@ -4727,7 +3971,7 @@ client.on(Events.InteractionCreate, async i => {
                 const t = getTargetMember();
                 if (!t) return replyMemberNotFound();
                 const dateInput = i.options.getString('date') || i.options.getString('날짜');
-                const leaveDate = parseDayOffCommandDate(dateInput);
+                const leaveDate = dayOffService.parseDayOffCommandDate(dateInput);
                 const reason = i.options.getString('reason') || i.options.getString('사유') || 'Rejected by Graet';
                 if (!leaveDate) {
                     return i.reply({ content: '날짜 형식이 올바르지 않습니다. 예: 2026-05-21 또는 May 21', flags: MessageFlags.Ephemeral }).then(() => autoDel());
@@ -4749,8 +3993,8 @@ client.on(Events.InteractionCreate, async i => {
                 await handleClockIn(t, u, s, now);
                 await writeAdminActionLog('FORCE_IN', i.member, t, [`shift=${s}`]);
                 await saveSystemAsync();
-                renderDashboardCore();
-                return i.reply({ content: 'Forced In.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
+                await renderDashboardCore({ forceMemberRefresh: true });
+                return i.reply({ content: '✅ Forced In.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
             }
             if (n('force-out') || n('강제퇴근')) {
                 if (!isAdmin) return i.reply({ content: 'No perms.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
@@ -4763,8 +4007,8 @@ client.on(Events.InteractionCreate, async i => {
                 await handleClockOut(t, u, now, '관리자 강제 퇴근', null, { skipEarlyPenalty: true });
                 await writeAdminActionLog('FORCE_OUT', i.member, t, ['skipEarlyPenalty=true']);
                 await saveSystemAsync();
-                renderDashboardCore();
-                return i.reply({ content: 'Forced Out.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
+                await renderDashboardCore({ forceMemberRefresh: true });
+                return i.reply({ content: '✅ Forced Out.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
             }
             if (n('force-early-out') || n('강제조기퇴근')) {
                 if (!isAdmin) return i.reply({ content: 'No perms.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
@@ -4777,8 +4021,8 @@ client.on(Events.InteractionCreate, async i => {
                 await handleClockOut(t, u, now, '관리자 조기퇴근 처리');
                 await writeAdminActionLog('FORCE_EARLY_OUT', i.member, t);
                 await saveSystemAsync();
-                renderDashboardCore();
-                return i.reply({ content: 'Forced Early Out.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
+                await renderDashboardCore({ forceMemberRefresh: true });
+                return i.reply({ content: '✅ Forced Early Out.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
             }
             if (n('force-off') || n('강제휴무')) {
                 if (!isAdmin) return i.reply({ content: 'No perms.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
@@ -4797,8 +4041,8 @@ client.on(Events.InteractionCreate, async i => {
                 await recordLog(u, 'off', '관리자 강제 휴무');
                 await writeAdminActionLog('FORCE_OFF', i.member, t, [s ? `shift=${s}` : 'shift=unknown']);
                 await saveSystemAsync();
-                renderDashboardCore();
-                return i.reply({ content: 'Forced Off.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
+                await renderDashboardCore({ forceMemberRefresh: true });
+                return i.reply({ content: '✅ Forced Off.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
             }
             if (n('force-ot') || n('강제연장')) {
                 if (!isAdmin) return i.reply({ content: 'No perms.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
@@ -4808,15 +4052,28 @@ client.on(Events.InteractionCreate, async i => {
                 if (!s) return i.reply({ content: 'No role.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
                 const u = ensureUserData(t, s);
                 if (!u.checkedIn) await handleClockIn(t, u, s, now);
-                if (addOvertimeUser(u, 'MANUAL')) {
+                u.checkedIn = true;
+                u.isFinished = false;
+                u.dayOff = false;
+                u.disconnected = false;
+                u.disconnectedAt = null;
+                u.pendingManualOT = false;
+                transitionRecordedStatus(u, {
+                    attendanceStatus: 'OVERTIME',
+                    voiceStatus: t.voice?.streaming ? 'LIVE_ON' : (t.voice?.channelId ? 'LIVE_OFF' : 'OFFLINE')
+                }, now, 'force-ot-command', 'admin-forced-overtime');
+                await updateWorkingRole(t, true);
+                if (addOvertimeUser(u, 'FORCED')) {
                     u.totalOT = (u.totalOT || 0) + 1;
                     u.points = (u.points || 0) + CONFIG.POINTS.OT;
                     await recordLog(u, 'ot', '관리자 강제 연장');
+                } else {
+                    await recordLog(u, 'ot', '관리자 강제 연장 상태 재확인');
                 }
                 await writeAdminActionLog('FORCE_OT', i.member, t, [`shift=${s}`, `checkedIn=${Boolean(u.checkedIn)}`]);
                 await saveSystemAsync();
-                renderDashboardCore();
-                return i.reply({ content: 'Forced OT.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
+                await renderDashboardCore({ forceMemberRefresh: true });
+                return i.reply({ content: '✅ Forced OT.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
             }
             if (n('diagnostics') || n('진단')) {
                 if (!isAdmin) return i.reply({ content: 'No perms.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
@@ -4875,7 +4132,7 @@ client.on(Events.InteractionCreate, async i => {
             }
             if (n('list-announce') || n('공지목록')) {
                 if (!canManageAnnouncements(i.member)) return i.reply({ content: 'No perms.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
-                return i.reply({ content: `\`\`\`\n${formatAnnouncementList()}\n\`\`\``, flags: MessageFlags.Ephemeral });
+                return i.reply({ content: `\`\`\`\n${adminService.formatAnnouncementList()}\n\`\`\``, flags: MessageFlags.Ephemeral });
             }
             if (n('manual-adjust') || n('수동수정')) {
                 if (!isAdmin) return i.reply({ content: 'No perms.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
@@ -4885,7 +4142,7 @@ client.on(Events.InteractionCreate, async i => {
                 const field = i.options.getString('field') || i.options.getString('항목');
                 const value = i.options.getString('value') || i.options.getString('값');
                 const u = ensureUserData(t, determineShift(t));
-                if (!applyManualAdjustment(u, field, value)) {
+                if (!adminService.applyManualAdjustment(u, field, value)) {
                     return i.reply({ content: 'Invalid field/value.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
                 }
                 await writeAdminActionLog('MANUAL_ADJUST', i.member, t, [`field=${field}`, `value=${value}`]);
@@ -5010,8 +4267,8 @@ client.on(Events.InteractionCreate, async i => {
                     }).then(() => autoDel(5000));
                 }
                 const voiceState = i.guild.voiceStates.cache.get(m.id);
-                const isVoiceConnected = Boolean(voiceState?.channelId);
-                const isStreamingNow = Boolean(voiceState?.channelId && voiceState?.streaming);
+                const isVoiceConnected = Boolean(m.voice?.channelId || voiceState?.channelId);
+                const isStreamingNow = Boolean(isVoiceConnected && (m.voice?.streaming || voiceState?.streaming));
                 if (!isStreamingNow) {
                     if (u.manualResumeRequired) {
                         u.checkedIn = false;
@@ -5047,6 +4304,20 @@ client.on(Events.InteractionCreate, async i => {
                     }).then(() => autoDel(3000));
                 }
                 u.isFinished = false;
+                if (canStartPreShiftOvertime(u, now)) {
+                    await startPreShiftOvertime(m, u, s, now, 'button-or-command');
+                    await saveSystemAsync();
+                    await renderDashboardCore({ forceMemberRefresh: true });
+                    return i.reply({
+                        content: [
+                            '✅ Pre-shift OT has started.',
+                            '',
+                            `Your regular ${s.toUpperCase()} shift starts at ${getShiftBounds(s, now).start.format('hh:mm A')}.`,
+                            'Until then, you will be shown as overtime.'
+                        ].join('\n'),
+                        flags: MessageFlags.Ephemeral
+                    }).then(() => autoDel(7000));
+                }
                 if (u.disconnected) {
                     u.disconnected = false;
                     u.disconnectedAt = null;
@@ -5076,10 +4347,44 @@ client.on(Events.InteractionCreate, async i => {
                     }).then(() => autoDel(5000));
                 }
                 const voiceState = i.guild.voiceStates.cache.get(m.id);
-                const isVoiceConnected = Boolean(voiceState?.channelId);
-                const isStreamingNow = Boolean(voiceState?.channelId && voiceState?.streaming);
+                const isVoiceConnected = Boolean(m.voice?.channelId || voiceState?.channelId);
+                const isStreamingNow = Boolean(isVoiceConnected && (m.voice?.streaming || voiceState?.streaming));
                 const overtimeStart = getOvertimeStartMoment(u, now);
                 const isOvertimeWindow = canStartOvertimeNow(u, now);
+                const isPreShiftOvertimeWindow = canStartPreShiftOvertime(u, now);
+                if (!u.checkedIn && !isOvertimeWindow) {
+                    if (isPreShiftOvertimeWindow && isStreamingNow) {
+                        await startPreShiftOvertime(m, u, s, now, 'button-or-command');
+                        await saveSystemAsync();
+                        await renderDashboardCore({ forceMemberRefresh: true });
+                        return i.reply({
+                            content: [
+                                '✅ Pre-shift OT has started.',
+                                '',
+                                `Your regular ${s.toUpperCase()} shift starts at ${getShiftBounds(s, now).start.format('hh:mm A')}.`,
+                                'Until then, you will be shown as overtime.'
+                            ].join('\n'),
+                            flags: MessageFlags.Ephemeral
+                        }).then(() => autoDel(7000));
+                    }
+                    await saveSystemAsync();
+                    await renderDashboardCore({ forceMemberRefresh: true });
+                    return i.reply({
+                        content: [
+                            '⚠️ OT was not reserved.',
+                            '',
+                            isPreShiftOvertimeWindow
+                                ? 'You are before your regular shift, but your live stream is not ON.'
+                                : 'You are not clocked in yet.',
+                            isPreShiftOvertimeWindow
+                                ? 'Please join a voice channel, turn LIVE ON, then press OVERTIME again.'
+                                : 'Please turn LIVE ON and press the CLOCK IN button first.',
+                            '',
+                            `OT can start after ${overtimeStart ? overtimeStart.format('hh:mm A') : 'your shift end'}.`
+                        ].join('\n'),
+                        flags: MessageFlags.Ephemeral
+                    }).then(() => autoDel(7000));
+                }
                 if (!isStreamingNow) {
                     u.pendingManualOT = true;
                     u.isFinished = false;
@@ -5156,59 +4461,11 @@ client.on(Events.InteractionCreate, async i => {
 client.once(Events.ClientReady, async () => {
     loadSystem();
     const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
-    const cmdList = [
-        new SlashCommandBuilder().setName('라이브예외').setDescription('Approve live exception').addUserOption(o=>o.setName('대상').setRequired(true).setDescription('Target')).addIntegerOption(o=>o.setName('시간').setRequired(true).setDescription('Hours').setMinValue(1).setMaxValue(12)).addStringOption(o=>o.setName('사유').setRequired(true).setDescription('Reason')),
-        new SlashCommandBuilder().setName('live-exception').setDescription('Approve live exception').addUserOption(o=>o.setName('target').setRequired(true).setDescription('Target')).addIntegerOption(o=>o.setName('hours').setRequired(true).setDescription('Approved hours').setMinValue(1).setMaxValue(12)).addStringOption(o=>o.setName('reason').setRequired(true).setDescription('Reason')),
-        new SlashCommandBuilder().setName('역할').setDescription('Assign roles').addUserOption(o=>o.setName('대상').setRequired(true).setDescription('Target')).addStringOption(o=>o.setName('서버').setRequired(true).setDescription('Server').addChoices({name:'Heine',value:'HEINE'},{name:'Paagrio',value:'PAAGRIO'})).addStringOption(o=>o.setName('시프트').setRequired(true).setDescription('Shift').addChoices({name:'Day',value:'DAY'},{name:'Night',value:'NIGHT'})),
-        new SlashCommandBuilder().setName('assign-roles').setDescription('Assign roles').addUserOption(o=>o.setName('target').setRequired(true).setDescription('Target')).addStringOption(o=>o.setName('server').setRequired(true).setDescription('Server').addChoices({name:'Heine',value:'HEINE'},{name:'Paagrio',value:'PAAGRIO'})).addStringOption(o=>o.setName('shift').setRequired(true).setDescription('Shift').addChoices({name:'Day',value:'DAY'},{name:'Night',value:'NIGHT'})),
-        new SlashCommandBuilder().setName('일반보고').setDescription('Summary report'), new SlashCommandBuilder().setName('report-regular').setDescription('Summary report'),
-        new SlashCommandBuilder().setName('정밀보고').setDescription('Deep report'), new SlashCommandBuilder().setName('report-analysis').setDescription('Deep report'),
-        new SlashCommandBuilder().setName('랭킹').setDescription('Ranking'), new SlashCommandBuilder().setName('ranking').setDescription('Ranking'),
-        new SlashCommandBuilder().setName('현황판갱신').setDescription('Refresh'), new SlashCommandBuilder().setName('refresh').setDescription('Refresh'),
-        new SlashCommandBuilder().setName('워킹동기화').setDescription('Sync WORKING roles'), new SlashCommandBuilder().setName('sync-working').setDescription('Sync WORKING roles'),
-        new SlashCommandBuilder().setName('권한진단').setDescription('Permission check'), new SlashCommandBuilder().setName('permission-check').setDescription('Permission check'),
-        new SlashCommandBuilder().setName('데이터검사').setDescription('Data audit'), new SlashCommandBuilder().setName('data-audit').setDescription('Data audit'),
-        new SlashCommandBuilder().setName('비활동검사').setDescription('Inactive kick candidate report').addIntegerOption(o=>o.setName('일수').setDescription('Inactive days').setMinValue(1).setMaxValue(30)),
-        new SlashCommandBuilder().setName('inactive-candidates').setDescription('Inactive kick candidate report').addIntegerOption(o=>o.setName('days').setDescription('Inactive days').setMinValue(1).setMaxValue(30)),
-        new SlashCommandBuilder().setName('상태검사').setDescription('Recorded status audit'), new SlashCommandBuilder().setName('status-audit').setDescription('Recorded status audit'),
-        new SlashCommandBuilder().setName('시간검사').setDescription('Time logic audit'), new SlashCommandBuilder().setName('time-audit').setDescription('Time logic audit'),
-        new SlashCommandBuilder().setName('휴무로그').setDescription('Day off audit log').addIntegerOption(o=>o.setName('갯수').setDescription('Limit').setMinValue(1).setMaxValue(30)),
-        new SlashCommandBuilder().setName('dayoff-log').setDescription('Day off audit log').addIntegerOption(o=>o.setName('limit').setDescription('Limit').setMinValue(1).setMaxValue(30)),
-        new SlashCommandBuilder().setName('휴무목록').setDescription('Day off list').addStringOption(o=>o.setName('상태').setDescription('Status').addChoices({name:'All',value:'all'},{name:'Pending',value:'pending'},{name:'Approved',value:'approved'},{name:'Today',value:'today'},{name:'Worked',value:'worked'},{name:'Cancelled',value:'cancelled'},{name:'Rejected',value:'rejected'})),
-        new SlashCommandBuilder().setName('dayoff-list').setDescription('Day off list').addStringOption(o=>o.setName('status').setDescription('Status').addChoices({name:'All',value:'all'},{name:'Pending',value:'pending'},{name:'Approved',value:'approved'},{name:'Today',value:'today'},{name:'Worked',value:'worked'},{name:'Cancelled',value:'cancelled'},{name:'Rejected',value:'rejected'})),
-        new SlashCommandBuilder().setName('휴무승인').setDescription('Approve day off').addUserOption(o=>o.setName('대상').setRequired(true).setDescription('Target')).addStringOption(o=>o.setName('날짜').setRequired(true).setDescription('Date')),
-        new SlashCommandBuilder().setName('dayoff-approve').setDescription('Approve day off').addUserOption(o=>o.setName('target').setRequired(true).setDescription('Target')).addStringOption(o=>o.setName('date').setRequired(true).setDescription('Date')),
-        new SlashCommandBuilder().setName('휴무취소').setDescription('Cancel day off').addUserOption(o=>o.setName('대상').setRequired(true).setDescription('Target')).addStringOption(o=>o.setName('날짜').setRequired(true).setDescription('Date')),
-        new SlashCommandBuilder().setName('dayoff-cancel').setDescription('Cancel day off').addUserOption(o=>o.setName('target').setRequired(true).setDescription('Target')).addStringOption(o=>o.setName('date').setRequired(true).setDescription('Date')),
-        new SlashCommandBuilder().setName('강제휴무취소').setDescription('Cancel exactly one day off without date').addUserOption(o=>o.setName('대상').setRequired(true).setDescription('Target')),
-        new SlashCommandBuilder().setName('dayoff-cancel-force').setDescription('Cancel exactly one day off without date').addUserOption(o=>o.setName('target').setRequired(true).setDescription('Target')),
-        new SlashCommandBuilder().setName('휴무반려').setDescription('Reject day off').addUserOption(o=>o.setName('대상').setRequired(true).setDescription('Target')).addStringOption(o=>o.setName('날짜').setRequired(true).setDescription('Date')).addStringOption(o=>o.setName('사유').setDescription('Reason')),
-        new SlashCommandBuilder().setName('dayoff-reject').setDescription('Reject day off').addUserOption(o=>o.setName('target').setRequired(true).setDescription('Target')).addStringOption(o=>o.setName('date').setRequired(true).setDescription('Date')).addStringOption(o=>o.setName('reason').setDescription('Reason')),
-        new SlashCommandBuilder().setName('강제출근').setDescription('Force in').addUserOption(o=>o.setName('대상').setRequired(true).setDescription('Target')), new SlashCommandBuilder().setName('force-in').setDescription('Force in').addUserOption(o=>o.setName('target').setRequired(true).setDescription('Target')),
-        new SlashCommandBuilder().setName('강제퇴근').setDescription('Force out').addUserOption(o=>o.setName('대상').setRequired(true).setDescription('Target')), new SlashCommandBuilder().setName('force-out').setDescription('Force out').addUserOption(o=>o.setName('target').setRequired(true).setDescription('Target')),
-        new SlashCommandBuilder().setName('강제조기퇴근').setDescription('Force early out').addUserOption(o=>o.setName('대상').setRequired(true).setDescription('Target')), new SlashCommandBuilder().setName('force-early-out').setDescription('Force early out').addUserOption(o=>o.setName('target').setRequired(true).setDescription('Target')),
-        new SlashCommandBuilder().setName('강제휴무').setDescription('Force off').addUserOption(o=>o.setName('대상').setRequired(true).setDescription('Target')), new SlashCommandBuilder().setName('force-off').setDescription('Force off').addUserOption(o=>o.setName('target').setRequired(true).setDescription('Target')),
-        new SlashCommandBuilder().setName('강제연장').setDescription('Force OT').addUserOption(o=>o.setName('대상').setRequired(true).setDescription('Target')), new SlashCommandBuilder().setName('force-ot').setDescription('Force OT').addUserOption(o=>o.setName('target').setRequired(true).setDescription('Target')),
-        new SlashCommandBuilder().setName('개인리셋').setDescription('Reset one user').addUserOption(o=>o.setName('대상').setRequired(true).setDescription('Target')), new SlashCommandBuilder().setName('reset-user').setDescription('Reset one user').addUserOption(o=>o.setName('target').setRequired(true).setDescription('Target')),
-        new SlashCommandBuilder().setName('리셋').setDescription('Reset one user').addUserOption(o=>o.setName('target').setRequired(true).setDescription('Target')),
-        new SlashCommandBuilder().setName('전체리셋').setDescription('Reset all attendance data'), new SlashCommandBuilder().setName('reset-all').setDescription('Reset all attendance data'),
-        new SlashCommandBuilder().setName('내정보').setDescription('My info'), new SlashCommandBuilder().setName('my-info').setDescription('My info'),
-        new SlashCommandBuilder().setName('진단').setDescription('Diagnostics'), new SlashCommandBuilder().setName('diagnostics').setDescription('Diagnostics'),
-        new SlashCommandBuilder().setName('백업생성').setDescription('Backup create'), new SlashCommandBuilder().setName('backup-create').setDescription('Backup create'),
-        new SlashCommandBuilder().setName('백업목록').setDescription('Backup list'), new SlashCommandBuilder().setName('backup-list').setDescription('Backup list'),
-        new SlashCommandBuilder().setName('백업복구').setDescription('Backup restore').addStringOption(o=>o.setName('파일').setDescription('File')), new SlashCommandBuilder().setName('backup-restore').setDescription('Backup restore').addStringOption(o=>o.setName('file').setDescription('File')),
-        new SlashCommandBuilder().setName('공지설정').setDescription('Set announce').addIntegerOption(o=>o.setName('번호').setRequired(true).setMinValue(1).setMaxValue(6).setDescription('Slot')).addRoleOption(o=>o.setName('대상').setRequired(true).setDescription('Target')).addStringOption(o=>o.setName('시간').setRequired(true).setDescription('HH:mm')).addStringOption(o=>o.setName('내용').setRequired(true).setDescription('Content')),
-        new SlashCommandBuilder().setName('set-announce').setDescription('Set announce').addIntegerOption(o=>o.setName('slot').setRequired(true).setMinValue(1).setMaxValue(6).setDescription('Slot')).addRoleOption(o=>o.setName('target').setRequired(true).setDescription('Target')).addStringOption(o=>o.setName('time').setRequired(true).setDescription('HH:mm')).addStringOption(o=>o.setName('content').setRequired(true).setDescription('Content')),
-        new SlashCommandBuilder().setName('공지취소').setDescription('Cancel announce').addIntegerOption(o=>o.setName('번호').setRequired(true).setMinValue(1).setMaxValue(6).setDescription('Slot')), new SlashCommandBuilder().setName('cancel-announce').setDescription('Cancel announce').addIntegerOption(o=>o.setName('slot').setRequired(true).setMinValue(1).setMaxValue(6).setDescription('Slot')),
-        new SlashCommandBuilder().setName('공지목록').setDescription('List announce'), new SlashCommandBuilder().setName('list-announce').setDescription('List announce'),
-        new SlashCommandBuilder().setName('해고').setDescription('Kick').addUserOption(o=>o.setName('대상').setRequired(true).setDescription('Target')), new SlashCommandBuilder().setName('fire').setDescription('Kick').addUserOption(o=>o.setName('target').setRequired(true).setDescription('Target')),
-        new SlashCommandBuilder().setName('역할삭제').setDescription('Clear roles').addUserOption(o=>o.setName('대상').setRequired(true).setDescription('Target')), new SlashCommandBuilder().setName('clear-roles').setDescription('Clear roles').addUserOption(o=>o.setName('target').setRequired(true).setDescription('Target')),
-        new SlashCommandBuilder().setName('수동수정').setDescription('Manual adjust').addUserOption(o=>o.setName('대상').setRequired(true).setDescription('Target')).addStringOption(o=>o.setName('항목').setRequired(true).setDescription('Field').addChoices({name:'points',value:'points'},{name:'status',value:'status'},{name:'shift',value:'shift'},{name:'checked-in',value:'checked-in'},{name:'day-off',value:'day-off'},{name:'disconnected',value:'disconnected'},{name:'finished',value:'finished'},{name:'normal',value:'normal'},{name:'late',value:'late'},{name:'absent',value:'absent'},{name:'early',value:'early'},{name:'ot',value:'ot'},{name:'off',value:'off'},{name:'dc',value:'dc'},{name:'strikes',value:'strikes'})).addStringOption(o=>o.setName('값').setRequired(true).setDescription('Value')),
-        new SlashCommandBuilder().setName('manual-adjust').setDescription('Manual adjust').addUserOption(o=>o.setName('target').setRequired(true).setDescription('Target')).addStringOption(o=>o.setName('field').setRequired(true).setDescription('Field').addChoices({name:'points',value:'points'},{name:'status',value:'status'},{name:'shift',value:'shift'},{name:'checked-in',value:'checked-in'},{name:'day-off',value:'day-off'},{name:'disconnected',value:'disconnected'},{name:'finished',value:'finished'},{name:'normal',value:'normal'},{name:'late',value:'late'},{name:'absent',value:'absent'},{name:'early',value:'early'},{name:'ot',value:'ot'},{name:'off',value:'off'},{name:'dc',value:'dc'},{name:'strikes',value:'strikes'})).addStringOption(o=>o.setName('value').setRequired(true).setDescription('Value'))
-    ];
+    const cmdList = buildCommandDefinitions();
+    const visibleCmdList = cmdList.filter(command => !hiddenCommandAliases.has(command.name));
 
     try {
-        await rest.put(Routes.applicationGuildCommands(client.user.id, CONFIG.GUILD_ID), { body: cmdList });
+        await rest.put(Routes.applicationGuildCommands(client.user.id, CONFIG.GUILD_ID), { body: visibleCmdList });
     } catch (e) {
         console.error('[REST ERROR]', e);
     }

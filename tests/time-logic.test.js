@@ -44,6 +44,9 @@ assert.strictEqual(time.isMaintenanceWindow(at('2026-05-20 06:00')), true, 'Wedn
 assert.strictEqual(time.isMaintenanceWindow(at('2026-05-20 09:00')), false, 'Wednesday 09:00 exits maintenance');
 assert.strictEqual(time.isWithinPreShiftWindow('day', at('2026-05-20 08:50')), true, '08:50 is day pre-shift buffer');
 assert.strictEqual(time.isWithinPreShiftWindow('day', at('2026-05-20 08:49')), false, '08:49 is before day pre-shift buffer');
+assert.strictEqual(time.getDashboardShift(at('2026-05-20 08:55')), 'day', 'day pre-shift takes over dashboard before 09:00');
+assert.strictEqual(time.getDashboardShift(at('2026-05-21 20:55')), 'night', 'night pre-shift takes over dashboard before 21:00');
+assert.strictEqual(time.getDashboardShift(at('2026-05-19 18:55')), 'night', 'Tuesday night pre-shift takes over dashboard before 19:00');
 
 const early = time.getRecognizedClockInMoment('day', at('2026-05-20 08:50'));
 assert.strictEqual(early.ok, true, 'pre-shift clock-in is accepted');
