@@ -901,14 +901,14 @@ const padWidthNoWrap = (text, width) => keepTogether(padWidth(text, width));
 function renderCleanGrid(arr, icon) {
     if (!arr || arr.length === 0) return 'NONE';
     const sorted = [...arr].sort((a, b) => getDashboardName(a).localeCompare(getDashboardName(b)));
-    const fixN = (u) => padWidthNoWrap(truncateWidth(getDashboardName(u), 10), 11);
+    const fixN = (u) => padWidthNoWrap(truncateWidth(getDashboardName(u), 9), 9);
     const fixT = (t) => padWidthNoWrap(String(t || '00:00').replace(/\s?[AP]M$/i, '').trim(), 5);
     const formatCell = (u) => `${icon}${NBSP}${fixT(u.checkInTime)}${NBSP}${fixN(u)}`;
     let lines = "```\n";
     for (let i = 0; i < sorted.length; i += 2) {
         const left = sorted[i];
         const right = sorted[i + 1];
-        lines += formatCell(left) + (right ? `${NBSP.repeat(8)}${formatCell(right)}` : '') + "\n";
+        lines += formatCell(left) + (right ? `${NBSP.repeat(4)}${formatCell(right)}` : '') + "\n";
     }
     return lines + "```";
 }

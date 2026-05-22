@@ -1,8 +1,8 @@
 require('dotenv').config();
 
 const CONFIG = {
-    VERSION: '2501.61-DASHBOARD-WRAP-BALANCE',
-    RELEASE_NOTE: 'Balance summary spacing and remove active grid gap',
+    VERSION: '2501.62-ACTIVE-GRID-FIT',
+    RELEASE_NOTE: 'Fit active worker grid columns inside dashboard box',
     GUILD_ID: '1502598521294028830',
     LOG_CHANNEL: '1503681085618262158',
     STATUS_CHANNEL: '1503681415407992962',
