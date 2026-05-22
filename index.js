@@ -950,12 +950,9 @@ function renderShiftSummary(label, groups) {
 }
 
 function renderSummaryBox(rows) {
-    const labelWidth = 10;
-    const valueWidth = 3;
     const height = 4;
-    const width = labelWidth + valueWidth;
-    const lines = rows.map(([label, value]) => `${padWidth(label, labelWidth)}${String(value).padStart(valueWidth)}`);
-    while (lines.length < height) lines.push(' '.repeat(width));
+    const lines = rows.map(([label, value]) => `${label}:${value}`);
+    while (lines.length < height) lines.push('\u200B');
     return `\`\`\`text\n${lines.slice(0, height).join('\n')}\n\`\`\``;
 }
 
