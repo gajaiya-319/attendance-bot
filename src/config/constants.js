@@ -1,8 +1,8 @@
 require('dotenv').config();
 
 const CONFIG = {
-    VERSION: '2501.59-ACTIVE-GRID-SPACING',
-    RELEASE_NOTE: 'Improve active worker grid column spacing',
+    VERSION: '2501.60-SUMMARY-COUNT-SPACING',
+    RELEASE_NOTE: 'Improve dashboard summary count spacing',
     GUILD_ID: '1502598521294028830',
     LOG_CHANNEL: '1503681085618262158',
     STATUS_CHANNEL: '1503681415407992962',
