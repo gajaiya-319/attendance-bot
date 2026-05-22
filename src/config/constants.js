@@ -1,8 +1,8 @@
 require('dotenv').config();
 
 const CONFIG = {
-    VERSION: '2501.47-ACTIVE-GRID-PADDING',
-    RELEASE_NOTE: 'Remove extra top padding from active dashboard grid',
+    VERSION: '2501.48-LIVE-EXCEPTION-COMMAND',
+    RELEASE_NOTE: 'Fix live exception command resume expiry',
     GUILD_ID: '1502598521294028830',
     LOG_CHANNEL: '1503681085618262158',
     STATUS_CHANNEL: '1503681415407992962',
