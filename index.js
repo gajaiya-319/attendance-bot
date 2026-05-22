@@ -1891,23 +1891,13 @@ const getNoticeEmbed = (type) => {
         `   \u001b[1;36m${padWidth('[ LIVE MONITORING ]', noticeWidth - 3)}\u001b[0m`,
         '```'
     ].join('\n');
-    const hourColor = '\u001b[1;33m';
-    const timeRestColor = '\u001b[1;32m';
-    const durationColor = '\u001b[1;32m';
-    const resetColor = '\u001b[0m';
-    const formatClockText = (clockText) => {
-        const match = clockText.match(/^(\d{2}:)(.+)$/);
-        if (!match) return `${timeRestColor}${clockText}${resetColor}`;
-        return `${hourColor}${match[1]}${timeRestColor}${match[2]}${resetColor}`;
-    };
-    const formatHoursLine = (icon, label, startText, endText, durationText) =>
-        `${icon} ${padWidth(label, 13)}: ${formatClockText(startText)}-${formatClockText(endText)} ${durationColor}${durationText}${resetColor}`;
+    const formatHoursLine = (icon, label, timeText) => `${icon} ${padWidth(label, 13)}: ${timeText}`;
     const regularLine = isDay
-        ? formatHoursLine('📅', 'MON/WED-SUN', '09:00AM', '09:00PM', '(12h)')
-        : formatHoursLine('📅', 'MON/WED-SUN', '09:00PM', '09:00AM', '(12h)');
+        ? formatHoursLine('📅', 'MON/WED-SUN', '09:00AM - 09:00PM (12h)')
+        : formatHoursLine('📅', 'MON/WED-SUN', '09:00PM - 09:00AM (12h)');
     const tueLine = isDay
-        ? formatHoursLine('🚨', 'TUE UPDATE', '09:00AM', '07:00PM', '(10h)')
-        : formatHoursLine('🚨', 'TUE UPDATE', '07:00PM', '04:00AM', '(9h)');
+        ? formatHoursLine('🚨', 'TUE UPDATE', '09:00AM - 07:00PM (10h)')
+        : formatHoursLine('🚨', 'TUE UPDATE', '07:00PM - 04:00AM (9h)');
     const workingHours = [
         regularLine,
         tueLine
@@ -1931,7 +1921,7 @@ const getNoticeEmbed = (type) => {
 
     return new EmbedBuilder()
         .setTitle(isDay ? '☀️ ELITE DAY SHIFT PROTOCOL' : '🌙 ELITE NIGHT SHIFT PROTOCOL')
-        .setDescription(`${clockLine}\n\n${divider}\n### ⏰ WORKING HOURS\n\`\`\`ansi\n${workingHours}\n\`\`\`\n⚠️ **TUE Note :** **${tueNote}**\n${divider}\n### 🚨 OPERATIONAL RULES\n${rules}\n\n⏳ **STRICT PUNCTUALITY**\n📢 **Be ready BEFORE the shift starts.**\n${divider}\n### 💡 BUTTON INSTRUCTIONS\n${buttonGuide}`)
+        .setDescription(`${clockLine}\n\n${divider}\n### ⏰ WORKING HOURS\n\`\`\`yaml\n${workingHours}\n\`\`\`\n⚠️ **TUE Note :** **${tueNote}**\n${divider}\n### 🚨 OPERATIONAL RULES\n${rules}\n\n⏳ **STRICT PUNCTUALITY**\n📢 **Be ready BEFORE the shift starts.**\n${divider}\n### 💡 BUTTON INSTRUCTIONS\n${buttonGuide}`)
         .setColor(isDay ? '#F1C40F' : '#3498DB')
         .setFooter({ text: 'BE BRIGHT. BE PROFESSIONAL. ✨' });
 };
