@@ -2901,6 +2901,7 @@ async function grantLiveException(targetMember, hours = null, reason, approverMe
     const u = ensureUserData(targetMember, shift);
     if (!u) return { ok: false, message: '대상 데이터를 생성할 수 없습니다.' };
 
+    const shouldStartNewSession = Boolean(u.isFinished || !u.checkedIn || !getOpenSession(u));
     const shiftEnd = getShiftBounds(shift, now).end;
     const expiresAt = hours ? now.clone().add(hours, 'hours') : shiftEnd.clone();
     if (!expiresAt || expiresAt.isSameOrBefore(now)) {
@@ -2934,8 +2935,20 @@ async function grantLiveException(targetMember, hours = null, reason, approverMe
         attendanceStatus: 'WORKING',
         voiceStatus: 'EXCEPTION'
     }, now, 'live-exception-command', 'admin-approved-live-exception');
-    u.checkInTime = u.checkInTime || now.format('hh:mm A');
-    u.checkInRaw = u.checkInRaw || now.toISOString();
+    if (shouldStartNewSession) {
+        u.checkInTime = now.format('hh:mm A');
+        u.checkInRaw = now.toISOString();
+        u.checkOutTime = null;
+        u.checkOutRaw = null;
+        u.lastClockOutSource = null;
+        u.finishedPresence = null;
+        u.finalLeftAt = null;
+        u.finishedLiveOffReminderMarks = [];
+        startAttendanceSession(u, shift, now, 'live-exception-command');
+    } else {
+        u.checkInTime = u.checkInTime || now.format('hh:mm A');
+        u.checkInRaw = u.checkInRaw || now.toISOString();
+    }
     u.voiceJoinedAt = null;
     u.liveOffStartedAt = null;
     u.lastLiveOnAt = now.toISOString();
@@ -2968,9 +2981,14 @@ async function checkLiveExceptions() {
         const member = guild?.members.cache.get(userId) || null;
         const u = attendanceData[userId];
         const exceptionExpiresAt = moment(exception.expiresAt).tz(CONFIG.TIMEZONE);
-        const scheduledEnd = u
+        const approvedAt = exception.approvedAt ? moment(exception.approvedAt).tz(CONFIG.TIMEZONE) : null;
+        const rawScheduledEnd = u
             ? (getScheduledEndMoment(u, now) || (exception.shift ? getShiftBounds(exception.shift, now).end : null))
             : (exception.shift ? getShiftBounds(exception.shift, now).end : null);
+        const fallbackShiftEnd = exception.shift ? getShiftBounds(exception.shift, now).end : null;
+        const scheduledEnd = rawScheduledEnd && approvedAt && rawScheduledEnd.isSameOrBefore(approvedAt)
+            ? fallbackShiftEnd
+            : rawScheduledEnd;
         const effectiveEnd = scheduledEnd && scheduledEnd.isBefore(exceptionExpiresAt)
             ? scheduledEnd
             : exceptionExpiresAt;
