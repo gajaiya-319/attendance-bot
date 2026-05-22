@@ -901,14 +901,15 @@ const padWidthNoWrap = (text, width) => keepTogether(padWidth(text, width));
 function renderCleanGrid(arr, icon) {
     if (!arr || arr.length === 0) return 'NONE';
     const sorted = [...arr].sort((a, b) => getDashboardName(a).localeCompare(getDashboardName(b)));
-    const fixN = (u) => padWidthNoWrap(truncateWidth(getDashboardName(u), 8), 8);
+    const rowIcon = icon === '✅' ? '✓' : icon;
+    const fixN = (u) => padWidthNoWrap(truncateWidth(getDashboardName(u), 9), 9);
     const fixT = (t) => padWidthNoWrap(String(t || '00:00').replace(/\s?[AP]M$/i, '').trim(), 5);
-    const formatCell = (u) => `${icon}${NBSP}${fixT(u.checkInTime)}${NBSP}${fixN(u)}`;
+    const formatCell = (u) => `${rowIcon}${NBSP}${fixT(u.checkInTime)}${NBSP}${fixN(u)}`;
     let lines = "```\n";
     for (let i = 0; i < sorted.length; i += 2) {
         const left = sorted[i];
         const right = sorted[i + 1];
-        lines += formatCell(left) + (right ? `${NBSP.repeat(2)}${formatCell(right)}` : '') + "\n";
+        lines += formatCell(left) + (right ? `${NBSP.repeat(8)}${formatCell(right)}` : '') + "\n";
     }
     return lines + "```";
 }
@@ -962,11 +963,20 @@ function renderSummaryBox(rows) {
     return `\`\`\`text\n${lines.slice(0, height).join('\n')}\n\`\`\``;
 }
 
+function renderDashboardSummary({ totalUsers, active, finished, liveOff, disconnected, absent, standby, leave, overtime, exceptions }) {
+    const lines = [
+        `OVERVIEW  TOTAL ${String(totalUsers).padStart(2)}   ACTIVE ${String(active).padStart(2)}   FINISHED ${String(finished).padStart(2)}`,
+        `ATTENTION LIVE OFF ${String(liveOff).padStart(2)}   DC ${String(disconnected).padStart(2)}   ABSENT ${String(absent).padStart(2)}   WAITING ${String(standby).padStart(2)}`,
+        `ETC       OFF ${String(leave).padStart(2)}   OT ${String(overtime).padStart(2)}   EXCEPTION ${String(exceptions).padStart(2)}`
+    ];
+    return `\`\`\`text\n${lines.join('\n')}\n\`\`\``;
+}
+
 function renderDashboardHeader(now, maintenance = false) {
     const dateStr = now.format('ddd, MMM DD, YYYY').toUpperCase();
     const status = maintenance ? '[ MAINTENANCE - WORK CLOSED ]' : `[ ${dateStr} ]`;
     const timeText = keepTogether(now.format('hh:mm:ss A'));
-    return `> # ⏱️ PH TIME: **${timeText}**\n>  ㅤ ㅤ     **[${status}](https://-)**`;
+    return `> **⏱️ PH TIME:** **${timeText}**\n> **[${status}](https://-)**`;
 }
 
 function renderOvertimeList(now, source = overtimeUsers) {
@@ -1327,37 +1337,22 @@ async function renderDashboardCore({ forceMemberRefresh = false } = {}) {
             .setTitle('🖥️ INTEGRATED OPS CONTROL CENTER')
             .setDescription(renderDashboardHeader(now, dashboardMaintenance));
 
-     
-        embed.addFields(
-    {
-        name: '📊 OVERVIEW',
-        value: renderSummaryBox([
-            ['TOTAL', totalUsers],
-            ['ACTIVE', active.length],
-            ['FINISHED', finished.length]
-        ]),
-        inline: true
-    },
-    {
-        name: '⚠️ ATTENTION',
-        value: renderSummaryBox([
-            ['LIVE OFF', liveOff.length],
-            ['DC', disconnected.length],
-            ['ABSENT', absent.length],
-            ['WAITING', standby.length]
-        ]),
-        inline: true
-    },
-    {
-        name: '📌 ETC',
-        value: renderSummaryBox([
-            ['OFF', leave.length],
-            ['OT', exclusiveOvertimeUsers.length],
-            ['EXCEPTION', liveExceptionUsers.length]
-        ]),
-        inline: true
-    }
-);
+        embed.addFields({
+            name: '📊 OVERVIEW / ⚠️ ATTENTION / 📌 ETC',
+            value: renderDashboardSummary({
+                totalUsers,
+                active: active.length,
+                finished: finished.length,
+                liveOff: liveOff.length,
+                disconnected: disconnected.length,
+                absent: absent.length,
+                standby: standby.length,
+                leave: leave.length,
+                overtime: exclusiveOvertimeUsers.length,
+                exceptions: liveExceptionUsers.length
+            }),
+            inline: false
+        });
 
         embed.addFields({ name: '\u200B', value: '\u200B', inline: false });
         embed.addFields({ name: `${shiftNameText} [CURRENT]`, value: '\u200B', inline: false });

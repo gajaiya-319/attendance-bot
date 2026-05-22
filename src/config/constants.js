@@ -1,8 +1,8 @@
 require('dotenv').config();
 
 const CONFIG = {
-    VERSION: '2501.63-ACTIVE-GRID-TIGHT-FIT',
-    RELEASE_NOTE: 'Tighten active grid columns to prevent name wrapping',
+    VERSION: '2501.64-DASHBOARD-STABLE-LAYOUT',
+    RELEASE_NOTE: 'Use stable dashboard summary and compact active grid',
     GUILD_ID: '1502598521294028830',
     LOG_CHANNEL: '1503681085618262158',
     STATUS_CHANNEL: '1503681415407992962',
