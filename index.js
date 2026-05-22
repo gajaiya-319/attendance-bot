@@ -48,6 +48,7 @@ const {
 } = require('./src/utils/commandStatus');
 const createPermissionUtils = require('./src/utils/permissions');
 const {
+    getStrWidth,
     padWidth,
     truncateWidth,
     formatDuration,
