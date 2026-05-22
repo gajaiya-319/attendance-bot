@@ -1,8 +1,8 @@
 require('dotenv').config();
 
 const CONFIG = {
-    VERSION: '2501.64-DASHBOARD-STABLE-LAYOUT',
-    RELEASE_NOTE: 'Use stable dashboard summary and compact active grid',
+    VERSION: '2501.65-DASHBOARD-WIDE-DIVIDER',
+    RELEASE_NOTE: 'Widen dashboard embed with visible divider',
     GUILD_ID: '1502598521294028830',
     LOG_CHANNEL: '1503681085618262158',
     STATUS_CHANNEL: '1503681415407992962',

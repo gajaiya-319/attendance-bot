@@ -895,6 +895,7 @@ function getDashboardName(user) {
 }
 
 const NBSP = '\u00A0';
+const DASHBOARD_DIVIDER = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━';
 const keepTogether = (text) => String(text).replace(/ /g, NBSP);
 const padWidthNoWrap = (text, width) => keepTogether(padWidth(text, width));
 
@@ -976,7 +977,7 @@ function renderDashboardHeader(now, maintenance = false) {
     const dateStr = now.format('ddd, MMM DD, YYYY').toUpperCase();
     const status = maintenance ? '[ MAINTENANCE - WORK CLOSED ]' : `[ ${dateStr} ]`;
     const timeText = keepTogether(now.format('hh:mm:ss A'));
-    return `> **⏱️ PH TIME:** **${timeText}**\n> **[${status}](https://-)**`;
+    return `> **⏱️ PH TIME:** **${timeText}**\n> **[${status}](https://-)**\n${DASHBOARD_DIVIDER}`;
 }
 
 function renderOvertimeList(now, source = overtimeUsers) {
