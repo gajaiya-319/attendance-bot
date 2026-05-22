@@ -896,14 +896,14 @@ function getDashboardName(user) {
 function renderCleanGrid(arr, icon) {
     if (!arr || arr.length === 0) return 'NONE';
     const sorted = [...arr].sort((a, b) => getDashboardName(a).localeCompare(getDashboardName(b)));
-    const fixN = (u) => padWidth(truncateWidth(getDashboardName(u), 10), 11);
+    const fixN = (u) => padWidth(truncateWidth(getDashboardName(u), 8), 8);
     const fixT = (t) => padWidth(String(t || '00:00').replace(/\s?[AP]M$/i, '').trim(), 5);
     const formatCell = (u) => `${icon} ${fixT(u.checkInTime)} ${fixN(u)}`;
     let lines = "```\n";
     for (let i = 0; i < sorted.length; i += 2) {
         const left = sorted[i];
         const right = sorted[i + 1];
-        lines += formatCell(left) + (right ? `  ${formatCell(right)}` : '') + "\n";
+        lines += formatCell(left) + (right ? ` ${formatCell(right)}` : '') + "\n";
     }
     return lines + "```";
 }

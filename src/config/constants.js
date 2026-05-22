@@ -1,8 +1,8 @@
 require('dotenv').config();
 
 const CONFIG = {
-    VERSION: '2501.52-SUMMARY-COUNT-ALIGN',
-    RELEASE_NOTE: 'Align dashboard summary counts without colons',
+    VERSION: '2501.53-ACTIVE-GRID-WRAP-FIX',
+    RELEASE_NOTE: 'Keep active dashboard names on one line',
     GUILD_ID: '1502598521294028830',
     LOG_CHANNEL: '1503681085618262158',
     STATUS_CHANNEL: '1503681415407992962',
