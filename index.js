@@ -949,6 +949,8 @@ function renderShiftSummary(label, groups) {
     return `${label} | ABSENT ${groups.absent.length} | DC ${groups.disconnected.length} | WAITING ${groups.standby.length} | ACTIVE ${groups.active.length} | OFF ${groups.leave.length}`;
 }
 
+const DASHBOARD_WIDTH_FOOTER = '\u2800'.repeat(96);
+
 function renderSummaryBox(rows) {
     const labelWidth = 10;
     const valueWidth = 3;
@@ -1321,7 +1323,8 @@ async function renderDashboardCore({ forceMemberRefresh = false } = {}) {
         const embed = new EmbedBuilder()
             .setColor(embedColor)
             .setTitle('🖥️ INTEGRATED OPS CONTROL CENTER')
-            .setDescription(renderDashboardHeader(now, dashboardMaintenance));
+            .setDescription(renderDashboardHeader(now, dashboardMaintenance))
+            .setFooter({ text: DASHBOARD_WIDTH_FOOTER });
 
         embed.addFields(
     {
