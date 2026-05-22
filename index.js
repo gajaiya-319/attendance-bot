@@ -1891,13 +1891,13 @@ const getNoticeEmbed = (type) => {
         `   \u001b[1;36m${padWidth('[ LIVE MONITORING ]', noticeWidth - 3)}\u001b[0m`,
         '```'
     ].join('\n');
-    const formatHoursLine = (icon, label, timeText) => `${icon} ${padWidth(label, 13)}: ${timeText}`;
+    const formatHoursLine = (icon, label, timeText) => `${icon} ${label}: ${timeText}`;
     const regularLine = isDay
-        ? formatHoursLine('📅', 'MON/WED-SUN', '09:00AM - 09:00PM (12h)')
-        : formatHoursLine('📅', 'MON/WED-SUN', '09:00PM - 09:00AM (12h)');
+        ? formatHoursLine('📅', 'MON/WED-SUN', '09:00AM-09:00PM (12h)')
+        : formatHoursLine('📅', 'MON/WED-SUN', '09:00PM-09:00AM (12h)');
     const tueLine = isDay
-        ? formatHoursLine('🚨', 'TUE UPDATE', '09:00AM - 07:00PM (10h)')
-        : formatHoursLine('🚨', 'TUE UPDATE', '07:00PM - 04:00AM (9h)');
+        ? formatHoursLine('🚨', 'TUE UPDATE', '09:00AM-07:00PM (10h)')
+        : formatHoursLine('🚨', 'TUE UPDATE', '07:00PM-04:00AM (9h)');
     const workingHours = [
         regularLine,
         tueLine

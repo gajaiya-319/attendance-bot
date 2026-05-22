@@ -1,8 +1,8 @@
 require('dotenv').config();
 
 const CONFIG = {
-    VERSION: '2501.48-LIVE-EXCEPTION-COMMAND',
-    RELEASE_NOTE: 'Fix live exception command resume expiry',
+    VERSION: '2501.49-NOTICE-WRAP-FIX',
+    RELEASE_NOTE: 'Keep working hours lines from wrapping',
     GUILD_ID: '1502598521294028830',
     LOG_CHANNEL: '1503681085618262158',
     STATUS_CHANNEL: '1503681415407992962',
