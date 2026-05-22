@@ -895,6 +895,7 @@ function getDashboardName(user) {
 }
 
 const NBSP = '\u00A0';
+const DASHBOARD_WIDTH_ANCHOR = NBSP.repeat(64);
 const keepTogether = (text) => String(text).replace(/ /g, NBSP);
 const padWidthNoWrap = (text, width) => keepTogether(padWidth(text, width));
 
@@ -956,7 +957,7 @@ function renderShiftSummary(label, groups) {
 
 function renderSummaryBox(rows) {
     const height = 4;
-    const labelWidth = Math.max(10, rows.reduce((width, [label]) => Math.max(width, getStrWidth(label)), 0));
+    const labelWidth = rows.reduce((width, [label]) => Math.max(width, getStrWidth(label)), 0);
     const lines = rows.map(([label, value]) => `${padWidthNoWrap(label, labelWidth)}${NBSP}${value}`);
     while (lines.length < height) lines.push(NBSP.repeat(labelWidth + 2));
     return `\`\`\`text\n${lines.slice(0, height).join('\n')}\n\`\`\``;
@@ -965,7 +966,7 @@ function renderSummaryBox(rows) {
 function renderDashboardHeader(now, maintenance = false) {
     const dateStr = now.format('ddd, MMM DD, YYYY').toUpperCase();
     const status = maintenance ? '[ MAINTENANCE - WORK CLOSED ]' : `[ ${dateStr} ]`;
-    return `> # ⏱️ PH TIME: **${now.format('hh:mm:ss A')}**\n>  ㅤ ㅤ     **[${status}](https://-)**`;
+    return `> # ⏱️ PH TIME: **${now.format('hh:mm:ss A')}**\n>  ㅤ ㅤ     **[${status}](https://-)**\n${DASHBOARD_WIDTH_ANCHOR}`;
 }
 
 function renderOvertimeList(now, source = overtimeUsers) {
