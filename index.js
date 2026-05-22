@@ -895,7 +895,6 @@ function getDashboardName(user) {
 }
 
 const NBSP = '\u00A0';
-const DASHBOARD_WIDTH_ANCHOR = `\`\`\`text\n${NBSP.repeat(86)}\n\`\`\``;
 const keepTogether = (text) => String(text).replace(/ /g, NBSP);
 const padWidthNoWrap = (text, width) => keepTogether(padWidth(text, width));
 
@@ -911,6 +910,7 @@ function renderCleanGrid(arr, icon) {
         const right = sorted[i + 1];
         lines += formatCell(left) + (right ? `${NBSP}${NBSP}${formatCell(right)}` : '') + "\n";
     }
+    lines += NBSP.repeat(86) + "\n";
     return lines + "```";
 }
 
@@ -967,7 +967,7 @@ function renderDashboardHeader(now, maintenance = false) {
     const dateStr = now.format('ddd, MMM DD, YYYY').toUpperCase();
     const status = maintenance ? '[ MAINTENANCE - WORK CLOSED ]' : `[ ${dateStr} ]`;
     const timeText = keepTogether(now.format('hh:mm:ss A'));
-    return `${DASHBOARD_WIDTH_ANCHOR}\n> # ⏱️ PH TIME: **${timeText}**\n>  ㅤ ㅤ     **[${status}](https://-)**`;
+    return `> # ⏱️ PH TIME: **${timeText}**\n>  ㅤ ㅤ     **[${status}](https://-)**`;
 }
 
 function renderOvertimeList(now, source = overtimeUsers) {
