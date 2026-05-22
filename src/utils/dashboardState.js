@@ -83,6 +83,7 @@ function createDashboardStateUtils(deps) {
         );
 
         if (context.liveException) return 'LIVE_EXCEPTION';
+        if ((voiceStatus === 'EXCEPTION' || user.status === 'exception') && user.checkedIn && !user.isFinished) return 'LIVE_EXCEPTION';
         if (!attendanceStatus && !voiceStatus) return legacy;
         if (user.dayOff || attendanceStatus === 'DAY_OFF') return 'LEAVE';
         const finishedBeforeCurrentShift = Boolean(finishedAt && bounds?.start && moment(finishedAt).tz(CONFIG.TIMEZONE).isBefore(bounds.start));

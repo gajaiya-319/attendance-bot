@@ -107,6 +107,31 @@ const utils = createDashboardStateUtils({
 }
 
 {
+    const state = utils.getHybridDashboardState({
+        id: 'self-exception-active',
+        checkedIn: true,
+        isFinished: false,
+        dayOff: false,
+        disconnected: false,
+        status: 'exception',
+        attendanceStatus: 'WORKING',
+        voiceStatus: 'EXCEPTION',
+        scheduledEndAt: at('2026-05-20 21:00').toISOString()
+    }, {
+        now: at('2026-05-20 13:00'),
+        bounds: { start: at('2026-05-20 09:00'), end: at('2026-05-20 21:00') },
+        isVoiceConnected: true,
+        isStreaming: false,
+        isVoiceLiveOff: true,
+        isPreShift: false,
+        hasLiveOffVoice: true,
+        liveException: null
+    });
+
+    assert.strictEqual(state, 'LIVE_EXCEPTION', 'self clock-in exception renders as LIVE_EXCEPTION without a stored exception object');
+}
+
+{
     const state = utils.deriveAttendanceStatusForAudit({
         id: 'ot-user',
         checkedIn: true,

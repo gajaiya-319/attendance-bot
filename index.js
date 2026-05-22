@@ -682,24 +682,45 @@ async function notifyFinishedReturnToVoice(member, user, shift, now, action = 'R
     if (!member || !user || !shift) return false;
     const clockOutKey = user.checkOutRaw || user.lastClockOutDetectedAt || getShiftSessionKey(shift, now);
     const key = `${clockOutKey}:${action}`;
+    const bounds = getShiftBounds(shift, now);
+    const isWithinShift = Boolean(bounds?.start && bounds?.end && now.isSameOrAfter(bounds.start) && now.isBefore(bounds.end));
+    const wasVoiceLeaveFinish = ['dc-timeout', 'auto-out-after-shift'].includes(user.lastClockOutSource);
     appendAttendanceEvent(user, 'finished_return_to_voice_detected', now, 'voice_snapshot', {
         action,
-        result: 'finished_kept'
+        result: 'finished_kept',
+        withinShift: isWithinShift,
+        previousClockOutSource: user.lastClockOutSource || null
     });
     if (user.lastFinishedReturnPromptKey === key) return false;
     user.lastFinishedReturnPromptKey = key;
 
-    await member.send([
-        '🌿 Welcome back',
-        '',
-        'I can see that you returned to the voice channel, but your attendance is still FINISHED.',
-        '',
-        'To start counting work time again:',
-        '1. Turn your live stream ON.',
-        '2. Press the CLOCK IN button on the attendance panel.',
-        '',
-        'Live stream ON by itself will not restart attendance. 🙂'
-    ].join('\n')).catch(() => null);
+    const lines = isWithinShift && wasVoiceLeaveFinish
+        ? [
+            '🌿 Welcome back',
+            '',
+            'Your previous attendance was marked as FINISHED after you left the voice channel.',
+            '',
+            'It looks like you may be unable to turn your live stream ON for some reason.',
+            'If that is the case, please go to the attendance channel and press the CLOCK IN button.',
+            '',
+            '✅ After you press CLOCK IN, your attendance can resume as a LIVE EXCEPTION.',
+            '🚫 If you do not press CLOCK IN, this time will not be counted as work.',
+            '',
+            'Please use this only when you truly cannot turn LIVE ON. 🙏'
+        ]
+        : [
+            '🌿 Welcome back',
+            '',
+            'I can see that you returned to the voice channel, but your attendance is still FINISHED.',
+            '',
+            'To start counting work time again:',
+            '1. Turn your live stream ON.',
+            '2. Press the CLOCK IN button on the attendance panel.',
+            '',
+            'Live stream ON by itself will not restart attendance. 🙂'
+        ];
+
+    await member.send(lines.join('\n')).catch(() => null);
     return true;
 }
 
@@ -1419,26 +1440,6 @@ async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().
     const activeLiveException = getActiveLiveException(member.id, now);
 
     if (!isConnected) {
-        if (activeLiveException) {
-            if (user.checkedIn || user.disconnected || user.isFinished || user.voiceStatus !== 'OFFLINE') {
-                user.checkedIn = false;
-                user.disconnected = false;
-                user.disconnectedAt = null;
-                user.isFinished = false;
-                user.voiceJoinedAt = null;
-                user.liveOffStartedAt = null;
-                user.liveOffWarnedFor = null;
-                user.pendingClockOut = null;
-                transitionRecordedStatus(user, {
-                    attendanceStatus: 'WORKING',
-                    voiceStatus: 'OFFLINE'
-                }, now, source, 'live-exception-left-voice-standby');
-                await updateWorkingRole(member, false);
-                await recordLog(user, 'disconnect', '라이브 예외 중 음성채널 이탈 - 대기 상태 전환');
-                return true;
-            }
-            return false;
-        }
         if (user.voiceJoinedAt || user.liveOffStartedAt || user.liveOffWarnedFor) {
             user.voiceJoinedAt = null;
             user.liveOffStartedAt = null;
@@ -1710,7 +1711,13 @@ async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().
             await recordLog(user, 'disconnect', '라이브 OFF 시작 - 음성채널 접속 상태');
             return true;
         }
-        if (user.checkedIn && !user.isFinished && !getActiveLiveException(member.id, now)) {
+        if (
+            user.checkedIn &&
+            !user.isFinished &&
+            !getActiveLiveException(member.id, now) &&
+            user.status !== 'exception' &&
+            user.voiceStatus !== 'EXCEPTION'
+        ) {
             // ✨ 정규 퇴근 시간 이후에 방송을 끄면 즉시 퇴근 처리 (유예 없음)
             const shiftEnd = getScheduledEndMoment(user, now); 
             if (shiftEnd && now.isSameOrAfter(shiftEnd)) {
@@ -1884,16 +1891,20 @@ const getNoticeEmbed = (type) => {
         `   \u001b[1;36m${padWidth('[ LIVE MONITORING ]', noticeWidth - 3)}\u001b[0m`,
         '```'
     ].join('\n');
-    const formatHoursLine = (icon, label, timeText) => `${icon} ${padWidth(label, 13)}: ${timeText}`;
+    const timeColor = '\u001b[1;33m';
+    const durationColor = '\u001b[1;32m';
+    const resetColor = '\u001b[0m';
+    const formatHoursLine = (icon, label, startText, endText, durationText) =>
+        `${icon} ${padWidth(label, 13)}: ${timeColor}${startText}${resetColor}-${timeColor}${endText}${resetColor} ${durationColor}${durationText}${resetColor}`;
     const regularLine = isDay
-        ? formatHoursLine('📅', 'MON/WED-SUN', '09:00AM-09:00PM (12h)')
-        : formatHoursLine('📅', 'MON/WED-SUN', '09:00PM-09:00AM (12h)');
+        ? formatHoursLine('📅', 'MON/WED-SUN', '09:00AM', '09:00PM', '(12h)')
+        : formatHoursLine('📅', 'MON/WED-SUN', '09:00PM', '09:00AM', '(12h)');
     const tueLine = isDay
-        ? formatHoursLine('🚨', 'TUE UPDATE', '09:00AM-07:00PM (10h)')
-        : formatHoursLine('🚨', 'TUE UPDATE', '07:00PM-04:00AM (9h)');
+        ? formatHoursLine('🚨', 'TUE UPDATE', '09:00AM', '07:00PM', '(10h)')
+        : formatHoursLine('🚨', 'TUE UPDATE', '07:00PM', '04:00AM', '(9h)');
     const workingHours = [
-        padWidth(regularLine, noticeWidth),
-        padWidth(tueLine, noticeWidth)
+        regularLine,
+        tueLine
     ].join('\n');
     const tueNote = isDay ? 'Early Out.' : 'Early Start & Out.';
     const formatRuleLine = (icon, label, text) => `${icon} **${padWidth(label, 10)}:** **${text}**`;
@@ -1914,7 +1925,7 @@ const getNoticeEmbed = (type) => {
 
     return new EmbedBuilder()
         .setTitle(isDay ? '☀️ ELITE DAY SHIFT PROTOCOL' : '🌙 ELITE NIGHT SHIFT PROTOCOL')
-        .setDescription(`${clockLine}\n\n${divider}\n### ⏰ WORKING HOURS\n\`\`\`yaml\n${workingHours}\n\`\`\`\n⚠️ **TUE Note :** **${tueNote}**\n${divider}\n### 🚨 OPERATIONAL RULES\n${rules}\n\n⏳ **STRICT PUNCTUALITY**\n📢 **Be ready BEFORE the shift starts.**\n${divider}\n### 💡 BUTTON INSTRUCTIONS\n${buttonGuide}`)
+        .setDescription(`${clockLine}\n\n${divider}\n### ⏰ WORKING HOURS\n\`\`\`ansi\n${workingHours}\n\`\`\`\n⚠️ **TUE Note :** **${tueNote}**\n${divider}\n### 🚨 OPERATIONAL RULES\n${rules}\n\n⏳ **STRICT PUNCTUALITY**\n📢 **Be ready BEFORE the shift starts.**\n${divider}\n### 💡 BUTTON INSTRUCTIONS\n${buttonGuide}`)
         .setColor(isDay ? '#F1C40F' : '#3498DB')
         .setFooter({ text: 'BE BRIGHT. BE PROFESSIONAL. ✨' });
 };
@@ -2759,8 +2770,7 @@ async function checkGracePeriods() {
         if (
             u.disconnected &&
             (u.pendingClockOut?.source === 'voice_leave' || u.disconnectedAt) &&
-            now.isSameOrAfter(moment(u.pendingClockOut?.expiresAt || moment(u.disconnectedAt).tz(CONFIG.TIMEZONE).add(CONFIG.GRACE_PERIOD_MINS, 'minutes'))) &&
-            !getActiveLiveException(id, now)
+            now.isSameOrAfter(moment(u.pendingClockOut?.expiresAt || moment(u.disconnectedAt).tz(CONFIG.TIMEZONE).add(CONFIG.GRACE_PERIOD_MINS, 'minutes')))
         ) {
             const m = client.guilds.cache.get(CONFIG.GUILD_ID)?.members.cache.get(id);
             const effectiveDcOut = moment(u.pendingClockOut?.at || u.disconnectedAt).tz(CONFIG.TIMEZONE);
@@ -4358,6 +4368,21 @@ client.on(Events.InteractionCreate, async i => {
                     ['live-off-timeout', 'live-exception-expired'].includes(u.lastClockOutSource)
                 );
                 if (canSelfResumeLiveException) {
+                    const exceptionExpiresAt = getShiftBounds(s, now).end;
+                    liveExceptions[m.id] = {
+                        userId: m.id,
+                        name: m.displayName,
+                        shift: s,
+                        hours: null,
+                        approvedMinutes: Math.max(1, exceptionExpiresAt.diff(now, 'minutes')),
+                        mode: 'self-clock-in',
+                        reason: 'Unable to turn on LIVE; resumed from FINISHED by CLOCK IN',
+                        approvedBy: m.id,
+                        approvedByName: m.displayName || m.user?.username || 'Unknown',
+                        approvedAt: now.toISOString(),
+                        expiresAt: exceptionExpiresAt.toISOString(),
+                        status: 'active'
+                    };
                     u.checkedIn = true;
                     u.dayOff = false;
                     u.isFinished = false;
@@ -4388,7 +4413,8 @@ client.on(Events.InteractionCreate, async i => {
                     startAttendanceSession(u, s, now, 'self-live-exception-clock-in');
                     appendAttendanceEvent(u, 'self_live_exception_clock_in', now, 'button-or-command', {
                         previousClockOutSource: u.lastClockOutSource || null,
-                        previousClockOutAt: u.checkOutRaw || null
+                        previousClockOutAt: u.checkOutRaw || null,
+                        exceptionExpiresAt: exceptionExpiresAt.toISOString()
                     });
                     await updateWorkingRole(m, true);
                     await recordLog(u, 'reconnect', '라이브 불가 예외 CLOCK IN - 근무 인정');
