@@ -1893,7 +1893,7 @@ const getNoticeEmbed = (type) => {
         `   \u001b[1;36m${padWidth('[ LIVE MONITORING ]', noticeWidth - 3)}\u001b[0m`,
         '```'
     ].join('\n');
-    const formatHoursLine = (icon, label, timeText) => `${icon} ${label}: ${timeText}`;
+    const formatHoursLine = (icon, label, timeText) => `${icon} ${padWidth(label, 11)}: ${timeText}`;
     const regularLine = isDay
         ? formatHoursLine('📅', 'MON/WED-SUN', '09:00AM-09:00PM (12h)')
         : formatHoursLine('📅', 'MON/WED-SUN', '09:00PM-09:00AM (12h)');

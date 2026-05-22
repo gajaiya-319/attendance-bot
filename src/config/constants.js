@@ -1,8 +1,8 @@
 require('dotenv').config();
 
 const CONFIG = {
-    VERSION: '2501.67-DASHBOARD-WIDTH-FOOTER',
-    RELEASE_NOTE: 'Widen dashboard embed with footer anchor',
+    VERSION: '2501.68-WORKING-HOURS-COLON-ALIGN',
+    RELEASE_NOTE: 'Align working hours label colons',
     GUILD_ID: '1502598521294028830',
     LOG_CHANNEL: '1503681085618262158',
     STATUS_CHANNEL: '1503681415407992962',
