@@ -83,6 +83,30 @@ const utils = createDashboardStateUtils({
 }
 
 {
+    const state = utils.getHybridDashboardState({
+        id: 'exception-finished-stale',
+        checkedIn: false,
+        isFinished: true,
+        dayOff: false,
+        disconnected: false,
+        attendanceStatus: 'FINISHED',
+        voiceStatus: 'OFFLINE',
+        checkOutRaw: at('2026-05-20 11:00').toISOString()
+    }, {
+        now: at('2026-05-20 13:00'),
+        bounds: { start: at('2026-05-20 09:00'), end: at('2026-05-20 21:00') },
+        isVoiceConnected: true,
+        isStreaming: false,
+        isVoiceLiveOff: true,
+        isPreShift: false,
+        hasLiveOffVoice: true,
+        liveException: { status: 'active' }
+    });
+
+    assert.strictEqual(state, 'LIVE_EXCEPTION', 'active live exception overrides stale FINISHED state');
+}
+
+{
     const state = utils.deriveAttendanceStatusForAudit({
         id: 'ot-user',
         checkedIn: true,

@@ -82,7 +82,7 @@ function createDashboardStateUtils(deps) {
             now.diff(moment(finishedAt).tz(CONFIG.TIMEZONE), 'minutes') > CONFIG.FINISHED_VISIBLE_AFTER_MINS
         );
 
-        if (context.liveException) return isVoiceConnected ? 'LIVE_EXCEPTION' : 'WAITING';
+        if (context.liveException) return 'LIVE_EXCEPTION';
         if (!attendanceStatus && !voiceStatus) return legacy;
         if (user.dayOff || attendanceStatus === 'DAY_OFF') return 'LEAVE';
         const finishedBeforeCurrentShift = Boolean(finishedAt && bounds?.start && moment(finishedAt).tz(CONFIG.TIMEZONE).isBefore(bounds.start));

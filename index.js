@@ -1470,6 +1470,20 @@ async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().
     }
 
     if (user.dayOff) {
+        const activeDayOffReservation = getActiveApprovedDayOffReservation(member.id, shift, now);
+        if (isStreaming && isCurrentShiftRegularWorker(member, now) && !activeDayOffReservation) {
+            const previousExpireAt = user.dayOffExpireAt || null;
+            user.dayOff = false;
+            user.dayOffExpireAt = null;
+            if ((user.offCount || 0) > 0) user.offCount -= 1;
+            appendAttendanceEvent(user, 'stale_dayoff_cleared_for_current_worker', now, source, {
+                shift,
+                previousExpireAt,
+                reason: 'current-regular-live-on-without-approved-reservation'
+            });
+            await recordLog(user, 'reconnect', '현재 근무자 LIVE ON 감지 - 예약 없는 DAY OFF 상태 자동 해제');
+            changed = true;
+        } else {
         if (transitionRecordedStatus(user, {
             attendanceStatus: 'DAY_OFF',
             voiceStatus: isStreaming ? 'LIVE_ON' : 'LIVE_OFF'
@@ -1479,6 +1493,7 @@ async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().
             return await notifyDayOffPresence(member, user, shift, now, action);
         }
         return false;
+        }
     }
 
     if (activeLiveException) {
@@ -1496,6 +1511,7 @@ async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().
         user.liveOffStartedAt = null;
         user.liveOffWarnedFor = null;
         user.pendingClockOut = null;
+        user.finishedLiveOffReminderMarks = [];
         user.lastLiveOnAt = now.toISOString();
         transitionRecordedStatus(user, {
             attendanceStatus: 'WORKING',
@@ -1533,6 +1549,7 @@ async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().
     const isAutoTimeoutClockOut = ['dc-timeout', 'live-off-timeout'].includes(lastClockOutSource);
     const scheduledEnd = getScheduledEndMoment(user, now);
     const isBeforeScheduledEnd = Boolean(scheduledEnd && now.isBefore(scheduledEnd));
+    const canAutoResumeCurrentRegularWorker = isCurrentShiftRegularWorker(member, now);
     const canResumeFromAutoTimeout = Boolean(
         isStreaming &&
         user.isFinished &&
@@ -1540,8 +1557,8 @@ async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().
         isAutoTimeoutClockOut &&
         isBeforeScheduledEnd &&
         autoTimeoutResumeMins !== null &&
-        autoTimeoutResumeMins <= CONFIG.AUTO_TIMEOUT_RESUME_WINDOW_MINS &&
-        !user.manualResumeRequired &&
+        (canAutoResumeCurrentRegularWorker || autoTimeoutResumeMins <= CONFIG.AUTO_TIMEOUT_RESUME_WINDOW_MINS) &&
+        (!user.manualResumeRequired || canAutoResumeCurrentRegularWorker) &&
         !overtimeUsers.some(ot => ot.id === member.id)
     );
     if (canResumeFromAutoTimeout) {
@@ -1554,6 +1571,7 @@ async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().
             user.reversibleEarlyPenaltyPoints = null;
             appendAttendanceEvent(user, 'early_penalty_reversed', now, source, {
                 reason: 'auto-timeout-resumed-live-on',
+                currentRegularWorker: canAutoResumeCurrentRegularWorker,
                 clockOutSource: lastClockOutSource,
                 clockOutAt: lastClockOutAt
             });
@@ -1577,10 +1595,12 @@ async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().
         transitionRecordedStatus(user, {
             attendanceStatus: 'WORKING',
             voiceStatus: 'LIVE_ON'
-        }, now, source, 'auto-timeout-resumed-live-on');
-        startAttendanceSession(user, shift, now, 'auto-timeout-resume');
+        }, now, source, canAutoResumeCurrentRegularWorker ? 'current-regular-resumed-live-on' : 'auto-timeout-resumed-live-on');
+        startAttendanceSession(user, shift, now, canAutoResumeCurrentRegularWorker ? 'current-regular-resume' : 'auto-timeout-resume');
         await updateWorkingRole(member, true);
-        await recordLog(user, 'reconnect', '자동 조기퇴근 후 라이브 복구 (근무 재개)');
+        await recordLog(user, 'reconnect', canAutoResumeCurrentRegularWorker
+            ? '현재 근무자 DC/LIVE OFF 종료 후 라이브 복구 (근무 재개)'
+            : '자동 조기퇴근 후 라이브 복구 (근무 재개)');
         return true;
     }
     const shouldPromptManualResume = Boolean(
@@ -1591,6 +1611,7 @@ async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().
         isBeforeScheduledEnd &&
         autoTimeoutResumeMins !== null &&
         autoTimeoutResumeMins > CONFIG.AUTO_TIMEOUT_RESUME_WINDOW_MINS &&
+        !canAutoResumeCurrentRegularWorker &&
         !overtimeUsers.some(ot => ot.id === member.id)
     );
     if (shouldPromptManualResume) {
@@ -1661,6 +1682,8 @@ async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().
         if (!isStreaming && isConnected) {
             const notified = await notifyStandbyClockInRequired(member, user, shift, now, 'Finished user in voice without live');
             if (notified) changed = true;
+            const finishedReminderSent = await sendFinishedLiveOffReminder(member, user, now, source);
+            if (finishedReminderSent) changed = true;
         }
         if (isStreaming) {
             const notified = await notifyAfterFinishPresence(member, user, shift, now, 'LIVE ON after clock-out');
@@ -2736,7 +2759,8 @@ async function checkGracePeriods() {
         if (
             u.disconnected &&
             (u.pendingClockOut?.source === 'voice_leave' || u.disconnectedAt) &&
-            now.isSameOrAfter(moment(u.pendingClockOut?.expiresAt || moment(u.disconnectedAt).tz(CONFIG.TIMEZONE).add(CONFIG.GRACE_PERIOD_MINS, 'minutes')))
+            now.isSameOrAfter(moment(u.pendingClockOut?.expiresAt || moment(u.disconnectedAt).tz(CONFIG.TIMEZONE).add(CONFIG.GRACE_PERIOD_MINS, 'minutes'))) &&
+            !getActiveLiveException(id, now)
         ) {
             const m = client.guilds.cache.get(CONFIG.GUILD_ID)?.members.cache.get(id);
             const effectiveDcOut = moment(u.pendingClockOut?.at || u.disconnectedAt).tz(CONFIG.TIMEZONE);
@@ -2755,12 +2779,12 @@ async function checkGracePeriods() {
                     '',
                     `You were disconnected for about ${CONFIG.GRACE_PERIOD_MINS} minutes, so the bot has clocked you out automatically.`,
                     '',
-                    'If you come back after this, please follow these steps:',
+                    'If you are still in your current scheduled shift, please follow these steps:',
                     '1. Join the voice channel again.',
                     '2. Turn your live stream ON.',
-                    '3. Press the CLOCK IN button on the attendance panel.',
+                    '3. The bot can resume your shift automatically.',
                     '',
-                    'Important: live stream ON by itself will NOT restart attendance. You must press CLOCK IN again.',
+                    `Outside the current shift, automatic resume is limited to ${CONFIG.AUTO_TIMEOUT_RESUME_WINDOW_MINS} minutes; after that, you must press CLOCK IN again.`,
                     'No extra DC reminders will be sent for this clock-out. 🙂'
                 ].join('\n')).catch(() => null);
             }
@@ -3346,6 +3370,61 @@ async function markWorkedOnDayOff(member, user, shift, now) {
         reason: 'clock-in-or-live-on'
     });
     return reservation;
+}
+
+function getActiveApprovedDayOffReservation(memberId, shift, now = moment().tz(CONFIG.TIMEZONE)) {
+    if (!memberId || !shift) return null;
+    const logicalDate = getDayOffLogicalDateForShift(shift, now);
+    return Object.values(dayOffReservations).find(r =>
+        r &&
+        r.status === 'approved' &&
+        r.userId === memberId &&
+        r.shift === shift &&
+        r.leaveDate === logicalDate
+    ) || null;
+}
+
+function buildLiveOffGuidanceDm({ final = false, minutes = null } = {}) {
+    const lines = [
+        final ? '⚠️ Your attendance has been closed because LIVE stayed OFF.' : '📹 Please turn your live stream ON.',
+        '',
+        '❓ Are you unable to turn on your live stream right now?',
+        'If you cannot turn on LIVE due to internet or PC problems, stay in the voice channel and press CLOCK IN to restart as a LIVE EXCEPTION.',
+        '✅ Your work will only be counted after you do this.',
+        '',
+        '🙏 Please use this only when you truly cannot turn LIVE ON.',
+        '🚫 If you do not press CLOCK IN, your attendance will not be counted.'
+    ];
+    if (minutes !== null) {
+        lines.splice(1, 0, `⏱️ LIVE OFF duration: about ${minutes} minutes.`);
+    }
+    return lines.join('\n');
+}
+
+async function sendFinishedLiveOffReminder(member, user, now, source = 'voice_snapshot') {
+    if (!member || !user?.isFinished || user.checkedIn) return false;
+    const finishedAt = user.checkOutRaw || user.attendanceStatusChangedAt || null;
+    if (!finishedAt) return false;
+    if (!Array.isArray(user.finishedLiveOffReminderMarks)) user.finishedLiveOffReminderMarks = [];
+
+    const elapsedMins = Math.max(0, now.diff(moment(finishedAt).tz(CONFIG.TIMEZONE), 'minutes'));
+    const reminderMarks = [15, 30, 45, 60];
+    const reminderMark = Math.floor(elapsedMins / 15) * 15;
+    if (!reminderMarks.includes(reminderMark)) return false;
+    if (user.finishedLiveOffReminderMarks.includes(reminderMark)) return false;
+
+    user.finishedLiveOffReminderMarks.push(reminderMark);
+    appendAttendanceEvent(user, 'finished_live_off_dm_sent', now, source, {
+        minutesSinceFinished: elapsedMins,
+        reminderMark
+    });
+    await member.send([
+        '🌿 LIVE OFF after FINISHED',
+        `Reminder ${reminderMarks.indexOf(reminderMark) + 1}/${reminderMarks.length}`,
+        '',
+        buildLiveOffGuidanceDm({ final: true, minutes: reminderMark })
+    ].join('\n')).catch(() => null);
+    return true;
 }
 
 async function cancelDayOffReservationByCommand(member, leaveDate, cancelledBy) {
@@ -4269,7 +4348,58 @@ client.on(Events.InteractionCreate, async i => {
                 const voiceState = i.guild.voiceStates.cache.get(m.id);
                 const isVoiceConnected = Boolean(m.voice?.channelId || voiceState?.channelId);
                 const isStreamingNow = Boolean(isVoiceConnected && (m.voice?.streaming || voiceState?.streaming));
-                if (!isStreamingNow) {
+                const activeLiveException = getActiveLiveException(m.id, now);
+                const canClockInByLiveException = Boolean(isVoiceConnected && activeLiveException);
+                const canSelfResumeLiveException = Boolean(
+                    isVoiceConnected &&
+                    !isStreamingNow &&
+                    !activeLiveException &&
+                    u.isFinished &&
+                    ['live-off-timeout', 'live-exception-expired'].includes(u.lastClockOutSource)
+                );
+                if (canSelfResumeLiveException) {
+                    u.checkedIn = true;
+                    u.dayOff = false;
+                    u.isFinished = false;
+                    u.disconnected = false;
+                    u.disconnectedAt = null;
+                    u.voiceJoinedAt = null;
+                    u.liveOffStartedAt = null;
+                    u.liveOffWarnedFor = null;
+                    u.pendingClockOut = null;
+                    u.manualResumeRequired = false;
+                    u.manualResumeRequiredSince = null;
+                    u.manualResumeRequiredReason = null;
+                    u.lastManualResumePromptKey = null;
+                    u.manualResumePromptMarks = [];
+                    u.finishedLiveOffReminderMarks = [];
+                    u.finishedPresence = null;
+                    u.finalLeftAt = null;
+                    u.status = 'exception';
+                    u.shift = s;
+                    u.checkInTime = now.format('hh:mm A');
+                    u.checkInRaw = now.toISOString();
+                    u.finishedLiveOffReminderMarks = [];
+                    u.lastLiveOnAt = now.toISOString();
+                    transitionRecordedStatus(u, {
+                        attendanceStatus: 'WORKING',
+                        voiceStatus: 'EXCEPTION'
+                    }, now, 'button-or-command', 'self-live-exception-clock-in');
+                    startAttendanceSession(u, s, now, 'self-live-exception-clock-in');
+                    appendAttendanceEvent(u, 'self_live_exception_clock_in', now, 'button-or-command', {
+                        previousClockOutSource: u.lastClockOutSource || null,
+                        previousClockOutAt: u.checkOutRaw || null
+                    });
+                    await updateWorkingRole(m, true);
+                    await recordLog(u, 'reconnect', '라이브 불가 예외 CLOCK IN - 근무 인정');
+                    await saveSystemAsync();
+                    await renderDashboardCore({ forceMemberRefresh: true });
+                    return i.reply({
+                        content: 'Attendance resumed as LIVE EXCEPTION. You will be shown as LIVE EXCEPTION on the dashboard.',
+                        flags: MessageFlags.Ephemeral
+                    }).then(() => autoDel(7000));
+                }
+                if (!isStreamingNow && !canClockInByLiveException) {
                     if (u.manualResumeRequired) {
                         u.checkedIn = false;
                         u.isFinished = true;
@@ -4298,10 +4428,19 @@ client.on(Events.InteractionCreate, async i => {
                     await renderDashboardCore({ forceMemberRefresh: true });
                     return i.reply({
                         content: isVoiceConnected
-                            ? 'LIVE OFF detected. Please turn on your live stream so your clock-in can be counted.'
+                            ? [
+                                'Please turn your live stream ON.',
+                                '',
+                                'Are you unable to turn your live stream on right now?',
+                                'Stay in the voice channel and press CLOCK IN to resume as a LIVE EXCEPTION.',
+                                'Your work will only be counted after that.',
+                                '',
+                                'Only use this if you truly cannot turn LIVE ON.',
+                                'If you do not press CLOCK IN, your attendance will not be counted.'
+                            ].join('\n')
                             : 'Please join a voice channel and turn on your live stream so your clock-in can be counted.',
                         flags: MessageFlags.Ephemeral
-                    }).then(() => autoDel(3000));
+                    }).then(() => autoDel(isVoiceConnected ? 10000 : 3000));
                 }
                 u.isFinished = false;
                 if (canStartPreShiftOvertime(u, now)) {
@@ -4333,6 +4472,29 @@ client.on(Events.InteractionCreate, async i => {
                             flags: MessageFlags.Ephemeral
                         }).then(() => autoDel(7000));
                     }
+                }
+                if (canClockInByLiveException) {
+                    u.checkedIn = true;
+                    u.dayOff = false;
+                    u.isFinished = false;
+                    u.disconnected = false;
+                    u.disconnectedAt = null;
+                    u.status = 'exception';
+                    u.shift = s;
+                    u.checkInTime = u.checkInTime || now.format('hh:mm A');
+                    u.checkInRaw = u.checkInRaw || now.toISOString();
+                    u.liveOffStartedAt = null;
+                    u.liveOffWarnedFor = null;
+                    u.pendingClockOut = null;
+                    transitionRecordedStatus(u, {
+                        attendanceStatus: 'WORKING',
+                        voiceStatus: 'EXCEPTION'
+                    }, now, 'button-or-command', 'clock-in-with-live-exception');
+                    appendAttendanceEvent(u, 'clock_in_with_live_exception', now, 'button-or-command', {
+                        exceptionApprovedAt: activeLiveException.approvedAt || null,
+                        exceptionExpiresAt: activeLiveException.expiresAt || null
+                    });
+                    await recordLog(u, 'reconnect', '라이브 예외 대상 CLOCK IN - 근무 인정');
                 }
             } else if (type === 'out') {
                 await handleClockOut(m, u, now);

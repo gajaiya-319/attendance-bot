@@ -67,6 +67,7 @@ function createAttendanceService(deps) {
                 reversibleEarlyPenaltyPoints: null,
                 liveOffWarnedFor: null,
                 liveOffWarningMarks: [],
+                finishedLiveOffReminderMarks: [],
                 lastFinishedReturnPromptKey: null,
                 lastActivityAt: null,
                 lastActivitySource: null,
@@ -112,6 +113,7 @@ function createAttendanceService(deps) {
         if (!Object.prototype.hasOwnProperty.call(user, 'reversibleEarlyPenaltyAppliedAt')) user.reversibleEarlyPenaltyAppliedAt = null;
         if (!Object.prototype.hasOwnProperty.call(user, 'reversibleEarlyPenaltyPoints')) user.reversibleEarlyPenaltyPoints = null;
         if (!Array.isArray(user.liveOffWarningMarks)) user.liveOffWarningMarks = [];
+        if (!Array.isArray(user.finishedLiveOffReminderMarks)) user.finishedLiveOffReminderMarks = [];
         if (!Object.prototype.hasOwnProperty.call(user, 'lastFinishedReturnPromptKey')) user.lastFinishedReturnPromptKey = null;
         if (!Object.prototype.hasOwnProperty.call(user, 'lastActivityAt')) user.lastActivityAt = null;
         if (!Object.prototype.hasOwnProperty.call(user, 'lastActivitySource')) user.lastActivitySource = null;
@@ -457,6 +459,7 @@ function createAttendanceService(deps) {
         user.manualResumeRequiredReason = null;
         user.lastManualResumePromptKey = null;
         user.manualResumePromptMarks = [];
+        user.finishedLiveOffReminderMarks = [];
         user.preShiftLiveAt = clockInRule.preShift ? now.toISOString() : null;
         user.lastPreShiftWaitLogKey = null;
         user.lastLiveOnAt = now.toISOString();
@@ -532,6 +535,7 @@ function createAttendanceService(deps) {
         user.voiceJoinedAt = null;
         user.liveOffStartedAt = null;
         user.liveOffWarnedFor = null;
+        user.finishedLiveOffReminderMarks = [];
         user.pendingClockOut = null;
         user.checkOutTime = outMoment.format('hh:mm A');
         user.checkOutRaw = outMoment.toISOString();
