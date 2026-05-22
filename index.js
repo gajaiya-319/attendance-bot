@@ -1891,11 +1891,17 @@ const getNoticeEmbed = (type) => {
         `   \u001b[1;36m${padWidth('[ LIVE MONITORING ]', noticeWidth - 3)}\u001b[0m`,
         '```'
     ].join('\n');
-    const timeColor = '\u001b[1;33m';
+    const hourColor = '\u001b[1;33m';
+    const timeRestColor = '\u001b[1;32m';
     const durationColor = '\u001b[1;32m';
     const resetColor = '\u001b[0m';
+    const formatClockText = (clockText) => {
+        const match = clockText.match(/^(\d{2}:)(.+)$/);
+        if (!match) return `${timeRestColor}${clockText}${resetColor}`;
+        return `${hourColor}${match[1]}${timeRestColor}${match[2]}${resetColor}`;
+    };
     const formatHoursLine = (icon, label, startText, endText, durationText) =>
-        `${icon} ${padWidth(label, 13)}: ${timeColor}${startText}${resetColor}-${timeColor}${endText}${resetColor} ${durationColor}${durationText}${resetColor}`;
+        `${icon} ${padWidth(label, 13)}: ${formatClockText(startText)}-${formatClockText(endText)} ${durationColor}${durationText}${resetColor}`;
     const regularLine = isDay
         ? formatHoursLine('📅', 'MON/WED-SUN', '09:00AM', '09:00PM', '(12h)')
         : formatHoursLine('📅', 'MON/WED-SUN', '09:00PM', '09:00AM', '(12h)');
