@@ -1,8 +1,8 @@
 require('dotenv').config();
 
 const CONFIG = {
-    VERSION: '2501.54-SUMMARY-IMPORT-FIX',
-    RELEASE_NOTE: 'Fix dashboard summary width helper import',
+    VERSION: '2501.55-DASHBOARD-NOWRAP',
+    RELEASE_NOTE: 'Prevent dashboard code block line wrapping',
     GUILD_ID: '1502598521294028830',
     LOG_CHANNEL: '1503681085618262158',
     STATUS_CHANNEL: '1503681415407992962',

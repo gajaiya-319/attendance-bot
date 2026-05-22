@@ -894,17 +894,21 @@ function getDashboardName(user) {
     return (user.dashboardName || user.name || 'Unknown').split('-')[0].trim() || 'Unknown';
 }
 
+const NBSP = '\u00A0';
+const keepTogether = (text) => String(text).replace(/ /g, NBSP);
+const padWidthNoWrap = (text, width) => keepTogether(padWidth(text, width));
+
 function renderCleanGrid(arr, icon) {
     if (!arr || arr.length === 0) return 'NONE';
     const sorted = [...arr].sort((a, b) => getDashboardName(a).localeCompare(getDashboardName(b)));
-    const fixN = (u) => padWidth(truncateWidth(getDashboardName(u), 8), 8);
-    const fixT = (t) => padWidth(String(t || '00:00').replace(/\s?[AP]M$/i, '').trim(), 5);
-    const formatCell = (u) => `${icon} ${fixT(u.checkInTime)} ${fixN(u)}`;
+    const fixN = (u) => padWidthNoWrap(truncateWidth(getDashboardName(u), 8), 8);
+    const fixT = (t) => padWidthNoWrap(String(t || '00:00').replace(/\s?[AP]M$/i, '').trim(), 5);
+    const formatCell = (u) => `${icon}${NBSP}${fixT(u.checkInTime)}${NBSP}${fixN(u)}`;
     let lines = "```\n";
     for (let i = 0; i < sorted.length; i += 2) {
         const left = sorted[i];
         const right = sorted[i + 1];
-        lines += formatCell(left) + (right ? ` ${formatCell(right)}` : '') + "\n";
+        lines += formatCell(left) + (right ? `${NBSP}${NBSP}${formatCell(right)}` : '') + "\n";
     }
     return lines + "```";
 }
@@ -941,7 +945,7 @@ function renderStatusList(arr, icon, now, mode = 'time') {
                 const minsLeft = ex?.expiresAt ? Math.max(0, moment(ex.expiresAt).diff(now, 'minutes')) : 0;
                 meta = `${formatDuration(minsLeft)} 남음`;
             }
-            return `${icon} ${name} ${meta}`;
+            return keepTogether(`${icon} ${name} ${meta}`);
         });
     return `\`\`\`\n${lines.join('\n')}\n\`\`\``;
 }
@@ -952,9 +956,9 @@ function renderShiftSummary(label, groups) {
 
 function renderSummaryBox(rows) {
     const height = 4;
-    const labelWidth = rows.reduce((width, [label]) => Math.max(width, getStrWidth(label)), 0);
-    const lines = rows.map(([label, value]) => `${padWidth(label, labelWidth)} ${value}`);
-    while (lines.length < height) lines.push('\u200B');
+    const labelWidth = Math.max(10, rows.reduce((width, [label]) => Math.max(width, getStrWidth(label)), 0));
+    const lines = rows.map(([label, value]) => `${padWidthNoWrap(label, labelWidth)}${NBSP}${value}`);
+    while (lines.length < height) lines.push(NBSP.repeat(labelWidth + 2));
     return `\`\`\`text\n${lines.slice(0, height).join('\n')}\n\`\`\``;
 }
 
