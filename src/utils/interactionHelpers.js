@@ -25,7 +25,17 @@ function createCommandOptionHelpers(interaction) {
         getAnnounceRole: () => interaction.options.getRole('target') ||
             interaction.options.getRole('대상') ||
             interaction.options.getRole('role') ||
-            interaction.options.getRole('역할')
+            interaction.options.getRole('역할'),
+        getAnnounceRoles: () => [
+            interaction.options.getRole('target') ||
+                interaction.options.getRole('대상') ||
+                interaction.options.getRole('role') ||
+                interaction.options.getRole('역할'),
+            interaction.options.getRole('target2') ||
+                interaction.options.getRole('대상2') ||
+                interaction.options.getRole('role2') ||
+                interaction.options.getRole('역할2')
+        ].filter(Boolean)
     };
 }
 

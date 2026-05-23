@@ -3087,7 +3087,13 @@ async function checkScheduledAnnouncements() {
                         .setDescription(d.content)
                         .setColor('#5865F2')
                         .setTimestamp();
-                    await chan.send({ content: d.roleId ? `<@&${d.roleId}>` : '@everyone', embeds: [embed] })
+                    const roleIds = Array.isArray(d.roleIds)
+                        ? d.roleIds.filter(Boolean)
+                        : (d.roleId ? [d.roleId] : []);
+                    const mentionText = roleIds.length
+                        ? roleIds.map(roleId => `<@&${roleId}>`).join(' ')
+                        : '@everyone';
+                    await chan.send({ content: mentionText, embeds: [embed] })
                         .catch(e => console.error('[ANNOUNCE SEND ERROR]', e));
                     d.lastSentDate = today;
                     await saveSystemAsync();
@@ -3937,7 +3943,8 @@ client.on(Events.InteractionCreate, async i => {
                 getSlot,
                 getAnnounceTime,
                 getAnnounceContent,
-                getAnnounceRole
+                getAnnounceRole,
+                getAnnounceRoles
             } = createCommandOptionHelpers(i);
             const replyMemberNotFound = () => i.reply({ content: '대상을 찾을 수 없습니다.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
 
@@ -4247,7 +4254,10 @@ client.on(Events.InteractionCreate, async i => {
                 const slot = getSlot();
                 const time = getAnnounceTime();
                 const content = getAnnounceContent();
-                const role = getAnnounceRole();
+                const roles = typeof getAnnounceRoles === 'function'
+                    ? getAnnounceRoles()
+                    : [getAnnounceRole()].filter(Boolean);
+                const roleIds = [...new Set(roles.map(role => role?.id).filter(Boolean))].slice(0, 2);
                 if (slot < 1 || slot > 6 || !/^\d{2}:\d{2}$/.test(time)) {
                     return i.reply({ content: 'Invalid slot or time. Use slot 1-6 and HH:mm.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
                 }
@@ -4255,11 +4265,15 @@ client.on(Events.InteractionCreate, async i => {
                     active: true,
                     time,
                     content,
-                    roleId: role?.id || null,
+                    roleId: roleIds[0] || null,
+                    roleIds,
                     lastSentDate: null
                 };
                 await saveSystemAsync();
-                return i.reply({ content: `Announcement slot ${slot} saved for ${time}.`, flags: MessageFlags.Ephemeral }).then(() => autoDel());
+                const targetText = roleIds.length
+                    ? roleIds.map(roleId => `<@&${roleId}>`).join(' ')
+                    : '@everyone';
+                return i.reply({ content: `Announcement slot ${slot} saved for ${time}. Targets: ${targetText}`, flags: MessageFlags.Ephemeral }).then(() => autoDel());
             }
             if (n('cancel-announce') || n('공지취소')) {
                 if (!canManageAnnouncements(i.member)) return i.reply({ content: 'No perms.', flags: MessageFlags.Ephemeral }).then(() => autoDel());

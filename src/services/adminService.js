@@ -6,7 +6,10 @@ function createAdminService({ getAnnounceData, truncateWidth }) {
             .map(([slot, d]) => {
                 if (!d) return `Slot ${slot}: empty`;
                 const state = d.active ? 'ON' : 'OFF';
-                const role = d.roleId ? ` role=<@&${d.roleId}>` : '';
+                const roleIds = Array.isArray(d.roleIds)
+                    ? d.roleIds.filter(Boolean)
+                    : (d.roleId ? [d.roleId] : []);
+                const role = roleIds.length ? ` roles=${roleIds.map(roleId => `<@&${roleId}>`).join(',')}` : '';
                 const content = truncateWidth(d.content || '', 55);
                 return `Slot ${slot}: ${state} ${d.time || '--:--'}${role} - ${content}`;
             })

@@ -4,7 +4,7 @@ const { truncateWidth } = require('../src/utils/textFormat');
 
 let announceData = {
     1: null,
-    2: { active: true, time: '12:30', roleId: 'role1', content: 'Hello workers' },
+    2: { active: true, time: '12:30', roleId: 'role1', roleIds: ['role1', 'role2'], content: 'Hello workers' },
     3: { active: false, time: null, roleId: null, content: 'Paused notice' }
 };
 
@@ -15,7 +15,7 @@ const service = createAdminService({
 
 const list = service.formatAnnouncementList();
 assert(list.includes('Slot 1: empty'));
-assert(list.includes('Slot 2: ON 12:30 role=<@&role1> - Hello workers'));
+assert(list.includes('Slot 2: ON 12:30 roles=<@&role1>,<@&role2> - Hello workers'));
 assert(list.includes('Slot 3: OFF --:-- - Paused notice'));
 
 const user = {};

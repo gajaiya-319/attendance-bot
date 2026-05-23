@@ -6,13 +6,18 @@ const {
 
 const member = { id: '1' };
 const role = { id: 'role' };
+const role2 = { id: 'role2' };
 const interaction = {
     commandName: '테스트',
     options: {
         getMember: (name) => name === '대상' ? member : null,
         getInteger: (name) => name === '번호' ? 3 : null,
         getString: (name) => name === '시간' ? '21:30' : null,
-        getRole: (name) => name === '역할' ? role : null
+        getRole: (name) => {
+            if (name === '역할') return role;
+            if (name === '대상2') return role2;
+            return null;
+        }
     }
 };
 
@@ -22,6 +27,7 @@ assert.strictEqual(helpers.getTargetMember(), member);
 assert.strictEqual(helpers.getSlot(), 3);
 assert.strictEqual(helpers.getAnnounceTime(), '21:30');
 assert.strictEqual(helpers.getAnnounceRole(), role);
+assert.deepStrictEqual(helpers.getAnnounceRoles(), [role, role2]);
 
 let replyPayload = null;
 const patched = {
