@@ -1,8 +1,8 @@
 require('dotenv').config();
 
 const CONFIG = {
-    VERSION: '2501.72-GUEST-NICKNAME',
-    RELEASE_NOTE: 'Use display names for automatic guest nicknames',
+    VERSION: '2501.77-WORKER-REPORT-FILTER',
+    RELEASE_NOTE: 'Limit reports to day night workers',
     GUILD_ID: '1502598521294028830',
     LOG_CHANNEL: '1503681085618262158',
     STATUS_CHANNEL: '1503681415407992962',

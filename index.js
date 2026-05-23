@@ -1090,6 +1090,25 @@ function renderPercentBar(percent, size = 10) {
     return `[${'#'.repeat(filled)}${'.'.repeat(size - filled)}] ${String(safePercent).padStart(3)}%`;
 }
 
+function getDayNightWorkerStats(guild, shift = 'all') {
+    const scope = ['all', 'day', 'night'].includes(shift) ? shift : 'all';
+    return Object.values(attendanceData).filter(user => {
+        const workerShift = getRankingWorkerShift(user, guild);
+        if (!workerShift) return false;
+        return scope === 'all' || workerShift === scope;
+    });
+}
+
+function getDayNightWorkerOvertimeUsers(guild, shift = 'all') {
+    const scope = ['all', 'day', 'night'].includes(shift) ? shift : 'all';
+    return overtimeUsers.filter(ot => {
+        const user = attendanceData[ot.id] || ot;
+        const workerShift = getRankingWorkerShift(user, guild);
+        if (!workerShift) return false;
+        return scope === 'all' || workerShift === scope;
+    });
+}
+
 async function renderDashboardCore({ forceMemberRefresh = false } = {}) {
     if (renderingDashboard) {
         pendingDashboardRender = true;
@@ -1975,7 +1994,7 @@ async function sendDeepReport(type = 'Regular') {
             .setTimestamp();
         const guild = logChan.guild;
         await refreshGuildMembers(guild);
-        const allStats = Object.values(attendanceData).filter(u => guild.members.cache.has(u.id));
+        const allStats = getDayNightWorkerStats(guild);
 
         if (type === 'Analysis') {
             let content = '```\n[PTS] [Normal/Late/Absent/Early/OT/Off] [DC] | Name\n';
@@ -2014,7 +2033,8 @@ async function sendOpsReport(type = 'Regular') {
 
         const guild = logChan.guild;
         await refreshGuildMembers(guild);
-        const allStats = Object.values(attendanceData).filter(u => guild.members.cache.has(u.id));
+        const allStats = getDayNightWorkerStats(guild, currentShift);
+        const reportOvertimeUsers = getDayNightWorkerOvertimeUsers(guild, currentShift);
 
         if (type !== 'Analysis') {
             const activeUsers = allStats.filter(u => u.checkedIn && !u.disconnected && !u.dayOff);
@@ -2038,7 +2058,7 @@ async function sendOpsReport(type = 'Regular') {
             const standbyRate = Math.round((standbyUsers.length / workBase) * 100) || 0;
             const offRate = Math.round((offUsers.length / Math.max(allStats.length, 1)) * 100) || 0;
             const dcRate = Math.round((disconnectedUsers.length / workBase) * 100) || 0;
-            const otRate = Math.round((overtimeUsers.length / workBase) * 100) || 0;
+            const otRate = Math.round((reportOvertimeUsers.length / workBase) * 100) || 0;
             const lateUsers = allStats.filter(u => u.status === 'late');
             const lateRate = Math.round((lateUsers.length / workBase) * 100) || 0;
 
@@ -2065,11 +2085,11 @@ async function sendOpsReport(type = 'Regular') {
                 makeRateRow('Late', lateRate, lateUsers.length, workBase),
                 makeRateRow('Off', offRate, offUsers.length, Math.max(allStats.length, 1)),
                 makeRateRow('DC', dcRate, disconnectedUsers.length, workBase),
-                makeRateRow('OT 비율', otRate, overtimeUsers.length, workBase)
+                makeRateRow('OT 비율', otRate, reportOvertimeUsers.length, workBase)
             ].join('\n\n');
 
             embed.addFields(
-                { name: `📊 ${shiftNameText} Snapshot`, value: `TOTAL ${allStats.length} | WORK BASE ${workBase} | ACTIVE ${activeUsers.length} | FINISHED ${finishedUsers.length} | ABSENT ${absentUsers.length} | STANDBY ${standbyUsers.length} | OFF ${offUsers.length} | OT ${overtimeUsers.length} | DC ${disconnectedUsers.length}`, inline: false },
+                { name: `📊 ${shiftNameText} Summary Snapshot`, value: `TOTAL ${allStats.length} | WORK BASE ${workBase} | ACTIVE ${activeUsers.length} | FINISHED ${finishedUsers.length} | ABSENT ${absentUsers.length} | STANDBY ${standbyUsers.length} | OFF ${offUsers.length} | OT ${reportOvertimeUsers.length} | DC ${disconnectedUsers.length}`, inline: false },
                 { name: `📈 Daily Rates`, value: `\`\`\`\n${rateBlock}\n\`\`\``, inline: false },
                 { name: `🟢 Active (${activeUsers.length})`, value: `\`\`\`\n${listNames(activeUsers)}\n\`\`\``, inline: false },
                 { name: `⚪ Finished (${finishedUsers.length})`, value: `\`\`\`\n${listNames(finishedUsers)}\n\`\`\``, inline: false },
@@ -2077,7 +2097,7 @@ async function sendOpsReport(type = 'Regular') {
                 { name: `🟡 Standby (${standbyUsers.length})`, value: `\`\`\`\n${listNames(standbyUsers)}\n\`\`\``, inline: false },
                 { name: `🔵 Day Off (${offUsers.length})`, value: `\`\`\`\n${listNames(offUsers)}\n\`\`\``, inline: false },
                 { name: `⚡ Disconnected (${disconnectedUsers.length})`, value: `\`\`\`\n${listNames(disconnectedUsers)}\n\`\`\``, inline: false },
-                { name: `🔥 Overtime (${overtimeUsers.length})`, value: `\`\`\`\n${overtimeUsers.map(ot => attendanceData[ot.id] || ot).map(u => formatExactWidth(u.name || 'Unknown', 16)).join('\n') || 'NONE'}\n\`\`\``, inline: false }
+                { name: `🔥 Overtime (${reportOvertimeUsers.length})`, value: `\`\`\`\n${reportOvertimeUsers.map(ot => attendanceData[ot.id] || ot).map(u => formatExactWidth(u.name || 'Unknown', 16)).join('\n') || 'NONE'}\n\`\`\``, inline: false }
             );
             return logChan.send({ embeds: [embed] });
         }
@@ -2109,7 +2129,7 @@ async function sendOpsReport(type = 'Regular') {
             .join('\n') || 'No session data.';
 
         embed.addFields(
-            { name: `${shiftNameText} Snapshot`, value: `TOTAL ${allStats.length} | ACTIVE ${active.length} | STANDBY ${standby.length} | ABSENT ${absent.length} | OFF ${off.length} | OT ${overtimeUsers.length} | DC ${disconnected.length}`, inline: false },
+            { name: `${shiftNameText} Precision Snapshot`, value: `TOTAL ${allStats.length} | ACTIVE ${active.length} | STANDBY ${standby.length} | ABSENT ${absent.length} | OFF ${off.length} | OT ${reportOvertimeUsers.length} | DC ${disconnected.length}`, inline: false },
             { name: 'Attention', value: `\`\`\`\n${attention}\n\`\`\``, inline: false },
             { name: 'Target Top 5', value: `\`\`\`\n${top}\n\`\`\``, inline: false },
             { name: 'Session Credited Time', value: `\`\`\`\n${sessionMetrics}\n\`\`\``, inline: false },
@@ -2147,8 +2167,30 @@ function buildDiagnosticsEmbed(guild) {
         .setTimestamp();
 }
 
-function buildRankingEmbed() {
+function getRankingWorkerShift(user, guild = null) {
+    if (!user?.id) return null;
+    const member = guild?.members?.cache?.get(user.id);
+    if (member?.user?.bot) return null;
+
+    const hasDayRole = Boolean(member?.roles?.cache?.has(CONFIG.ROLES.DAY));
+    const hasNightRole = Boolean(member?.roles?.cache?.has(CONFIG.ROLES.NIGHT));
+    if (hasDayRole || hasNightRole) {
+        if (hasDayRole && hasNightRole) return user.shift === 'night' ? 'night' : 'day';
+        return hasDayRole ? 'day' : 'night';
+    }
+
+    if (!guild && ['day', 'night'].includes(user.shift)) return user.shift;
+    return null;
+}
+
+function buildRankingEmbed({ guild = null, shift = 'all' } = {}) {
+    const scope = ['all', 'day', 'night'].includes(shift) ? shift : 'all';
     const sorted = Object.values(attendanceData)
+        .filter(user => {
+            const workerShift = getRankingWorkerShift(user, guild);
+            if (!workerShift) return false;
+            return scope === 'all' || workerShift === scope;
+        })
         .sort((a, b) => (b.points || 0) - (a.points || 0))
         .slice(0, 20);
     const lines = sorted.length
@@ -2157,12 +2199,19 @@ function buildRankingEmbed() {
             const stats = `${u.totalNormal || 0}/${u.totalLate || 0}/${u.totalAbsent || 0}/${u.totalEarly || 0}/${u.totalOT || 0}/${u.offCount || 0}`;
             return `${String(idx + 1).padStart(2, '0')}. ${padWidth(name, 20)} ${String(u.points || 0).padStart(5)} pts  [${stats}]`;
         }).join('\n')
-        : 'No attendance data.';
+        : 'No day/night worker attendance data.';
+
+    const titleByScope = {
+        all: 'Combined Day/Night Worker Ranking',
+        day: 'Day Shift Worker Ranking',
+        night: 'Night Shift Worker Ranking'
+    };
 
     return new EmbedBuilder()
-        .setTitle('Live Attendance Ranking')
+        .setTitle(titleByScope[scope])
         .setDescription(`\`\`\`\n${lines}\n\`\`\``)
         .setColor('#F1C40F')
+        .setFooter({ text: 'Only members with DAY or NIGHT shift roles are included.' })
         .setTimestamp();
 }
 
@@ -4001,8 +4050,10 @@ client.on(Events.InteractionCreate, async i => {
                 await sendOpsReport('Analysis');
                 return i.editReply({ content: 'Sent.' }).then(() => autoDel());
             }
-            if (n('ranking') || n('랭킹')) {
-                return i.reply({ embeds: [buildRankingEmbed()] });
+            if (n('combined-ranking') || n('통합랭킹')) {
+                const shift = i.options.getString('구분') || i.options.getString('shift') || 'all';
+                await refreshGuildMembers(i.guild, { force: false });
+                return i.reply({ embeds: [buildRankingEmbed({ guild: i.guild, shift })] });
             }
             if (n('refresh') || n('현황판갱신')) {
                 await i.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => null);
@@ -4717,6 +4768,7 @@ client.once(Events.ClientReady, async () => {
     const visibleCmdList = cmdList.filter(command => !hiddenCommandAliases.has(command.name));
 
     try {
+        await rest.put(Routes.applicationCommands(client.user.id), { body: [] });
         await rest.put(Routes.applicationGuildCommands(client.user.id, CONFIG.GUILD_ID), { body: visibleCmdList });
     } catch (e) {
         console.error('[REST ERROR]', e);
