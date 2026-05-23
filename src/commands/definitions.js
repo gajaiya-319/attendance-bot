@@ -80,8 +80,23 @@ function buildCommandDefinitions() {
         new SlashCommandBuilder().setName('백업생성').setDescription('Backup create'), new SlashCommandBuilder().setName('backup-create').setDescription('Backup create'),
         new SlashCommandBuilder().setName('백업목록').setDescription('Backup list'), new SlashCommandBuilder().setName('backup-list').setDescription('Backup list'),
         new SlashCommandBuilder().setName('백업복구').setDescription('Backup restore').addStringOption(o=>o.setName('파일').setDescription('File')), new SlashCommandBuilder().setName('backup-restore').setDescription('Backup restore').addStringOption(o=>o.setName('file').setDescription('File')),
-        new SlashCommandBuilder().setName('공지설정').setDescription('Schedule announcement').addIntegerOption(o=>o.setName('slot').setRequired(true).setMinValue(1).setMaxValue(6).setDescription('Announcement slot')).addRoleOption(o=>o.setName('target').setRequired(true).setDescription('First target role')).addRoleOption(o=>o.setName('target2').setDescription('Second target role')).addStringOption(o=>o.setName('time').setRequired(true).setDescription('Send time (HH:mm)')).addStringOption(o=>o.setName('content').setRequired(true).setDescription('Announcement content')),
-        new SlashCommandBuilder().setName('set-announce').setDescription('Schedule announcement').addIntegerOption(o=>o.setName('slot').setRequired(true).setMinValue(1).setMaxValue(6).setDescription('Announcement slot')).addRoleOption(o=>o.setName('target').setRequired(true).setDescription('First target role')).addRoleOption(o=>o.setName('target2').setDescription('Second target role')).addStringOption(o=>o.setName('time').setRequired(true).setDescription('Send time (HH:mm)')).addStringOption(o=>o.setName('content').setRequired(true).setDescription('Announcement content')),
+        new SlashCommandBuilder()
+    .setName('공지설정')
+    .setDescription('Schedule announcement')
+    .addIntegerOption(o=>o.setName('slot').setRequired(true).setMinValue(1).setMaxValue(6).setDescription('Announcement slot'))
+    .addRoleOption(o=>o.setName('target').setRequired(true).setDescription('First target role'))
+    .addStringOption(o=>o.setName('time').setRequired(true).setDescription('Send time (HH:mm)'))
+    .addStringOption(o=>o.setName('content').setRequired(true).setDescription('Announcement content'))
+    .addRoleOption(o=>o.setName('target2').setDescription('Second target role')),
+
+new SlashCommandBuilder()
+    .setName('set-announce')
+    .setDescription('Schedule announcement')
+    .addIntegerOption(o=>o.setName('slot').setRequired(true).setMinValue(1).setMaxValue(6).setDescription('Announcement slot'))
+    .addRoleOption(o=>o.setName('target').setRequired(true).setDescription('First target role'))
+    .addStringOption(o=>o.setName('time').setRequired(true).setDescription('Send time (HH:mm)'))
+    .addStringOption(o=>o.setName('content').setRequired(true).setDescription('Announcement content'))
+    .addRoleOption(o=>o.setName('target2').setDescription('Second target role')),
         new SlashCommandBuilder().setName('공지취소').setDescription('Cancel scheduled announcement').addIntegerOption(o=>o.setName('slot').setRequired(true).setMinValue(1).setMaxValue(6).setDescription('Announcement slot to cancel')), new SlashCommandBuilder().setName('cancel-announce').setDescription('Cancel scheduled announcement').addIntegerOption(o=>o.setName('slot').setRequired(true).setMinValue(1).setMaxValue(6).setDescription('Announcement slot to cancel')),
         new SlashCommandBuilder().setName('공지목록').setDescription('List announce'), new SlashCommandBuilder().setName('list-announce').setDescription('List announce'),
         new SlashCommandBuilder().setName('해고').setDescription('Kick').addUserOption(o=>o.setName('대상').setRequired(true).setDescription('Target')), new SlashCommandBuilder().setName('fire').setDescription('Kick').addUserOption(o=>o.setName('target').setRequired(true).setDescription('Target')),

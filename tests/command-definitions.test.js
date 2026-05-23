@@ -22,7 +22,7 @@ assert(!commandNames.includes('랭킹'));
 assert(!commandNames.includes('ranking'));
 
 const setAnnounce = commands.find(command => command.name === '공지설정').toJSON();
-assert.deepStrictEqual(setAnnounce.options.map(option => option.name), ['slot', 'target', 'target2', 'time', 'content']);
+assert.deepStrictEqual(setAnnounce.options.map(option => option.name), ['slot', 'target', 'time', 'content', 'target2']);
 
 const cancelAnnounce = commands.find(command => command.name === '공지취소').toJSON();
 assert.deepStrictEqual(cancelAnnounce.options.map(option => option.name), ['slot']);

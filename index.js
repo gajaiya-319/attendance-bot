@@ -1090,6 +1090,11 @@ function renderPercentBar(percent, size = 10) {
     return `[${'#'.repeat(filled)}${'.'.repeat(size - filled)}] ${String(safePercent).padStart(3)}%`;
 }
 
+function renderEmbedCodeBlock(text, maxLength = 1010) {
+    const body = truncateWidth(String(text || 'NONE'), maxLength);
+    return `\`\`\`\n${body}\n\`\`\``;
+}
+
 function getDayNightWorkerStats(guild, shift = 'all') {
     const scope = ['all', 'day', 'night'].includes(shift) ? shift : 'all';
     return Object.values(attendanceData).filter(user => {
@@ -2003,7 +2008,7 @@ async function sendDeepReport(type = 'Regular') {
                 const stats = `${u.totalNormal || 0}/${u.totalLate || 0}/${u.totalAbsent || 0}/${u.totalEarly || 0}/${u.totalOT || 0}/${u.offCount || 0}`;
                 content += `${padWidth((u.points || 0).toString(), 5)} ${padWidth(stats, 18)} ${padWidth((u.dcCount || 0).toString(), 4)} | ${u.name?.split('-')[0] || 'Unknown'}\n`;
             });
-            embed.addFields({ name: '전체 인원 지표', value: content + '```' });
+            embed.addFields({ name: '전체 인원 지표', value: renderEmbedCodeBlock(content.replace(/^```\n/, ''), 1000) });
         } else {
             const act = allStats.filter(u => u.checkedIn).length;
             const off = allStats.filter(u => u.dayOff).length;
@@ -2090,14 +2095,14 @@ async function sendOpsReport(type = 'Regular') {
 
             embed.addFields(
                 { name: `📊 ${shiftNameText} Summary Snapshot`, value: `TOTAL ${allStats.length} | WORK BASE ${workBase} | ACTIVE ${activeUsers.length} | FINISHED ${finishedUsers.length} | ABSENT ${absentUsers.length} | STANDBY ${standbyUsers.length} | OFF ${offUsers.length} | OT ${reportOvertimeUsers.length} | DC ${disconnectedUsers.length}`, inline: false },
-                { name: `📈 Daily Rates`, value: `\`\`\`\n${rateBlock}\n\`\`\``, inline: false },
-                { name: `🟢 Active (${activeUsers.length})`, value: `\`\`\`\n${listNames(activeUsers)}\n\`\`\``, inline: false },
-                { name: `⚪ Finished (${finishedUsers.length})`, value: `\`\`\`\n${listNames(finishedUsers)}\n\`\`\``, inline: false },
-                { name: `❌ Absent (${absentUsers.length})`, value: `\`\`\`\n${listNames(absentUsers)}\n\`\`\``, inline: false },
-                { name: `🟡 Standby (${standbyUsers.length})`, value: `\`\`\`\n${listNames(standbyUsers)}\n\`\`\``, inline: false },
-                { name: `🔵 Day Off (${offUsers.length})`, value: `\`\`\`\n${listNames(offUsers)}\n\`\`\``, inline: false },
-                { name: `⚡ Disconnected (${disconnectedUsers.length})`, value: `\`\`\`\n${listNames(disconnectedUsers)}\n\`\`\``, inline: false },
-                { name: `🔥 Overtime (${reportOvertimeUsers.length})`, value: `\`\`\`\n${reportOvertimeUsers.map(ot => attendanceData[ot.id] || ot).map(u => formatExactWidth(u.name || 'Unknown', 16)).join('\n') || 'NONE'}\n\`\`\``, inline: false }
+                { name: `📈 Daily Rates`, value: renderEmbedCodeBlock(rateBlock), inline: false },
+                { name: `🟢 Active (${activeUsers.length})`, value: renderEmbedCodeBlock(listNames(activeUsers)), inline: false },
+                { name: `⚪ Finished (${finishedUsers.length})`, value: renderEmbedCodeBlock(listNames(finishedUsers)), inline: false },
+                { name: `❌ Absent (${absentUsers.length})`, value: renderEmbedCodeBlock(listNames(absentUsers)), inline: false },
+                { name: `🟡 Standby (${standbyUsers.length})`, value: renderEmbedCodeBlock(listNames(standbyUsers)), inline: false },
+                { name: `🔵 Day Off (${offUsers.length})`, value: renderEmbedCodeBlock(listNames(offUsers)), inline: false },
+                { name: `⚡ Disconnected (${disconnectedUsers.length})`, value: renderEmbedCodeBlock(listNames(disconnectedUsers)), inline: false },
+                { name: `🔥 Overtime (${reportOvertimeUsers.length})`, value: renderEmbedCodeBlock(reportOvertimeUsers.map(ot => attendanceData[ot.id] || ot).map(u => formatExactWidth(u.name || 'Unknown', 16)).join('\n') || 'NONE'), inline: false }
             );
             return logChan.send({ embeds: [embed] });
         }
@@ -2130,10 +2135,10 @@ async function sendOpsReport(type = 'Regular') {
 
         embed.addFields(
             { name: `${shiftNameText} Precision Snapshot`, value: `TOTAL ${allStats.length} | ACTIVE ${active.length} | STANDBY ${standby.length} | ABSENT ${absent.length} | OFF ${off.length} | OT ${reportOvertimeUsers.length} | DC ${disconnected.length}`, inline: false },
-            { name: 'Attention', value: `\`\`\`\n${attention}\n\`\`\``, inline: false },
-            { name: 'Target Top 5', value: `\`\`\`\n${top}\n\`\`\``, inline: false },
-            { name: 'Session Credited Time', value: `\`\`\`\n${sessionMetrics}\n\`\`\``, inline: false },
-            { name: 'Full Metrics', value: `\`\`\`\n PTS | Name              |  정  지  결  조  연  휴 | DC\n${metrics}\n\`\`\``, inline: false }
+            { name: 'Attention', value: renderEmbedCodeBlock(attention), inline: false },
+            { name: 'Target Top 5', value: renderEmbedCodeBlock(top), inline: false },
+            { name: 'Session Credited Time', value: renderEmbedCodeBlock(sessionMetrics), inline: false },
+            { name: 'Full Metrics', value: renderEmbedCodeBlock(` PTS | Name              |  정  지  결  조  연  휴 | DC\n${metrics}`), inline: false }
         );
         return logChan.send({ embeds: [embed] });
     } catch (e) {
