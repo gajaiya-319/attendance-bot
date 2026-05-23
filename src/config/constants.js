@@ -1,8 +1,8 @@
 require('dotenv').config();
 
 const CONFIG = {
-    VERSION: '2501.92-STATUS-TRACE-COMMAND',
-    RELEASE_NOTE: 'Add per-user status trace audit command',
+    VERSION: '2501.93-STATUS-SYNC-USER',
+    RELEASE_NOTE: 'Add per-user recorded status sync command',
     GUILD_ID: '1502598521294028830',
     LOG_CHANNEL: '1503681085618262158',
     STATUS_CHANNEL: '1503681415407992962',

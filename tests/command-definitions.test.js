@@ -23,6 +23,11 @@ assert(commandNames.includes('status-trace'));
 assert(hiddenCommandAliases.has('status-trace'));
 assert(visibleNames.includes('상태추적'));
 assert(!visibleNames.includes('status-trace'));
+assert(commandNames.includes('상태동기화'));
+assert(commandNames.includes('status-sync'));
+assert(hiddenCommandAliases.has('status-sync'));
+assert(visibleNames.includes('상태동기화'));
+assert(!visibleNames.includes('status-sync'));
 assert(!commandNames.includes('랭킹'));
 assert(!commandNames.includes('ranking'));
 

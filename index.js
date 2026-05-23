@@ -2653,6 +2653,28 @@ function buildStatusTraceEmbed(member) {
         .setTimestamp();
 }
 
+async function syncUserRecordedStatus(member, actor) {
+    const now = moment().tz(CONFIG.TIMEZONE);
+    const user = ensureUserData(member, determineShift(member));
+    const before = {
+        attendanceStatus: user.attendanceStatus || 'MISSING',
+        voiceStatus: user.voiceStatus || 'MISSING'
+    };
+    const next = {
+        attendanceStatus: deriveAttendanceStatusForAudit(user),
+        voiceStatus: deriveVoiceStatusForAudit(member, user, now)
+    };
+    const changed = transitionRecordedStatus(user, next, now, 'status-sync-command', 'admin-sync-recorded-status');
+    await writeAdminActionLog('STATUS_SYNC', actor, member, [
+        `attendance=${before.attendanceStatus}->${next.attendanceStatus}`,
+        `voice=${before.voiceStatus}->${next.voiceStatus}`,
+        `changed=${changed}`
+    ]);
+    if (changed) await saveSystemAsync();
+    await renderDashboardCore({ forceMemberRefresh: true });
+    return { user, before, next, changed };
+}
+
 function buildTimeAuditEmbed() {
     const cases = [
         { label: 'Tue Day', shift: 'day', at: '2026-05-19 12:00', start: '2026-05-19 09:00', end: '2026-05-19 19:00' },
@@ -4155,6 +4177,22 @@ client.on(Events.InteractionCreate, async i => {
                 const t = getTargetMember();
                 if (!t) return replyMemberNotFound();
                 return i.reply({ embeds: [buildStatusTraceEmbed(t)], flags: MessageFlags.Ephemeral });
+            }
+            if (n('status-sync') || n('상태동기화')) {
+                if (!isAdmin) return i.reply({ content: 'No perms.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
+                await i.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => null);
+                if (!i.deferred && !i.replied) return;
+                const t = getTargetMember();
+                if (!t) return i.editReply({ content: '대상을 찾을 수 없습니다.' }).then(() => autoDel());
+                const result = await syncUserRecordedStatus(t, i.member);
+                return i.editReply({
+                    content: [
+                        result.changed ? '✅ 상태 동기화 완료.' : '✅ 이미 동기화되어 있습니다.',
+                        `대상: ${result.user.name || t.displayName}`,
+                        `Attendance: ${result.before.attendanceStatus} -> ${result.next.attendanceStatus}`,
+                        `Voice: ${result.before.voiceStatus} -> ${result.next.voiceStatus}`
+                    ].join('\n')
+                }).then(() => autoDel());
             }
             if (n('time-audit') || n('시간검사')) {
                 if (!isAdmin) return i.reply({ content: 'No perms.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
