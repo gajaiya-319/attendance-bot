@@ -2333,7 +2333,7 @@ async function autoAssignGuestForUnassignedMembers(guild) {
             return changed;
         }
 
-        const guestNick = `${member.id} - Guest`.slice(0, 32);
+        const guestNick = roleService.buildGuestNickname(member.displayName || member.user?.username);
         let memberChanged = false;
         if (member.displayName !== guestNick) {
             await member.setNickname(guestNick, 'Unassigned for more than 24 hours').catch(e => {

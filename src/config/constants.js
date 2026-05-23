@@ -1,8 +1,8 @@
 require('dotenv').config();
 
 const CONFIG = {
-    VERSION: '2501.71-SAFETY-CLEANUP',
-    RELEASE_NOTE: 'Harden admin list and ignore runtime data',
+    VERSION: '2501.72-GUEST-NICKNAME',
+    RELEASE_NOTE: 'Use display names for automatic guest nicknames',
     GUILD_ID: '1502598521294028830',
     LOG_CHANNEL: '1503681085618262158',
     STATUS_CHANNEL: '1503681415407992962',
