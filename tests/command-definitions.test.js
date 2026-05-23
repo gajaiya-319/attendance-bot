@@ -18,6 +18,11 @@ assert(commandNames.includes('combined-ranking'));
 assert(hiddenCommandAliases.has('combined-ranking'));
 assert(visibleNames.includes('통합랭킹'));
 assert(!visibleNames.includes('combined-ranking'));
+assert(commandNames.includes('상태추적'));
+assert(commandNames.includes('status-trace'));
+assert(hiddenCommandAliases.has('status-trace'));
+assert(visibleNames.includes('상태추적'));
+assert(!visibleNames.includes('status-trace'));
 assert(!commandNames.includes('랭킹'));
 assert(!commandNames.includes('ranking'));
 

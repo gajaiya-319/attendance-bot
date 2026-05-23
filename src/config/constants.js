@@ -1,8 +1,8 @@
 require('dotenv').config();
 
 const CONFIG = {
-    VERSION: '2501.91-REPORT-FIELD-HARD-LIMIT',
-    RELEASE_NOTE: 'Clamp report code blocks by Discord field length',
+    VERSION: '2501.92-STATUS-TRACE-COMMAND',
+    RELEASE_NOTE: 'Add per-user status trace audit command',
     GUILD_ID: '1502598521294028830',
     LOG_CHANNEL: '1503681085618262158',
     STATUS_CHANNEL: '1503681415407992962',

@@ -2607,6 +2607,52 @@ async function buildStatusAuditEmbed(guild) {
         .setTimestamp();
 }
 
+function buildStatusTraceEmbed(member) {
+    const user = attendanceData[member.id] || ensureUserData(member, determineShift(member));
+    const events = Array.isArray(user.attendanceEvents) ? user.attendanceEvents.slice(-12).reverse() : [];
+    const warnings = Array.isArray(user.statusTransitionWarnings) ? user.statusTransitionWarnings.slice(-8).reverse() : [];
+    const current = [
+        `name=${user.name || member.displayName}`,
+        `shift=${user.shift || 'none'}`,
+        `checkedIn=${Boolean(user.checkedIn)}`,
+        `finished=${Boolean(user.isFinished)}`,
+        `dayOff=${Boolean(user.dayOff)}`,
+        `disconnected=${Boolean(user.disconnected)}`,
+        `attendance=${user.attendanceStatus || 'MISSING'}`,
+        `voice=${user.voiceStatus || 'MISSING'}`,
+        `transitionSeq=${Number(user.statusTransitionSeq) || 0}`
+    ].join('\n');
+    const eventText = events.length
+        ? events.map(event => {
+            const time = event?.at ? moment(event.at).tz(CONFIG.TIMEZONE).format('MM-DD HH:mm') : 'unknown';
+            const type = truncateWidth(event?.type || 'unknown', 24).padEnd(24);
+            const source = truncateWidth(event?.source || event?.meta?.source || 'unknown', 16);
+            const reason = truncateWidth(event?.meta?.reason || event?.reason || '', 28);
+            return `${time} | ${type} | ${source} | ${reason}`;
+        }).join('\n')
+        : 'No attendance events found.';
+    const warningText = warnings.length
+        ? warnings.map(entry => {
+            const time = entry?.at ? moment(entry.at).tz(CONFIG.TIMEZONE).format('MM-DD HH:mm') : 'unknown';
+            const source = truncateWidth(entry?.source || 'unknown', 14).padEnd(14);
+            const reason = truncateWidth(entry?.reason || 'no-reason', 22).padEnd(22);
+            const detail = truncateWidth((entry?.warnings || []).join(', ') || 'unknown-warning', 36);
+            return `${time} | ${source} | ${reason} | ${detail}`;
+        }).join('\n')
+        : 'No transition warnings found.';
+
+    return new EmbedBuilder()
+        .setTitle(`Status Trace - ${member.displayName}`)
+        .setColor(warnings.length ? '#E67E22' : '#5865F2')
+        .addFields(
+            { name: 'Current Saved State', value: renderEmbedCodeBlock(current), inline: false },
+            { name: 'Recent Events', value: renderEmbedCodeBlock(eventText), inline: false },
+            { name: 'Recent Transition Warnings', value: renderEmbedCodeBlock(warningText), inline: false }
+        )
+        .setFooter({ text: `Read-only trace | ${CONFIG.VERSION}` })
+        .setTimestamp();
+}
+
 function buildTimeAuditEmbed() {
     const cases = [
         { label: 'Tue Day', shift: 'day', at: '2026-05-19 12:00', start: '2026-05-19 09:00', end: '2026-05-19 19:00' },
@@ -4103,6 +4149,12 @@ client.on(Events.InteractionCreate, async i => {
             if (n('status-audit') || n('상태검사')) {
                 if (!isAdmin) return i.reply({ content: 'No perms.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
                 return i.reply({ embeds: [await buildStatusAuditEmbed(i.guild)], flags: MessageFlags.Ephemeral });
+            }
+            if (n('status-trace') || n('상태추적')) {
+                if (!isAdmin) return i.reply({ content: 'No perms.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
+                const t = getTargetMember();
+                if (!t) return replyMemberNotFound();
+                return i.reply({ embeds: [buildStatusTraceEmbed(t)], flags: MessageFlags.Ephemeral });
             }
             if (n('time-audit') || n('시간검사')) {
                 if (!isAdmin) return i.reply({ content: 'No perms.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
