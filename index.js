@@ -1061,26 +1061,41 @@ function renderReportMetricRow(user) {
     return `${points} | ${name} | ${stats} | ${dc}`;
 }
 
+function renderReportMetricHeader() {
+    return '점수 | 이름           | 정상 결석 지각 조퇴 연장 휴무 | DC';
+}
+
 function renderReportTopRow(user, index) {
     const rank = String(index + 1).padStart(2, '0');
     const name = getReportName(user, 14);
     const points = String(safeNumber(user.points)).padStart(4);
-    return `${rank} ${name} ${points} pts | ${getReportStatsColumns(user)}`;
+    return `${rank} | ${name} | ${points} | ${getReportStatsColumns(user)}`;
+}
+
+function renderReportStatsLegend() {
+    return '순위 | 이름           | 점수 | 정상 결석 지각 조퇴 연장 휴무';
+}
+
+function formatDurationClock(minutes) {
+    const safeMinutes = Math.max(0, Number(minutes) || 0);
+    const hours = Math.floor(safeMinutes / 60);
+    const mins = safeMinutes % 60;
+    return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
 }
 
 function renderSessionMetricRow(user, now = moment().tz(CONFIG.TIMEZONE)) {
     const summary = getUserLatestSessionSummary(user, now);
     const name = getReportName(user, 14);
-    if (!summary) return `${name} | no session data`;
+    if (!summary) return `${name} | 세션없음 | 00:00 | 00:00 | 00:00 | 00:00`;
     const session = summary.session;
-    const state = session.clockOutAt ? 'CLOSED' : 'OPEN  ';
+    const state = session.clockOutAt ? '퇴근' : '근무';
     return [
         name,
-        state,
-        `credit ${formatDuration(summary.creditedMinutes)}`,
-        `gross ${formatDuration(summary.grossMinutes)}`,
-        `off ${formatDuration(summary.liveOffMinutes)}`,
-        `dc ${formatDuration(summary.dcMinutes)}`
+        padWidth(state, 4),
+        formatDurationClock(summary.creditedMinutes),
+        formatDurationClock(summary.grossMinutes),
+        formatDurationClock(summary.liveOffMinutes),
+        formatDurationClock(summary.dcMinutes)
     ].join(' | ');
 }
 
@@ -2125,20 +2140,22 @@ async function sendOpsReport(type = 'Regular') {
             ...disconnected.slice(0, 5).map(u => `DC     ${padWidth(truncateWidth(u.name || 'Unknown', 16), 17)} ${u.disconnectedAt ? formatDuration(now.diff(moment(u.disconnectedAt), 'minutes')) : ''}`),
             ...absent.slice(0, 5).map(u => `ABSENT ${padWidth(truncateWidth(u.name || 'Unknown', 16), 17)} +${formatDuration(now.diff(getShiftBounds(u.shift, now).start, 'minutes'))}`)
         ].join('\n') || 'No urgent issues.';
-        const top = sorted.slice(0, 5).map((u, idx) => renderReportTopRow(u, idx)).join('\n') || 'No data.';
+        const topRows = sorted.slice(0, 5).map((u, idx) => renderReportTopRow(u, idx)).join('\n') || 'No data.';
+        const top = `${renderReportStatsLegend()}\n${topRows}`;
         const metrics = sorted.slice(0, 20).map(renderReportMetricRow).join('\n') || 'No data.';
         const sessionMetrics = sorted
             .filter(u => Array.isArray(u.sessions) && u.sessions.length > 0)
             .slice(0, 15)
             .map(u => renderSessionMetricRow(u, now))
             .join('\n') || 'No session data.';
+        const sessionMetricsTable = `이름           | 상태 | 인정  | 총시간 | OFF   | DC\n${sessionMetrics}`;
 
         embed.addFields(
             { name: `${shiftNameText} Precision Snapshot`, value: `TOTAL ${allStats.length} | ACTIVE ${active.length} | STANDBY ${standby.length} | ABSENT ${absent.length} | OFF ${off.length} | OT ${reportOvertimeUsers.length} | DC ${disconnected.length}`, inline: false },
             { name: 'Attention', value: renderEmbedCodeBlock(attention), inline: false },
-            { name: 'Target Top 5', value: renderEmbedCodeBlock(top), inline: false },
-            { name: 'Session Credited Time', value: renderEmbedCodeBlock(sessionMetrics), inline: false },
-            { name: 'Full Metrics', value: renderEmbedCodeBlock(` PTS | Name              |  정  지  결  조  연  휴 | DC\n${metrics}`), inline: false }
+            { name: '상위 5명', value: renderEmbedCodeBlock(top), inline: false },
+            { name: '세션 인정 시간', value: renderEmbedCodeBlock(sessionMetricsTable), inline: false },
+            { name: '전체 지표', value: renderEmbedCodeBlock(`${renderReportMetricHeader()}\n${metrics}`), inline: false }
         );
         return logChan.send({ embeds: [embed] });
     } catch (e) {
