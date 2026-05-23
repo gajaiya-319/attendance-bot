@@ -2767,15 +2767,33 @@ async function syncUserRecordedStatus(member, actor) {
         attendanceStatus: deriveAttendanceStatusForAudit(user),
         voiceStatus: deriveVoiceStatusForAudit(member, user, now)
     };
+
+    let backupPath = null;
+    try {
+        backupPath = await createBackupSnapshot('before-status-sync');
+    } catch (error) {
+        console.error('[STATUS SYNC BACKUP ERROR]', error);
+    }
+
+    if (!backupPath) {
+        await writeAdminActionLog('STATUS_SYNC_ABORTED', actor, member, [
+            'reason=backup-failed',
+            `attendance=${before.attendanceStatus}->${next.attendanceStatus}`,
+            `voice=${before.voiceStatus}->${next.voiceStatus}`
+        ]);
+        return { user, before, next, changed: false, backupPath: null, ok: false };
+    }
+
     const changed = transitionRecordedStatus(user, next, now, 'status-sync-command', 'admin-sync-recorded-status');
     await writeAdminActionLog('STATUS_SYNC', actor, member, [
         `attendance=${before.attendanceStatus}->${next.attendanceStatus}`,
         `voice=${before.voiceStatus}->${next.voiceStatus}`,
-        `changed=${changed}`
+        `changed=${changed}`,
+        `backup=${backupPath}`
     ]);
     if (changed) await saveSystemAsync();
     await renderDashboardCore({ forceMemberRefresh: true });
-    return { user, before, next, changed };
+    return { user, before, next, changed, backupPath, ok: true };
 }
 
 function buildTimeAuditEmbed() {
@@ -4294,12 +4312,16 @@ client.on(Events.InteractionCreate, async i => {
                 const t = getTargetMember();
                 if (!t) return i.editReply({ content: '대상을 찾을 수 없습니다.' }).then(() => autoDel());
                 const result = await syncUserRecordedStatus(t, i.member);
+                if (!result.ok) {
+                    return i.editReply({ content: '백업 생성 실패로 상태 동기화를 중단했습니다. 데이터는 변경하지 않았습니다.' }).then(() => autoDel());
+                }
                 return i.editReply({
                     content: [
                         result.changed ? '✅ 상태 동기화 완료.' : '✅ 이미 동기화되어 있습니다.',
                         `대상: ${result.user.name || t.displayName}`,
                         `Attendance: ${result.before.attendanceStatus} -> ${result.next.attendanceStatus}`,
-                        `Voice: ${result.before.voiceStatus} -> ${result.next.voiceStatus}`
+                        `Voice: ${result.before.voiceStatus} -> ${result.next.voiceStatus}`,
+                        `Backup: ${result.backupPath}`
                     ].join('\n')
                 }).then(() => autoDel());
             }
