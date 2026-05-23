@@ -1,2 +1,7 @@
 node_modules
 .env
+attendanceData.json
+attendanceData.json.bak
+logs/*.jsonl
+backups/*.json
+snippet.js

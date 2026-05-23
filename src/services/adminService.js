@@ -5,6 +5,7 @@ function createAdminService({ getAnnounceData, truncateWidth }) {
         return Object.entries(getAnnounceData())
             .map(([slot, d]) => {
                 if (!d) return `Slot ${slot}: empty`;
+                if (typeof d !== 'object') return `Slot ${slot}: invalid legacy data`;
                 const state = d.active ? 'ON' : 'OFF';
                 const roleIds = Array.isArray(d.roleIds)
                     ? d.roleIds.filter(Boolean)
