@@ -1,8 +1,8 @@
 require('dotenv').config();
 
 const CONFIG = {
-    VERSION: '2501.83-TOP-RANKING-HEADER',
-    RELEASE_NOTE: 'Align Korean top ranking report headers',
+    VERSION: '2501.86-COMPACT-TOP-RANKING',
+    RELEASE_NOTE: 'Compact top ranking report table',
     GUILD_ID: '1502598521294028830',
     LOG_CHANNEL: '1503681085618262158',
     STATUS_CHANNEL: '1503681415407992962',

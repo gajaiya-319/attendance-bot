@@ -1053,27 +1053,38 @@ function getReportStatsColumns(user) {
     ].map(v => String(v).padStart(3)).join(' ');
 }
 
+function getCompactReportStatsColumns(user) {
+    return [
+        safeNumber(user.totalNormal),
+        safeNumber(user.totalAbsent),
+        safeNumber(user.totalLate),
+        safeNumber(user.totalEarly),
+        safeNumber(user.totalOT),
+        safeNumber(user.offCount)
+    ].map(v => String(v).padStart(2)).join(' ');
+}
+
 function renderReportMetricRow(user) {
     const points = String(safeNumber(user.points)).padStart(4);
-    const name = getReportName(user, 14);
-    const stats = getReportStatsColumns(user);
+    const name = getReportName(user, 11);
+    const stats = getCompactReportStatsColumns(user);
     const dc = String(safeNumber(user.dcCount)).padStart(2);
-    return `${points} | ${name} | ${stats} | ${dc}`;
+    return `${points}|${name}|${stats}|${dc}`;
 }
 
 function renderReportMetricHeader() {
-    return '점수 | 이름           | 정상 결석 지각 조퇴 연장 휴무 | DC';
+    return '점수|이름       |정 결 지 조 연 휴|DC';
 }
 
 function renderReportTopRow(user, index) {
     const rank = String(index + 1).padStart(2, '0');
-    const name = getReportName(user, 14);
-    const points = String(safeNumber(user.points)).padStart(4);
-    return `${rank} | ${name} | ${points} | ${getReportStatsColumns(user)}`;
+    const name = getReportName(user, 10);
+    const points = String(safeNumber(user.points)).padStart(3);
+    return `${rank}|${name}|${points}|${getCompactReportStatsColumns(user)}`;
 }
 
 function renderReportStatsLegend() {
-    return '순위 | 이름           | 점수 | 정상 결석 지각 조퇴 연장 휴무';
+    return '순위|이름      |점수|정 결 지 조 연 휴';
 }
 
 function formatDurationClock(minutes) {
@@ -1085,18 +1096,18 @@ function formatDurationClock(minutes) {
 
 function renderSessionMetricRow(user, now = moment().tz(CONFIG.TIMEZONE)) {
     const summary = getUserLatestSessionSummary(user, now);
-    const name = getReportName(user, 14);
-    if (!summary) return `${name} | 세션없음 | 00:00 | 00:00 | 00:00 | 00:00`;
+    const name = getReportName(user, 12);
+    if (!summary) return `${name}|세션없음|00:00|00:00|00:00|00:00`;
     const session = summary.session;
     const state = session.clockOutAt ? '퇴근' : '근무';
     return [
         name,
-        padWidth(state, 4),
+        state,
         formatDurationClock(summary.creditedMinutes),
         formatDurationClock(summary.grossMinutes),
         formatDurationClock(summary.liveOffMinutes),
         formatDurationClock(summary.dcMinutes)
-    ].join(' | ');
+    ].join('|');
 }
 
 function renderPercentBar(percent, size = 10) {
@@ -2148,7 +2159,7 @@ async function sendOpsReport(type = 'Regular') {
             .slice(0, 15)
             .map(u => renderSessionMetricRow(u, now))
             .join('\n') || 'No session data.';
-        const sessionMetricsTable = `이름           | 상태 | 인정  | 총시간 | OFF   | DC\n${sessionMetrics}`;
+        const sessionMetricsTable = `이름        |상태|인정 |총시간|OFF  |DC\n${sessionMetrics}`;
 
         embed.addFields(
             { name: `${shiftNameText} Precision Snapshot`, value: `TOTAL ${allStats.length} | ACTIVE ${active.length} | STANDBY ${standby.length} | ABSENT ${absent.length} | OFF ${off.length} | OT ${reportOvertimeUsers.length} | DC ${disconnected.length}`, inline: false },
