@@ -7,6 +7,47 @@ const {
 const commands = buildCommandDefinitions();
 const commandNames = commands.map(command => command.name);
 const visibleNames = commandNames.filter(name => !hiddenCommandAliases.has(name));
+const visibleCommands = commands.filter(command => !hiddenCommandAliases.has(command.name)).map(command => command.toJSON());
+
+function assertUnique(values, label) {
+    const seen = new Set();
+    for (const value of values) {
+        assert(!seen.has(value), `${label} must be unique: ${value}`);
+        seen.add(value);
+    }
+}
+
+function validateOption(option, path) {
+    assert(option.name, `${path} option name is required`);
+    assert(option.description, `${path}.${option.name} option description is required`);
+    assert(option.name.length <= 32, `${path}.${option.name} option name too long`);
+    assert(option.description.length <= 100, `${path}.${option.name} option description too long`);
+    assert(!Array.isArray(option.choices) || option.choices.length <= 25, `${path}.${option.name} has too many choices`);
+
+    if (Array.isArray(option.choices)) {
+        assertUnique(option.choices.map(choice => choice.name), `${path}.${option.name} choice names`);
+        assertUnique(option.choices.map(choice => String(choice.value)), `${path}.${option.name} choice values`);
+        for (const choice of option.choices) {
+            assert(choice.name.length <= 100, `${path}.${option.name} choice name too long`);
+            assert(String(choice.value).length <= 100, `${path}.${option.name} choice value too long`);
+        }
+    }
+}
+
+assert(commands.length <= 100, 'total command definitions must fit Discord limit');
+assert(visibleCommands.length <= 100, 'visible guild commands must fit Discord limit');
+assertUnique(commandNames, 'command names');
+assertUnique(visibleNames, 'visible command names');
+
+for (const command of visibleCommands) {
+    assert(command.name.length >= 1 && command.name.length <= 32, `${command.name} command name length invalid`);
+    assert(command.description.length >= 1 && command.description.length <= 100, `${command.name} description length invalid`);
+    assert(!Array.isArray(command.options) || command.options.length <= 25, `${command.name} has too many options`);
+    assertUnique((command.options || []).map(option => option.name), `${command.name} option names`);
+    for (const option of command.options || []) {
+        validateOption(option, command.name);
+    }
+}
 
 assert(commandNames.includes('라이브예외'));
 assert(commandNames.includes('live-exception'));
