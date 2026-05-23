@@ -47,4 +47,8 @@ async function recordLog(user, actionType, customText = null, earlyOverrideTime 
     if (logChan) {
         logChan.send(`\`[${now.format('MM/DD HH:mm')}]\` ${shiftIcon} 👤 **${user.name}** → ${aIcon} ${baseTxt}`)
             .catch(e => console.error('[LOG SEND ERROR]', e));
+<<<<<<< ours
     }
+=======
+    }
+>>>>>>> theirs
