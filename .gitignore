@@ -1,7 +1,12 @@
 node_modules
 .env
+
+# Runtime attendance data. These files belong to the running bot/server,
+# not to source control.
 attendanceData.json
 attendanceData.json.bak
 logs/*.jsonl
-backups/*.json
+backups/attendanceData-*.json
+
+# Local scratch files.
 snippet.js
