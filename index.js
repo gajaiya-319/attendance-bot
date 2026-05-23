@@ -841,7 +841,7 @@ async function recordLog(user, actionType, customText = null, earlyOverrideTime 
         await client.channels.fetch(CONFIG.LOG_CHANNEL).catch(() => null);
     if (logChan) {
         const timestamp = eventTime.format('MM/DD HH:mm');
-        logChan.send(`\`[${timestamp}]\` ${shiftIcon} 👤 **${user.name}** → ${aIcon} ${baseTxt}`)
+        await logChan.send(`\`[${timestamp}]\` ${shiftIcon} 👤 **${user.name}** → ${aIcon} ${baseTxt}`)
             .catch(e => console.error('[LOG SEND ERROR]', e));
     }
 }
@@ -1893,7 +1893,15 @@ const getNoticeEmbed = (type) => {
         `   \u001b[1;36m${padWidth('[ LIVE MONITORING ]', noticeWidth - 3)}\u001b[0m`,
         '```'
     ].join('\n');
-    const formatHoursLine = (icon, label, timeText) => `${icon} ${padWidth(label, 11)}: ${timeText}`;
+    const P = '\u001b[1;35m';  // 분홍 (시간 숫자)
+    const G = '\u001b[1;32m';  // 초록 (분/AM/PM 등 나머지)
+    const W = '\u001b[1;37m';  // 흰색 (레이블, 괄호 등)
+    const R = '\u001b[0m';     // 리셋
+    const colorTime = (t) => t
+        .replace(/(\d{2})(:)(\d{2})(AM|PM)/g, `${P}$1${G}$2$3$4${R}`)
+        .replace(/(\([\dh]+\))/g, `${W}$1${R}`);
+    const formatHoursLine = (icon, label, timeText) =>
+        `${icon} ${W}${padWidth(label, 11)}:${R} ${colorTime(timeText)}`;
     const regularLine = isDay
         ? formatHoursLine('📅', 'MON/WED-SUN', '09:00AM-09:00PM (12h)')
         : formatHoursLine('📅', 'MON/WED-SUN', '09:00PM-09:00AM (12h)');
@@ -1923,7 +1931,7 @@ const getNoticeEmbed = (type) => {
 
     return new EmbedBuilder()
         .setTitle(isDay ? '☀️ ELITE DAY SHIFT PROTOCOL' : '🌙 ELITE NIGHT SHIFT PROTOCOL')
-        .setDescription(`${clockLine}\n\n${divider}\n### ⏰ WORKING HOURS\n\`\`\`yaml\n${workingHours}\n\`\`\`\n⚠️ **TUE Note :** **${tueNote}**\n${divider}\n### 🚨 OPERATIONAL RULES\n${rules}\n\n⏳ **STRICT PUNCTUALITY**\n📢 **Be ready BEFORE the shift starts.**\n${divider}\n### 💡 BUTTON INSTRUCTIONS\n${buttonGuide}`)
+        .setDescription(`${clockLine}\n\n${divider}\n### ⏰ WORKING HOURS\n\`\`\`ansi\n${workingHours}\n\`\`\`\n⚠️ **TUE Note :** **${tueNote}**\n${divider}\n### 🚨 OPERATIONAL RULES\n${rules}\n\n⏳ **STRICT PUNCTUALITY**\n📢 **Be ready BEFORE the shift starts.**\n${divider}\n### 💡 BUTTON INSTRUCTIONS\n${buttonGuide}`)
         .setColor(isDay ? '#F1C40F' : '#3498DB')
         .setFooter({ text: 'BE BRIGHT. BE PROFESSIONAL. ✨' });
 };
@@ -2672,13 +2680,7 @@ async function buildPermissionCheckEmbed(guild) {
 }
 
 async function buildDayOffLogEmbed(limit = 10) {
-    let rows = [];
-    try {
-        const raw = await fs.readFile(CONFIG.FILES.DAYOFF_LOG, 'utf8');
-        rows = raw.trim().split(/\r?\n/).filter(Boolean).slice(-limit);
-    } catch {
-        rows = [];
-    }
+    const rows = await readDayOffLog(limit);
     const text = rows.length ? rows.join('\n') : 'No day off audit log found.';
     return new EmbedBuilder()
         .setTitle('Day Off Audit Log')
@@ -2715,7 +2717,7 @@ async function performSmartReset(targetShift) {
         }
     }
     await saveSystemAsync();
-    renderDashboardCore();
+    await renderDashboardCore();
 }
 
 async function checkGracePeriods() {
@@ -2740,15 +2742,21 @@ async function checkGracePeriods() {
             const m = client.guilds.cache.get(CONFIG.GUILD_ID)?.members.cache.get(id);
             const effectiveOut = moment(u.pendingClockOut?.at || u.liveOffStartedAt).tz(CONFIG.TIMEZONE);
             const liveOffTimeoutText = `라이브 OFF 유예 초과 자동 퇴근 (인정 퇴근 ${effectiveOut.format('hh:mm A')} / 처리 ${now.format('hh:mm A')})`;
-            await handleClockOut(
-                m || { id },
-                u,
-                now,
-                liveOffTimeoutText,
-                effectiveOut,
-                { effectiveTime: effectiveOut, detectedAt: now, forceIcon: '🔴', clockOutSource: 'live-off-timeout' }
-            );
+            if (m) {
+                await handleClockOut(m, u, now, liveOffTimeoutText, effectiveOut,
+                    { effectiveTime: effectiveOut, detectedAt: now, forceIcon: '🔴', clockOutSource: 'live-off-timeout' }
+                );
+            } else {
+                console.warn(`[GRACE WARN] live-off timeout: member ${id} not in cache, applying state only.`);
+                u.checkedIn = false;
+                u.disconnected = false;
+                u.pendingClockOut = null;
+                u.liveOffStartedAt = null;
+                u.isFinished = true;
+                await recordLog(u, 'out', liveOffTimeoutText, effectiveOut, { effectiveTime: effectiveOut, forceIcon: '🔴' });
+            }
             if (m?.send) {
+                if (!Array.isArray(u.liveOffWarningMarks)) u.liveOffWarningMarks = [];
                 if (!u.liveOffWarningMarks.includes(CONFIG.LIVE_OFF_CLOCK_OUT_MINS)) {
                     u.liveOffWarningMarks.push(CONFIG.LIVE_OFF_CLOCK_OUT_MINS);
                 }
@@ -2775,12 +2783,22 @@ async function checkGracePeriods() {
             const scheduledEnd = getScheduledEndMoment(u, effectiveDcOut);
             const earlyMins = scheduledEnd ? scheduledEnd.diff(effectiveDcOut, 'minutes') : 0;
             const customMsg = earlyMins > CONFIG.CLOCK_OUT_GRACE_MINS ? 'DC 유예 시간 초과 (조기 퇴근)' : 'DC 유예 시간 초과 (정상 퇴근)';
-            await handleClockOut(m || { id }, u, now, customMsg, effectiveDcOut, {
-                effectiveTime: effectiveDcOut,
-                detectedAt: now,
-                forceIcon: '🔴',
-                clockOutSource: 'dc-timeout'
-            });
+            if (m) {
+                await handleClockOut(m, u, now, customMsg, effectiveDcOut, {
+                    effectiveTime: effectiveDcOut,
+                    detectedAt: now,
+                    forceIcon: '🔴',
+                    clockOutSource: 'dc-timeout'
+                });
+            } else {
+                console.warn(`[GRACE WARN] dc-timeout: member ${id} not in cache, applying state only.`);
+                u.checkedIn = false;
+                u.disconnected = false;
+                u.pendingClockOut = null;
+                u.disconnectedAt = null;
+                u.isFinished = true;
+                await recordLog(u, 'out', customMsg, effectiveDcOut, { effectiveTime: effectiveDcOut, forceIcon: '🔴' });
+            }
             if (m?.send) {
                 await m.send([
                     '🌿 Quick update',
@@ -2812,13 +2830,17 @@ async function autoOvertimeCheck() {
     const guild = client.guilds.cache.get(CONFIG.GUILD_ID);
 
     const preOtBefore = overtimeUsers.length;
-    overtimeUsers = overtimeUsers.filter(ot => {
-        if (ot.type !== 'PRE_OT') return true;
+    const preOtToRemove = [];
+    for (const ot of overtimeUsers) {
+        if (ot.type !== 'PRE_OT') continue;
         const u = attendanceData[ot.id];
         const member = guild?.members.cache.get(ot.id);
-        if (!u || !member || u.dayOff || u.isFinished) return false;
+        if (!u || !member || u.dayOff || u.isFinished) {
+            preOtToRemove.push(ot.id);
+            continue;
+        }
         const bounds = getShiftBounds(u.shift, now);
-        if (!bounds?.start || now.isBefore(bounds.start)) return true;
+        if (!bounds?.start || now.isBefore(bounds.start)) continue;
 
         transitionRecordedStatus(u, {
             attendanceStatus: 'WORKING',
@@ -2829,10 +2851,13 @@ async function autoOvertimeCheck() {
         u.pendingManualOT = false;
         u.isFinished = false;
         u.checkedIn = true;
-        recordLog(u, 'in', '정시 근무 시작 (사전 OT 종료)', null, { effectiveTime: bounds.start });
+        await recordLog(u, 'in', '정시 근무 시작 (사전 OT 종료)', null, { effectiveTime: bounds.start });
+        preOtToRemove.push(ot.id);
         changed = true;
-        return false;
-    });
+    }
+    if (preOtToRemove.length > 0) {
+        overtimeUsers = overtimeUsers.filter(ot => !preOtToRemove.includes(ot.id));
+    }
     if (overtimeUsers.length !== preOtBefore) changed = true;
 
     for (const id in attendanceData) {
@@ -3134,6 +3159,15 @@ async function appendDayOffAudit(event, payload = {}) {
         await fs.appendFile(CONFIG.FILES.DAYOFF_LOG, `${JSON.stringify(record)}\n`);
     } catch (e) {
         console.error('[DAYOFF AUDIT LOG ERROR]', e);
+    }
+}
+
+async function readDayOffLog(limit = 10) {
+    try {
+        const raw = await fs.readFile(CONFIG.FILES.DAYOFF_LOG, 'utf8');
+        return raw.trim().split(/\r?\n/).filter(Boolean).slice(-limit);
+    } catch {
+        return [];
     }
 }
 
@@ -4677,7 +4711,13 @@ client.once(Events.ClientReady, async () => {
     const g = await client.guilds.fetch(CONFIG.GUILD_ID);
     await refreshGuildMembers(g, { force: true });
 
+    let heartbeatRunning = false;
     setInterval(async () => {
+        if (heartbeatRunning) {
+            console.warn('[HEARTBEAT WARN] Previous tick still running, skipping.');
+            return;
+        }
+        heartbeatRunning = true;
         try {
             await syncVoiceStates();
             await reconcileAttendanceMembership(client.guilds.cache.get(CONFIG.GUILD_ID));
@@ -4695,6 +4735,8 @@ client.once(Events.ClientReady, async () => {
             await renderDashboardCore();
         } catch (e) {
             console.error('[HEARTBEAT ERROR]', e);
+        } finally {
+            heartbeatRunning = false;
         }
     }, 60000);
 

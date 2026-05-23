@@ -1,8 +1,8 @@
 require('dotenv').config();
 
 const CONFIG = {
-    VERSION: '2501.68-WORKING-HOURS-COLON-ALIGN',
-    RELEASE_NOTE: 'Align working hours label colons',
+    VERSION: '2501.69-HEARTBEAT-STABILITY',
+    RELEASE_NOTE: 'Import stable heartbeat and timeout handling',
     GUILD_ID: '1502598521294028830',
     LOG_CHANNEL: '1503681085618262158',
     STATUS_CHANNEL: '1503681415407992962',
