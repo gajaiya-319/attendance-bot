@@ -78,6 +78,24 @@ const service = createAttendanceService({
     assert.strictEqual(user.attendanceStatus, 'OVERTIME', 'attendance status changes');
     assert.strictEqual(user.voiceStatus, 'LIVE_ON', 'voice status changes');
     assert.strictEqual(user.attendanceEvents.at(-1).type, 'recorded_status_changed', 'transition event is recorded');
+    assert.strictEqual(user.attendanceEvents.at(-1).meta.transitionId, 1, 'status transition receives a sequence id');
+}
+
+{
+    const user = state.attendanceData.user1;
+    user.dayOff = true;
+    user.attendanceStatus = 'DAY_OFF';
+    user.voiceStatus = 'OFFLINE';
+    const changed = service.transitionRecordedStatus(user, {
+        attendanceStatus: 'WORKING',
+        voiceStatus: 'LIVE_ON'
+    }, at('2026-05-22 09:10'), 'unit-test', 'bad-dayoff-transition');
+
+    assert.strictEqual(changed, true, 'unusual transition is still recorded');
+    assert.ok(user.statusTransitionWarnings.length > 0, 'unusual transition is stored in warning history');
+    assert.ok(user.attendanceEvents.at(-1).meta.policyWarnings.some(w => w.startsWith('dayoff-user-attendance-change')), 'event includes policy warning');
+
+    user.dayOff = false;
 }
 
 {

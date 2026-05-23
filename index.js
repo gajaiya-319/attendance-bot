@@ -34,6 +34,7 @@ const createRoleService = require('./src/services/roleService');
 const createDayOffService = require('./src/services/dayoffService');
 const createAdminService = require('./src/services/adminService');
 const createReportRenderer = require('./src/services/reportRenderer');
+const { collectStatusTransitionWarnings } = require('./src/services/stateTransitionPolicy');
 const { buildCommandDefinitions, hiddenCommandAliases } = require('./src/commands/definitions');
 const {
     createAutoDelete,
@@ -2575,16 +2576,34 @@ async function buildStatusAuditEmbed(guild) {
     }
 
     const text = rows.length ? rows.slice(0, 30).join('\n') : 'No status mismatches found.';
+    const transitionWarnings = collectStatusTransitionWarnings(attendanceData, { limit: 10 });
+    const warningText = transitionWarnings.length
+        ? transitionWarnings.map(entry => {
+            const time = entry.at ? moment(entry.at).tz(CONFIG.TIMEZONE).format('MM-DD HH:mm') : 'unknown';
+            const name = truncateWidth(entry.userName || entry.userId || 'Unknown', 14).padEnd(14);
+            const source = truncateWidth(entry.source || 'unknown', 12).padEnd(12);
+            const warning = truncateWidth((entry.warnings || []).join(', ') || 'unknown-warning', 42);
+            return `${time} | ${name} | ${source} | ${warning}`;
+        }).join('\n')
+        : 'No transition warnings found.';
+
     return new EmbedBuilder()
         .setTitle('Recorded Status Audit')
-        .setColor(rows.length ? '#E67E22' : '#2ECC71')
-        .setDescription(`Checked: ${checked}\nMismatches: ${rows.length}`)
-        .addFields({
-            name: 'Details',
-            value: `\`\`\`\n${text}\n\`\`\``,
-            inline: false
-        })
-        .setFooter({ text: 'Recorded -> Expected. This command does not change data.' })
+        .setColor(rows.length || transitionWarnings.length ? '#E67E22' : '#2ECC71')
+        .setDescription(`Checked: ${checked}\nMismatches: ${rows.length}\nTransition warnings: ${transitionWarnings.length}`)
+        .addFields(
+            {
+                name: 'Details',
+                value: `\`\`\`\n${text}\n\`\`\``,
+                inline: false
+            },
+            {
+                name: 'Recent Transition Warnings',
+                value: `\`\`\`\n${warningText}\n\`\`\``,
+                inline: false
+            }
+        )
+        .setFooter({ text: 'Recorded -> Expected. Recent warnings come from status transition audit logs.' })
         .setTimestamp();
 }
 

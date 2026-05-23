@@ -1,8 +1,8 @@
 require('dotenv').config();
 
 const CONFIG = {
-    VERSION: '2501.88-DAYOFF-DASHBOARD-SELF-HEAL',
-    RELEASE_NOTE: 'Self-heal approved day off during dashboard render',
+    VERSION: '2501.91-REPORT-FIELD-HARD-LIMIT',
+    RELEASE_NOTE: 'Clamp report code blocks by Discord field length',
     GUILD_ID: '1502598521294028830',
     LOG_CHANNEL: '1503681085618262158',
     STATUS_CHANNEL: '1503681415407992962',

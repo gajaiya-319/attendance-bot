@@ -83,7 +83,9 @@ function createReportRenderer({
     }
 
     function renderEmbedCodeBlock(text, maxLength = 1010) {
-        const body = truncateWidth(String(text || 'NONE'), maxLength);
+        const wrapperLength = 8;
+        const hardLimit = Math.max(0, Math.min(maxLength, 1024 - wrapperLength));
+        const body = truncateWidth(String(text || 'NONE'), hardLimit).slice(0, hardLimit);
         return `\`\`\`\n${body}\n\`\`\``;
     }
 

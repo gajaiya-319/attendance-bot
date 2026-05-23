@@ -1,5 +1,7 @@
 'use strict';
 
+const { evaluateStatusTransition } = require('./stateTransitionPolicy');
+
 function createAttendanceService(deps) {
     const {
         CONFIG,
@@ -46,6 +48,8 @@ function createAttendanceService(deps) {
                 preShiftLiveAt: null,
                 pendingClockOut: null,
                 attendanceEvents: [],
+                statusTransitionSeq: 0,
+                statusTransitionWarnings: [],
                 lastEventKey: null,
                 lastEventAt: null,
                 lastPreShiftWaitLogKey: null,
@@ -93,6 +97,8 @@ function createAttendanceService(deps) {
         if (!Object.prototype.hasOwnProperty.call(user, 'preShiftLiveAt')) user.preShiftLiveAt = null;
         if (!Object.prototype.hasOwnProperty.call(user, 'pendingClockOut')) user.pendingClockOut = null;
         if (!Array.isArray(user.attendanceEvents)) user.attendanceEvents = [];
+        if (!Object.prototype.hasOwnProperty.call(user, 'statusTransitionSeq')) user.statusTransitionSeq = 0;
+        if (!Array.isArray(user.statusTransitionWarnings)) user.statusTransitionWarnings = [];
         if (!Object.prototype.hasOwnProperty.call(user, 'lastEventKey')) user.lastEventKey = null;
         if (!Object.prototype.hasOwnProperty.call(user, 'lastEventAt')) user.lastEventAt = null;
         if (!Object.prototype.hasOwnProperty.call(user, 'lastPreShiftWaitLogKey')) user.lastPreShiftWaitLogKey = null;
@@ -364,7 +370,9 @@ function createAttendanceService(deps) {
         if (!user) return false;
         const at = moment(now).tz(CONFIG.TIMEZONE);
         let changed = false;
-        const meta = { reason };
+        const policy = evaluateStatusTransition({ user, next, source, reason });
+        const transitionId = (Number(user.statusTransitionSeq) || 0) + 1;
+        const meta = { reason, transitionId };
 
         if (next.attendanceStatus && user.attendanceStatus !== next.attendanceStatus) {
             meta.attendanceStatus = {
@@ -386,7 +394,23 @@ function createAttendanceService(deps) {
             changed = true;
         }
 
+        if (policy.warnings.length) {
+            meta.policyWarnings = policy.warnings;
+            user.statusTransitionWarnings = [
+                ...(Array.isArray(user.statusTransitionWarnings) ? user.statusTransitionWarnings : []),
+                {
+                    at: at.toISOString(),
+                    source,
+                    reason,
+                    warnings: policy.warnings,
+                    from: policy.from,
+                    to: policy.to
+                }
+            ].slice(-50);
+        }
+
         if (changed) {
+            user.statusTransitionSeq = transitionId;
             appendAttendanceEvent(user, 'recorded_status_changed', at, source, meta);
         }
         return changed;

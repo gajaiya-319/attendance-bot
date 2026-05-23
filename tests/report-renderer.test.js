@@ -35,5 +35,6 @@ assert.strictEqual(renderer.renderReportStatsLegend(), '순위|이름      |점�
 assert.strictEqual(renderer.renderReportTopRow(user, 1), '02|BitShelby | 25| 5  2  1  1  2  0');
 assert.strictEqual(renderer.renderSessionMetricRow(user), 'BitShelby   |근무|08:02|08:19|00:17|00:00');
 assert(renderer.renderEmbedCodeBlock('x'.repeat(2000)).length <= 1020);
+assert(renderer.renderEmbedCodeBlock('시간'.repeat(800)).length <= 1024);
 
 console.log('report-renderer tests passed');
