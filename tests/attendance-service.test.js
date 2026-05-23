@@ -357,6 +357,29 @@ const service = createAttendanceService({
 
 {
     const member = createMember({
+        id: 'normalize-dayoff',
+        displayName: 'Normalize Day Off',
+        voice: { channelId: 'voice1', streaming: true }
+    });
+    const user = service.ensureUserData(member, 'night');
+    user.dayOff = true;
+    user.checkedIn = true;
+    user.isFinished = false;
+    user.attendanceStatus = 'ABSENT';
+    user.voiceStatus = 'LIVE_ON';
+
+    const result = service.normalizeCurrentShiftSessionCore(member, user, 'night', at('2026-05-21 21:30'));
+
+    assert.strictEqual(result.changed, true, 'normalize reports changed for day-off session');
+    assert.strictEqual(result.action, 'working-role-off', 'normalize removes working role for day-off user');
+    assert.strictEqual(user.checkedIn, false, 'day-off user is not checked in');
+    assert.strictEqual(user.isFinished, true, 'day-off user stays finished for work accounting');
+    assert.strictEqual(user.attendanceStatus, 'DAY_OFF', 'day-off status is restored during normalize');
+    assert.strictEqual(user.voiceStatus, 'OFFLINE', 'day-off voice status is kept out of live/off buckets');
+}
+
+{
+    const member = createMember({
         id: 'normalize-checked',
         displayName: 'Normalize Checked',
         voice: { channelId: 'voice1', streaming: false }

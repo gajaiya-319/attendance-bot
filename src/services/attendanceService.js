@@ -900,6 +900,19 @@ function createAttendanceService(deps) {
             return { changed: true, action: 'working-role-off', reason: 'already-finished-this-session' };
         }
 
+        if (user.dayOff) {
+            user.checkedIn = false;
+            user.isFinished = true;
+            user.status = null;
+            user.disconnected = false;
+            user.disconnectedAt = null;
+            transitionRecordedStatus(user, {
+                attendanceStatus: 'DAY_OFF',
+                voiceStatus: 'OFFLINE'
+            }, now, 'shift-normalize', 'day-off-kept-during-shift-normalize');
+            return { changed: true, action: 'working-role-off', reason: 'day-off' };
+        }
+
         user.isFinished = false;
         if (finishedBeforeCurrentSession || user.attendanceStatus === 'FINISHED') {
             transitionRecordedStatus(user, {
@@ -908,11 +921,6 @@ function createAttendanceService(deps) {
             }, now, 'shift-normalize', 'previous-finished-reset-for-new-shift');
             user.finishedPresence = null;
             user.finalLeftAt = null;
-        }
-
-        if (user.dayOff) {
-            user.checkedIn = false;
-            return { changed: true, action: 'working-role-off', reason: 'day-off' };
         }
 
         if (member.voice?.streaming) {

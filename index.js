@@ -33,6 +33,7 @@ const { createAttendanceService } = require('./src/services/attendanceService');
 const createRoleService = require('./src/services/roleService');
 const createDayOffService = require('./src/services/dayoffService');
 const createAdminService = require('./src/services/adminService');
+const createReportRenderer = require('./src/services/reportRenderer');
 const { buildCommandDefinitions, hiddenCommandAliases } = require('./src/commands/definitions');
 const {
     createAutoDelete,
@@ -117,7 +118,21 @@ const JOKES = {
     OUT: ['Clock-out has been processed. Thank you for your hard work!'],
     OT: ['Overtime has been processed. Don\'t push yourself too hard and keep it up!'],
     OFF: ['Day off has been processed. Rest well!']
-};  
+};
+
+const reportRenderer = createReportRenderer({
+    truncateWidth,
+    formatExactWidth,
+    getUserLatestSessionSummary
+});
+const {
+    renderReportMetricRow,
+    renderReportMetricHeader,
+    renderReportTopRow,
+    renderReportStatsLegend,
+    renderSessionMetricRow,
+    renderEmbedCodeBlock
+} = reportRenderer;
 
 function printStartupBanner() {
     const now = moment().tz(CONFIG.TIMEZONE);
@@ -1029,96 +1044,14 @@ function getActiveLiveException(userId, now = moment().tz(CONFIG.TIMEZONE)) {
     return exception;
 }
 
-function safeNumber(value) {
-    const number = Number(value);
-    return Number.isFinite(number) ? number : 0;
-}
-
-function getReportName(user, width = 14) {
-    return formatExactWidth((user.name || 'Unknown').split('-')[0].trim() || 'Unknown', width);
-}
-
 function formatKoreanDateTime(value) {
     return moment(value).tz(CONFIG.TIMEZONE).format('YYYY년 MM월 DD일 HH:mm');
-}
-
-function getReportStatsColumns(user) {
-    return [
-        safeNumber(user.totalNormal),
-        safeNumber(user.totalAbsent),
-        safeNumber(user.totalLate),
-        safeNumber(user.totalEarly),
-        safeNumber(user.totalOT),
-        safeNumber(user.offCount)
-    ].map(v => String(v).padStart(3)).join(' ');
-}
-
-function getCompactReportStatsColumns(user) {
-    return [
-        safeNumber(user.totalNormal),
-        safeNumber(user.totalAbsent),
-        safeNumber(user.totalLate),
-        safeNumber(user.totalEarly),
-        safeNumber(user.totalOT),
-        safeNumber(user.offCount)
-    ].map(v => String(v).padStart(2)).join(' ');
-}
-
-function renderReportMetricRow(user) {
-    const points = String(safeNumber(user.points)).padStart(4);
-    const name = getReportName(user, 11);
-    const stats = getCompactReportStatsColumns(user);
-    const dc = String(safeNumber(user.dcCount)).padStart(2);
-    return `${points}|${name}|${stats}|${dc}`;
-}
-
-function renderReportMetricHeader() {
-    return '점수|이름       |정 결 지 조 연 휴|DC';
-}
-
-function renderReportTopRow(user, index) {
-    const rank = String(index + 1).padStart(2, '0');
-    const name = getReportName(user, 10);
-    const points = String(safeNumber(user.points)).padStart(3);
-    return `${rank}|${name}|${points}|${getCompactReportStatsColumns(user)}`;
-}
-
-function renderReportStatsLegend() {
-    return '순위|이름      |점수|정 결 지 조 연 휴';
-}
-
-function formatDurationClock(minutes) {
-    const safeMinutes = Math.max(0, Number(minutes) || 0);
-    const hours = Math.floor(safeMinutes / 60);
-    const mins = safeMinutes % 60;
-    return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
-}
-
-function renderSessionMetricRow(user, now = moment().tz(CONFIG.TIMEZONE)) {
-    const summary = getUserLatestSessionSummary(user, now);
-    const name = getReportName(user, 12);
-    if (!summary) return `${name}|세션없음|00:00|00:00|00:00|00:00`;
-    const session = summary.session;
-    const state = session.clockOutAt ? '퇴근' : '근무';
-    return [
-        name,
-        state,
-        formatDurationClock(summary.creditedMinutes),
-        formatDurationClock(summary.grossMinutes),
-        formatDurationClock(summary.liveOffMinutes),
-        formatDurationClock(summary.dcMinutes)
-    ].join('|');
 }
 
 function renderPercentBar(percent, size = 10) {
     const safePercent = Math.max(0, Math.min(100, Number(percent) || 0));
     const filled = Math.round((safePercent / 100) * size);
     return `[${'#'.repeat(filled)}${'.'.repeat(size - filled)}] ${String(safePercent).padStart(3)}%`;
-}
-
-function renderEmbedCodeBlock(text, maxLength = 1010) {
-    const body = truncateWidth(String(text || 'NONE'), maxLength);
-    return `\`\`\`\n${body}\n\`\`\``;
 }
 
 function getDayNightWorkerStats(guild, shift = 'all') {
@@ -1223,6 +1156,10 @@ async function renderDashboardCore({ forceMemberRefresh = false } = {}) {
         for (const member of currentShiftMembers.values()) {
             const shouldNormalizeCurrentShift = currentRoleMemberIds.has(member.id);
             const user = ensureUserData(member, shouldNormalizeCurrentShift ? activeDisplayShift : (attendanceData[member.id]?.shift || determineShift(member)));
+            const activeDayOffReservation = getActiveApprovedDayOffReservation(member.id, user?.shift || activeDisplayShift, now);
+            if (activeDayOffReservation && await applyApprovedDayOffReservation(activeDayOffReservation, member, user, now, 'dashboard-dayoff-self-heal')) {
+                sessionChanged = true;
+            }
             if (shouldNormalizeCurrentShift && await normalizeCurrentShiftSession(member, user, activeDisplayShift, now)) {
                 sessionChanged = true;
             }
@@ -3769,41 +3706,60 @@ async function checkDayOffReservations() {
         const member = await guild.members.fetch(reservation.userId).catch(() => null);
         const u = ensureUserData(member || { id: reservation.userId, displayName: reservation.name }, reservation.shift);
         if (!u) continue;
-        if (reservation.appliedDate === logicalDate && u.dayOff) continue;
-        const alreadyCounted = reservation.appliedDate === logicalDate;
-
-        u.shift = reservation.shift;
-        u.dayOff = true;
-        transitionRecordedStatus(u, {
-            attendanceStatus: 'DAY_OFF',
-            voiceStatus: 'OFFLINE'
-        }, now, 'dayoff-auto-apply', 'approved-day-off-applied');
-        u.dayOffExpireAt = (reservationBounds || getShiftBounds(reservation.shift, now)).end.toISOString();
-        u.checkedIn = false;
-        u.disconnected = false;
-        u.isFinished = true;
-        if (!alreadyCounted) u.offCount = (u.offCount || 0) + 1;
-        overtimeUsers = overtimeUsers.filter(o => o.id !== reservation.userId);
-        if (member) await updateWorkingRole(member, false);
-
-        reservation.appliedDate = logicalDate;
-        reservation.appliedAt = moment().tz(CONFIG.TIMEZONE).toISOString();
-        changed = true;
-        await writeDayOffLog(`📅 휴무 자동 반영\n👥 이름: ${reservation.name}\n⏰ 근무: ${reservation.shiftLabel}\n📅 휴무일: ${reservation.leaveDate}\n📝 사유: 근무조별 논리 날짜(${logicalDate}) 기준으로 근무 현황에 DAY OFF를 반영했습니다.`);
-        await appendDayOffAudit('APPLIED', {
-            messageId: reservation.messageId,
-            userId: reservation.userId,
-            name: reservation.name,
-            shift: reservation.shiftLabel,
-            leaveDate: reservation.leaveDate,
-            logicalDate
-        });
+        if (await applyApprovedDayOffReservation(reservation, member, u, now, 'dayoff-auto-apply')) changed = true;
     }
 
     if (changed) {
         await saveSystemAsync();
         renderDashboardCore();
     }
+}
+
+async function applyApprovedDayOffReservation(reservation, member, user, now, source = 'dayoff-auto-apply') {
+    if (!reservation || reservation.status !== 'approved' || !user) return false;
+    const logicalDate = getDayOffLogicalDateForShift(reservation.shift, now);
+    if (reservation.leaveDate !== logicalDate) return false;
+    const reservationBounds = buildShiftBoundsForBusinessDate(
+        reservation.shift,
+        moment.tz(reservation.leaveDate, 'YYYY-MM-DD', CONFIG.TIMEZONE)
+    );
+    if (reservationBounds?.end && now.isSameOrAfter(reservationBounds.end)) return false;
+    if (reservation.appliedDate === logicalDate && user.dayOff && user.attendanceStatus === 'DAY_OFF') return false;
+
+    const alreadyCounted = reservation.appliedDate === logicalDate;
+    user.shift = reservation.shift;
+    user.dayOff = true;
+    user.status = null;
+    user.checkedIn = false;
+    user.disconnected = false;
+    user.disconnectedAt = null;
+    user.isFinished = true;
+    user.pendingClockOut = null;
+    user.voiceJoinedAt = null;
+    user.liveOffStartedAt = null;
+    user.liveOffWarnedFor = null;
+    transitionRecordedStatus(user, {
+        attendanceStatus: 'DAY_OFF',
+        voiceStatus: 'OFFLINE'
+    }, now, source, 'approved-day-off-applied');
+    user.dayOffExpireAt = (reservationBounds || getShiftBounds(reservation.shift, now)).end.toISOString();
+    if (!alreadyCounted) user.offCount = (user.offCount || 0) + 1;
+    overtimeUsers = overtimeUsers.filter(o => o.id !== reservation.userId);
+    if (member) await updateWorkingRole(member, false);
+
+    reservation.appliedDate = logicalDate;
+    reservation.appliedAt = now.toISOString();
+    await writeDayOffLog(`📅 휴무 자동 반영\n👥 이름: ${reservation.name}\n⏰ 근무: ${reservation.shiftLabel}\n📅 휴무일: ${reservation.leaveDate}\n📝 사유: ${source === 'dashboard-dayoff-self-heal' ? '현황판 렌더링 중 승인된 휴무 상태를 보정했습니다.' : `근무조별 논리 날짜(${logicalDate}) 기준으로 근무 현황에 DAY OFF를 반영했습니다.`}`);
+    await appendDayOffAudit('APPLIED', {
+        messageId: reservation.messageId,
+        userId: reservation.userId,
+        name: reservation.name,
+        shift: reservation.shiftLabel,
+        leaveDate: reservation.leaveDate,
+        logicalDate,
+        source
+    });
+    return true;
 }
 
 /**

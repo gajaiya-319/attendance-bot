@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "node tests/time-logic.test.js && node tests/state-policy.test.js && node tests/dashboard-state.test.js && node tests/data-store.test.js && node tests/attendance-service.test.js && node tests/command-definitions.test.js && node tests/interaction-helpers.test.js && node tests/command-status.test.js && node tests/permissions.test.js && node tests/text-format.test.js && node tests/role-service.test.js && node tests/dayoff-service.test.js && node tests/admin-service.test.js"
+    "test": "node tests/time-logic.test.js && node tests/state-policy.test.js && node tests/dashboard-state.test.js && node tests/data-store.test.js && node tests/attendance-service.test.js && node tests/command-definitions.test.js && node tests/interaction-helpers.test.js && node tests/command-status.test.js && node tests/permissions.test.js && node tests/text-format.test.js && node tests/role-service.test.js && node tests/dayoff-service.test.js && node tests/admin-service.test.js && node tests/report-renderer.test.js"
   },
   "keywords": [],
   "author": "",
