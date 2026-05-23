@@ -2512,7 +2512,7 @@ async function syncRolesFromStructuredNickname(newMember) {
     return changed;
 }
 
-function buildDataAuditEmbed() {
+function collectDataAuditIssues() {
     const issues = [];
     for (const user of Object.values(attendanceData)) {
         if (user.checkedIn && user.dayOff) issues.push(`${user.name}: checkedIn=true + dayOff=true`);
@@ -2533,6 +2533,11 @@ function buildDataAuditEmbed() {
         if (count > 1) issues.push(`duplicate day off reservation: ${key} (${count})`);
     }
 
+    return issues;
+}
+
+function buildDataAuditEmbed() {
+    const issues = collectDataAuditIssues();
     const text = issues.length ? issues.slice(0, 30).join('\n') : 'No data issues found.';
     return new EmbedBuilder()
         .setTitle('Data Audit')
@@ -2604,6 +2609,104 @@ async function buildStatusAuditEmbed(guild) {
             }
         )
         .setFooter({ text: 'Recorded -> Expected. Recent warnings come from status transition audit logs.' })
+        .setTimestamp();
+}
+
+async function collectStatusAuditMismatches(guild, now = moment().tz(CONFIG.TIMEZONE)) {
+    await refreshGuildMembers(guild);
+    const rows = [];
+    let checked = 0;
+
+    for (const user of Object.values(attendanceData)) {
+        const member = guild?.members?.cache?.get(user.id);
+        if (!member || member.user?.bot) continue;
+        if (!isAssignedWorker(member) && !hasManagedAttendanceRole(member)) continue;
+        checked++;
+
+        const expectedAttendance = deriveAttendanceStatusForAudit(user);
+        const expectedVoice = deriveVoiceStatusForAudit(member, user, now);
+        const recordedAttendance = user.attendanceStatus || 'MISSING';
+        const recordedVoice = user.voiceStatus || 'MISSING';
+        if (expectedAttendance === recordedAttendance && expectedVoice === recordedVoice) continue;
+
+        rows.push({
+            name: getDashboardName(user),
+            recordedAttendance,
+            expectedAttendance,
+            recordedVoice,
+            expectedVoice
+        });
+    }
+
+    return { checked, rows };
+}
+
+async function buildOpsCheckEmbed(guild) {
+    const now = moment().tz(CONFIG.TIMEZONE);
+    const users = Object.values(attendanceData);
+    const visibleCommands = buildCommandDefinitions().filter(command => !hiddenCommandAliases.has(command.name));
+    const dataIssues = collectDataAuditIssues();
+    const statusAudit = await collectStatusAuditMismatches(guild, now);
+    const transitionWarnings = collectStatusTransitionWarnings(attendanceData, { limit: 5 });
+    const activeAnnouncements = Object.values(announceData).filter(Boolean).filter(d => d.active).length;
+    const checkedIn = users.filter(u => u.checkedIn).length;
+    const disconnected = users.filter(u => u.disconnected).length;
+    const dayOff = users.filter(u => u.dayOff).length;
+    const severity = dataIssues.length || statusAudit.rows.length || transitionWarnings.length ? 'WARN' : 'OK';
+    const warningRows = transitionWarnings.length
+        ? transitionWarnings.map(entry => {
+            const time = entry.at ? moment(entry.at).tz(CONFIG.TIMEZONE).format('MM-DD HH:mm') : 'unknown';
+            return `${time} ${truncateWidth(entry.userName, 12)} ${truncateWidth((entry.warnings || []).join(','), 34)}`;
+        }).join('\n')
+        : 'No recent transition warnings.';
+    const mismatchRows = statusAudit.rows.length
+        ? statusAudit.rows.slice(0, 8).map(row => {
+            const name = padWidth(truncateWidth(row.name, 14), 15);
+            return `${name} A ${row.recordedAttendance}->${row.expectedAttendance} | V ${row.recordedVoice}->${row.expectedVoice}`;
+        }).join('\n')
+        : 'No status mismatches.';
+
+    return new EmbedBuilder()
+        .setTitle(`Operational Health Check - ${severity}`)
+        .setColor(severity === 'OK' ? '#2ECC71' : '#E67E22')
+        .setDescription(`PH TIME: ${now.format('YYYY-MM-DD HH:mm:ss')}`)
+        .addFields(
+            {
+                name: 'Runtime',
+                value: [
+                    `Version: ${CONFIG.VERSION}`,
+                    `Guild cache: ${guild?.memberCount || guild?.members?.cache?.size || 0}`,
+                    `Saved users: ${users.length}`,
+                    `Commands: ${visibleCommands.length}`,
+                    `Last save: ${lastSavedAt || 'none'}`,
+                    `Last backup: ${lastBackupAt || 'none'}`
+                ].join('\n'),
+                inline: false
+            },
+            {
+                name: 'Attendance Summary',
+                value: [
+                    `Checked in: ${checkedIn}`,
+                    `Day off: ${dayOff}`,
+                    `Disconnected: ${disconnected}`,
+                    `Overtime: ${overtimeUsers.length}`,
+                    `Active announcements: ${activeAnnouncements}`
+                ].join('\n'),
+                inline: true
+            },
+            {
+                name: 'Risk Counters',
+                value: [
+                    `Data issues: ${dataIssues.length}`,
+                    `Status mismatches: ${statusAudit.rows.length}`,
+                    `Transition warnings: ${transitionWarnings.length}`
+                ].join('\n'),
+                inline: true
+            },
+            { name: 'Status Mismatches', value: renderEmbedCodeBlock(mismatchRows), inline: false },
+            { name: 'Recent Transition Warnings', value: renderEmbedCodeBlock(warningRows), inline: false }
+        )
+        .setFooter({ text: 'Read-only operational summary. Use /상태추적 and /상태동기화 for one user.' })
         .setTimestamp();
 }
 
@@ -4167,6 +4270,12 @@ client.on(Events.InteractionCreate, async i => {
                 await i.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => null);
                 if (!i.deferred && !i.replied) return;
                 return i.editReply({ embeds: [await buildInactiveCandidatesEmbed(i.guild, days)] });
+            }
+            if (n('ops-check') || n('운영점검')) {
+                if (!isAdmin) return i.reply({ content: 'No perms.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
+                await i.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => null);
+                if (!i.deferred && !i.replied) return;
+                return i.editReply({ embeds: [await buildOpsCheckEmbed(i.guild)] });
             }
             if (n('status-audit') || n('상태검사')) {
                 if (!isAdmin) return i.reply({ content: 'No perms.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
