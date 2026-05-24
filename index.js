@@ -3687,7 +3687,7 @@ async function cancelDayOffApproval(message, cancelledBy = null) {
 
 async function markWorkedOnDayOff(member, user, shift, now) {
     if (user) user.dayOffExpireAt = null;
-    const today = now.format('YYYY-MM-DD');
+    const today = getDayOffLogicalDateForShift(shift, now);
     const reservation = Object.values(dayOffReservations).find(r =>
         r &&
         r.status === 'approved' &&
@@ -4744,20 +4744,25 @@ client.on(Events.InteractionCreate, async i => {
 
             if (type === 'in') {
                 const wasDayOff = Boolean(u.dayOff);
-                if (wasDayOff) {
-                    await notifyDayOffPresence(m, u, s, now, 'CLOCK IN attempted while Day Off');
-                    await saveSystemAsync();
-                    await renderDashboardCore({ forceMemberRefresh: true });
-                    return i.reply({
-                        content: 'You are currently marked as Day Off. Attendance will not be counted automatically. If you are here to work, please contact an admin for approval.',
-                        flags: MessageFlags.Ephemeral
-                    }).then(() => autoDel(5000));
-                }
                 const voiceState = i.guild.voiceStates.cache.get(m.id);
                 const isVoiceConnected = Boolean(m.voice?.channelId || voiceState?.channelId);
                 const isStreamingNow = Boolean(isVoiceConnected && (m.voice?.streaming || voiceState?.streaming));
                 const activeLiveException = getActiveLiveException(m.id, now);
                 const canClockInByLiveException = Boolean(isVoiceConnected && activeLiveException);
+                if (wasDayOff && !isStreamingNow && !canClockInByLiveException) {
+                    await notifyDayOffPresence(m, u, s, now, 'CLOCK IN attempted while Day Off', false);
+                    await saveSystemAsync();
+                    await renderDashboardCore({ forceMemberRefresh: true });
+                    return i.reply({
+                        content: [
+                            'You are currently marked as Day Off.',
+                            '',
+                            'To start working today, please turn your live stream ON and press CLOCK IN again.',
+                            'Your attendance will only be recognized after CLOCK IN is pressed while LIVE is ON.'
+                        ].join('\n'),
+                        flags: MessageFlags.Ephemeral
+                    }).then(() => autoDel(7000));
+                }
                 const canSelfResumeLiveException = Boolean(
                     isVoiceConnected &&
                     !isStreamingNow &&
@@ -4869,6 +4874,16 @@ client.on(Events.InteractionCreate, async i => {
                 u.isFinished = false;
                 if (canStartPreShiftOvertime(u, now)) {
                     await startPreShiftOvertime(m, u, s, now, 'button-or-command');
+                    const workedDayOffReservation = wasDayOff
+                        ? await markWorkedOnDayOff(m, u, s, now)
+                        : null;
+                    if (workedDayOffReservation) {
+                        appendAttendanceEvent(u, 'dayoff_clock_in_confirmed', now, 'button-or-command', {
+                            reservationMessageId: workedDayOffReservation.messageId || null,
+                            leaveDate: workedDayOffReservation.leaveDate || null,
+                            mode: 'pre-shift-overtime'
+                        });
+                    }
                     await saveSystemAsync();
                     await renderDashboardCore({ forceMemberRefresh: true });
                     return i.reply({
@@ -4897,6 +4912,9 @@ client.on(Events.InteractionCreate, async i => {
                         }).then(() => autoDel(7000));
                     }
                 }
+                const workedDayOffReservation = wasDayOff
+                    ? await markWorkedOnDayOff(m, u, s, now)
+                    : null;
                 if (canClockInByLiveException) {
                     u.checkedIn = true;
                     u.dayOff = false;
@@ -4919,6 +4937,12 @@ client.on(Events.InteractionCreate, async i => {
                         exceptionExpiresAt: activeLiveException.expiresAt || null
                     });
                     await recordLog(u, 'reconnect', '라이브 예외 대상 CLOCK IN - 근무 인정');
+                }
+                if (workedDayOffReservation) {
+                    appendAttendanceEvent(u, 'dayoff_clock_in_confirmed', now, 'button-or-command', {
+                        reservationMessageId: workedDayOffReservation.messageId || null,
+                        leaveDate: workedDayOffReservation.leaveDate || null
+                    });
                 }
             } else if (type === 'out') {
                 await handleClockOut(m, u, now);
