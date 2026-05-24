@@ -1,8 +1,8 @@
 require('dotenv').config();
 
 const CONFIG = {
-    VERSION: '2501.95-STATUS-SYNC-BACKUP',
-    RELEASE_NOTE: 'Back up before per-user status sync',
+    VERSION: '2501.96-DAYOFF-CLOCKIN-DM',
+    RELEASE_NOTE: 'Prompt day-off live users to clock in',
     GUILD_ID: '1502598521294028830',
     LOG_CHANNEL: '1503681085618262158',
     STATUS_CHANNEL: '1503681415407992962',

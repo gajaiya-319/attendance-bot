@@ -642,14 +642,61 @@ async function recordLiveRecovery(member, user, shift, now, startedAt, text) {
     return true;
 }
 
-async function notifyDayOffPresence(member, user, shift, now, action = 'LIVE ON') {
+function buildDayOffClockInPromptMessage(reminderNumber, reminderMark) {
+    return [
+        '🌿 **Quick attendance reminder**',
+        `Reminder **${reminderNumber}/2**${reminderMark ? ` · about **${reminderMark} minutes** after live started` : ''}`,
+        '',
+        'Did you start working today?',
+        '',
+        'If yes, please keep your **live stream ON** and press the **CLOCK IN** button.',
+        '',
+        '⚠️ **Your attendance will only be recognized after you press CLOCK IN.**',
+        'Being connected or live by itself does **not** count as clocking in.',
+        '',
+        'Thank you. ✅'
+    ].join('\n');
+}
+
+async function sendDayOffClockInPromptIfDue(member, user, shift, now) {
+    if (!member || !user || !shift) return false;
+    const sessionKey = getShiftSessionKey(shift, now);
+    if (user.dayOffClockInPromptSessionKey !== sessionKey) {
+        user.dayOffClockInPromptSessionKey = sessionKey;
+        user.dayOffClockInPromptStartedAt = now.toISOString();
+        user.dayOffClockInPromptMarks = [];
+    }
+
+    if (!Array.isArray(user.dayOffClockInPromptMarks)) user.dayOffClockInPromptMarks = [];
+
+    const startedAt = user.dayOffClockInPromptStartedAt
+        ? moment(user.dayOffClockInPromptStartedAt).tz(CONFIG.TIMEZONE)
+        : now;
+    const elapsedMins = Math.max(0, now.diff(startedAt, 'minutes'));
+    const dueMark = elapsedMins >= 10 ? 10 : 0;
+    if (![0, 10].includes(dueMark) || user.dayOffClockInPromptMarks.includes(dueMark)) return false;
+
+    const reminderNumber = dueMark === 0 ? 1 : 2;
+    await member.send(buildDayOffClockInPromptMessage(reminderNumber, dueMark)).catch(() => null);
+    user.dayOffClockInPromptMarks.push(dueMark);
+    appendAttendanceEvent(user, 'dayoff_clockin_prompt_sent', now, 'voice_snapshot', {
+        reminderNumber,
+        reminderMark: dueMark,
+        result: 'dm_attempted'
+    });
+    return true;
+}
+
+async function notifyDayOffPresence(member, user, shift, now, action = 'LIVE ON', isStreaming = false) {
     if (!member || !user || !shift) return false;
     const key = `${getShiftSessionKey(shift, now)}:${action}`;
     appendAttendanceEvent(user, 'dayoff_presence_detected', now, 'voice_snapshot', {
         action,
         result: 'day_off_kept'
     });
-    if (user.dayOffPresenceNotifiedFor === key) return false;
+    if (user.dayOffPresenceNotifiedFor === key) {
+        return isStreaming ? await sendDayOffClockInPromptIfDue(member, user, shift, now) : false;
+    }
     user.dayOffPresenceNotifiedFor = key;
 
     const logChan = await client.channels.fetch(CONFIG.LOG_CHANNEL).catch(() => null);
@@ -662,11 +709,18 @@ async function notifyDayOffPresence(member, user, shift, now, action = 'LIVE ON'
         ].join('\n')).catch(() => null);
     }
 
-    await member.send([
-        'You are currently marked as Day Off.',
-        'Your presence or live stream was detected, but attendance will not be counted automatically.',
-        'If you are here to work, please contact an admin for approval.'
-    ].join('\n')).catch(() => null);
+    if (isStreaming) {
+        await sendDayOffClockInPromptIfDue(member, user, shift, now);
+    } else {
+        await member.send([
+            '🌿 **Quick attendance reminder**',
+            '',
+            'You are currently marked as **Day Off**.',
+            'Your voice channel presence was detected, but attendance will **not** be counted automatically.',
+            '',
+            'If you are starting work, please turn your **live stream ON** and press the **CLOCK IN** button.'
+        ].join('\n')).catch(() => null);
+    }
     return true;
 }
 
@@ -1481,7 +1535,7 @@ async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().
         }, now, source, 'day-off-presence')) changed = true;
         if (isConnected) {
             const action = isStreaming ? 'LIVE ON while Day Off' : 'Voice channel presence while Day Off';
-            return await notifyDayOffPresence(member, user, shift, now, action);
+            return await notifyDayOffPresence(member, user, shift, now, action, isStreaming);
         }
         return false;
         }

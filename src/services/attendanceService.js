@@ -54,6 +54,9 @@ function createAttendanceService(deps) {
                 lastEventAt: null,
                 lastPreShiftWaitLogKey: null,
                 dayOffPresenceNotifiedFor: null,
+                dayOffClockInPromptSessionKey: null,
+                dayOffClockInPromptStartedAt: null,
+                dayOffClockInPromptMarks: [],
                 afterFinishPresenceNotifiedFor: null,
                 standbyClockInPromptKey: null,
                 finishedPresence: null,
@@ -103,6 +106,9 @@ function createAttendanceService(deps) {
         if (!Object.prototype.hasOwnProperty.call(user, 'lastEventAt')) user.lastEventAt = null;
         if (!Object.prototype.hasOwnProperty.call(user, 'lastPreShiftWaitLogKey')) user.lastPreShiftWaitLogKey = null;
         if (!Object.prototype.hasOwnProperty.call(user, 'dayOffPresenceNotifiedFor')) user.dayOffPresenceNotifiedFor = null;
+        if (!Object.prototype.hasOwnProperty.call(user, 'dayOffClockInPromptSessionKey')) user.dayOffClockInPromptSessionKey = null;
+        if (!Object.prototype.hasOwnProperty.call(user, 'dayOffClockInPromptStartedAt')) user.dayOffClockInPromptStartedAt = null;
+        if (!Array.isArray(user.dayOffClockInPromptMarks)) user.dayOffClockInPromptMarks = [];
         if (!Object.prototype.hasOwnProperty.call(user, 'afterFinishPresenceNotifiedFor')) user.afterFinishPresenceNotifiedFor = null;
         if (!Object.prototype.hasOwnProperty.call(user, 'standbyClockInPromptKey')) user.standbyClockInPromptKey = null;
         if (!Object.prototype.hasOwnProperty.call(user, 'finishedPresence')) user.finishedPresence = null;
