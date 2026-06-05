@@ -243,14 +243,34 @@ function getRankingWorkerShift(user, guild = null) {
 
 function buildRankingEmbed({ guild = null, shift = 'all' } = {}) {
     const scope = ['all', 'day', 'night'].includes(shift) ? shift : 'all';
-    const sorted = Object.values(getAttendanceData())
-        .filter(user => {
-            const workerShift = getRankingWorkerShift(user, guild);
-            if (!workerShift) return false;
-            return scope === 'all' || workerShift === scope;
-        })
-        .sort((a, b) => (b.points || 0) - (a.points || 0))
-        .slice(0, 20);
+    const attendanceData = getAttendanceData();
+    const workersById = new Map();
+
+    if (guild?.members?.cache) {
+        guild.members.cache.forEach(member => {
+            const saved = attendanceData[member.id] || {};
+            const workerShift = getRankingWorkerShift({ ...saved, id: member.id }, guild);
+            if (!workerShift || (scope !== 'all' && workerShift !== scope)) return;
+            workersById.set(member.id, {
+                ...saved,
+                id: member.id,
+                name: saved.name || member.displayName || member.user?.username || 'Unknown',
+                shift: saved.shift || workerShift
+            });
+        });
+    }
+
+    Object.values(attendanceData).forEach(user => {
+        const workerShift = getRankingWorkerShift(user, guild);
+        if (!workerShift || (scope !== 'all' && workerShift !== scope)) return;
+        workersById.set(user.id, {
+            ...user,
+            shift: user.shift || workerShift
+        });
+    });
+
+    const sorted = Array.from(workersById.values())
+        .sort((a, b) => ((b.points || 0) - (a.points || 0)) || String(a.name || '').localeCompare(String(b.name || '')));
     const lines = sorted.length
         ? sorted.map((u, idx) => {
             const name = truncateWidth((u.name || 'Unknown').split('-')[0].trim(), 18);
@@ -269,7 +289,7 @@ function buildRankingEmbed({ guild = null, shift = 'all' } = {}) {
         .setTitle(titleByScope[scope])
         .setDescription(`\`\`\`\n${lines}\n\`\`\``)
         .setColor('#F1C40F')
-        .setFooter({ text: 'Only members with DAY or NIGHT shift roles are included.' })
+        .setFooter({ text: `Members shown: ${sorted.length}. DAY/NIGHT role members are included, even at 0 pts.` })
         .setTimestamp();
 }
 

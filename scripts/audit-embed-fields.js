@@ -5,6 +5,9 @@ const { execFileSync } = require('child_process');
 
 const allowedDirectAddFields = new Set([
     'index.js:safeAddFields',
+    'scripts/audit-embed-fields.js:auditEmbedFields',
+    'src/app/createCoreHelpers.js:safeAddFields',
+    'src/events/dayOffRequestInteractionHandler.js:buildPanelPayload',
     'src/services/dayoffService.js:buildDayOffListEmbed'
 ]);
 
