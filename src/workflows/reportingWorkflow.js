@@ -271,6 +271,7 @@ function buildRankingEmbed({ guild = null, shift = 'all' } = {}) {
 
     const sorted = Array.from(workersById.values())
         .sort((a, b) => ((b.points || 0) - (a.points || 0)) || String(a.name || '').localeCompare(String(b.name || '')));
+    const legend = 'Legend: [Normal/Late/Absent/Early/OT/Off]';
     const lines = sorted.length
         ? sorted.map((u, idx) => {
             const name = truncateWidth((u.name || 'Unknown').split('-')[0].trim(), 18);
@@ -287,7 +288,7 @@ function buildRankingEmbed({ guild = null, shift = 'all' } = {}) {
 
     return new EmbedBuilder()
         .setTitle(titleByScope[scope])
-        .setDescription(`\`\`\`\n${lines}\n\`\`\``)
+        .setDescription(`\`\`\`\n${legend}\n${lines}\n\`\`\``)
         .setColor('#F1C40F')
         .setFooter({ text: `Members shown: ${sorted.length}. DAY/NIGHT role members are included, even at 0 pts.` })
         .setTimestamp();

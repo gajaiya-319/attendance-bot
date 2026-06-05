@@ -95,6 +95,7 @@ const rankLines = embed.data.description
     .split('\n')
     .filter(line => /^\d{2}\./.test(line));
 
+assert(embed.data.description.includes('Legend: [Normal/Late/Absent/Early/OT/Off]'), 'ranking explains stat order');
 assert.strictEqual(rankLines.length, 26, 'combined ranking includes all day/night role members');
 assert(rankLines.some(line => line.includes('Worker 26')), 'ranking includes zero-point members without saved attendance data');
 assert.strictEqual(embed.data.footer.text, 'Members shown: 26. DAY/NIGHT role members are included, even at 0 pts.');
