@@ -12,6 +12,10 @@ const hiddenCommandAliases = new Set([
     'data-audit',
     'inactive-candidates',
     'ops-check',
+    'ops-pending',
+    'ops-retry',
+    'today-audit',
+    'payroll-audit',
     'status-audit',
     'status-trace',
     'status-sync',
@@ -22,7 +26,6 @@ const hiddenCommandAliases = new Set([
     'dayoff-cancel',
     'dayoff-cancel-force',
     'dayoff-reject',
-    '강제조기퇴근',
     'force-in',
     'force-out',
     'force-early-out',
@@ -59,16 +62,45 @@ function buildCommandDefinitions() {
         new SlashCommandBuilder().setName('비활동검사').setDescription('Inactive kick candidate report').addIntegerOption(o=>o.setName('일수').setDescription('Inactive days').setMinValue(1).setMaxValue(30)),
         new SlashCommandBuilder().setName('inactive-candidates').setDescription('Inactive kick candidate report').addIntegerOption(o=>o.setName('days').setDescription('Inactive days').setMinValue(1).setMaxValue(30)),
         new SlashCommandBuilder().setName('운영점검').setDescription('Operational health check'), new SlashCommandBuilder().setName('ops-check').setDescription('Operational health check'),
+        new SlashCommandBuilder().setName('작업대기').setDescription('실패해서 재시도 대기 중인 시트 작업을 확인합니다'), new SlashCommandBuilder().setName('ops-pending').setDescription('List pending sheet operations'),
+        new SlashCommandBuilder().setName('작업재시도').setDescription('실패해서 대기 중인 시트 작업을 다시 입력합니다'), new SlashCommandBuilder().setName('ops-retry').setDescription('Retry pending sheet operations'),
+        new SlashCommandBuilder().setName('오늘기록검사').setDescription('오늘 출결 기록, 이름 중복, 0기록 근무자를 검사합니다'), new SlashCommandBuilder().setName('today-audit').setDescription('Audit today raw attendance records'),
+        new SlashCommandBuilder().setName('급여검사').setDescription('급여 시트 실패, 백업 로그, 중복 의심 작업을 검사합니다'), new SlashCommandBuilder().setName('payroll-audit').setDescription('Audit payroll sheet operations'),
+        new SlashCommandBuilder().setName('급여기록').setDescription('3일 급여 마감을 Raw_Data 시트에 기록합니다').addStringOption(o=>o.setName('기간').setDescription('회차 라벨 (예: 31~2일 3일차)')),
         new SlashCommandBuilder().setName('상태검사').setDescription('Recorded status audit'), new SlashCommandBuilder().setName('status-audit').setDescription('Recorded status audit'),
         new SlashCommandBuilder().setName('상태추적').setDescription('Trace one user status history').addUserOption(o=>o.setName('대상').setRequired(true).setDescription('Target')),
         new SlashCommandBuilder().setName('status-trace').setDescription('Trace one user status history').addUserOption(o=>o.setName('target').setRequired(true).setDescription('Target')),
         new SlashCommandBuilder().setName('상태동기화').setDescription('Sync one user recorded status').addUserOption(o=>o.setName('대상').setRequired(true).setDescription('Target')),
         new SlashCommandBuilder().setName('status-sync').setDescription('Sync one user recorded status').addUserOption(o=>o.setName('target').setRequired(true).setDescription('Target')),
         new SlashCommandBuilder().setName('시간검사').setDescription('Time logic audit'), new SlashCommandBuilder().setName('time-audit').setDescription('Time logic audit'),
+        new SlashCommandBuilder()
+            .setName('점검')
+            .setDescription('정기점검 예외를 관리합니다')
+            .addSubcommand(s=>s
+                .setName('설정')
+                .setDescription('특정 날짜의 정기점검 예외를 설정합니다')
+                .addStringOption(o=>o.setName('날짜').setRequired(true).setDescription('기준 날짜 YYYY-MM-DD'))
+                .addStringOption(o=>o.setName('사용').setRequired(true).setDescription('정기점검 적용 여부').addChoices({name:'켜기',value:'true'},{name:'끄기',value:'false'}))
+                .addStringOption(o=>o.setName('주간시작').setDescription('주간 시작 HH:mm'))
+                .addStringOption(o=>o.setName('주간종료').setDescription('주간 종료 HH:mm'))
+                .addStringOption(o=>o.setName('야간시작').setDescription('야간 시작 HH:mm'))
+                .addStringOption(o=>o.setName('야간종료').setDescription('야간 종료 HH:mm'))
+                .addStringOption(o=>o.setName('점검날짜').setDescription('점검창 날짜 YYYY-MM-DD'))
+                .addStringOption(o=>o.setName('점검시작').setDescription('점검 시작 HH:mm'))
+                .addStringOption(o=>o.setName('점검종료').setDescription('점검 종료 HH:mm'))
+                .addStringOption(o=>o.setName('사유').setDescription('사유')))
+            .addSubcommand(s=>s
+                .setName('목록')
+                .setDescription('정기점검 예외 목록을 확인합니다'))
+            .addSubcommand(s=>s
+                .setName('삭제')
+                .setDescription('특정 날짜의 정기점검 예외를 삭제합니다')
+                .addStringOption(o=>o.setName('날짜').setRequired(true).setDescription('기준 날짜 YYYY-MM-DD'))),
         new SlashCommandBuilder().setName('휴무로그').setDescription('Day off audit log').addIntegerOption(o=>o.setName('갯수').setDescription('Limit').setMinValue(1).setMaxValue(30)),
         new SlashCommandBuilder().setName('dayoff-log').setDescription('Day off audit log').addIntegerOption(o=>o.setName('limit').setDescription('Limit').setMinValue(1).setMaxValue(30)),
         new SlashCommandBuilder().setName('휴무목록').setDescription('Day off list').addStringOption(o=>o.setName('상태').setDescription('Status').addChoices({name:'All',value:'all'},{name:'Pending',value:'pending'},{name:'Approved',value:'approved'},{name:'Today',value:'today'},{name:'Worked',value:'worked'},{name:'Cancelled',value:'cancelled'},{name:'Rejected',value:'rejected'})),
         new SlashCommandBuilder().setName('dayoff-list').setDescription('Day off list').addStringOption(o=>o.setName('status').setDescription('Status').addChoices({name:'All',value:'all'},{name:'Pending',value:'pending'},{name:'Approved',value:'approved'},{name:'Today',value:'today'},{name:'Worked',value:'worked'},{name:'Cancelled',value:'cancelled'},{name:'Rejected',value:'rejected'})),
+        new SlashCommandBuilder().setName('dayoff-panel').setDescription('Post the day-off request button panel'),
         new SlashCommandBuilder().setName('휴무승인').setDescription('Approve day off').addUserOption(o=>o.setName('대상').setRequired(true).setDescription('Target')).addStringOption(o=>o.setName('날짜').setRequired(true).setDescription('Date')),
         new SlashCommandBuilder().setName('dayoff-approve').setDescription('Approve day off').addUserOption(o=>o.setName('target').setRequired(true).setDescription('Target')).addStringOption(o=>o.setName('date').setRequired(true).setDescription('Date')),
         new SlashCommandBuilder().setName('휴무취소').setDescription('Cancel day off').addUserOption(o=>o.setName('대상').setRequired(true).setDescription('Target')).addStringOption(o=>o.setName('날짜').setRequired(true).setDescription('Date')),
@@ -78,9 +110,15 @@ function buildCommandDefinitions() {
         new SlashCommandBuilder().setName('휴무반려').setDescription('Reject day off').addUserOption(o=>o.setName('대상').setRequired(true).setDescription('Target')).addStringOption(o=>o.setName('날짜').setRequired(true).setDescription('Date')).addStringOption(o=>o.setName('사유').setDescription('Reason')),
         new SlashCommandBuilder().setName('dayoff-reject').setDescription('Reject day off').addUserOption(o=>o.setName('target').setRequired(true).setDescription('Target')).addStringOption(o=>o.setName('date').setRequired(true).setDescription('Date')).addStringOption(o=>o.setName('reason').setDescription('Reason')),
         new SlashCommandBuilder().setName('강제출근').setDescription('Force in').addUserOption(o=>o.setName('대상').setRequired(true).setDescription('Target')),
+        new SlashCommandBuilder().setName('force-in').setDescription('Force in').addUserOption(o=>o.setName('target').setRequired(true).setDescription('Target')),
         new SlashCommandBuilder().setName('강제퇴근').setDescription('Force out').addUserOption(o=>o.setName('대상').setRequired(true).setDescription('Target')),
+        new SlashCommandBuilder().setName('force-out').setDescription('Force out').addUserOption(o=>o.setName('target').setRequired(true).setDescription('Target')),
+        new SlashCommandBuilder().setName('강제조기퇴근').setDescription('Force early out').addUserOption(o=>o.setName('대상').setRequired(true).setDescription('Target')),
+        new SlashCommandBuilder().setName('force-early-out').setDescription('Force early out').addUserOption(o=>o.setName('target').setRequired(true).setDescription('Target')),
         new SlashCommandBuilder().setName('강제휴무').setDescription('Force off').addUserOption(o=>o.setName('대상').setRequired(true).setDescription('Target')),
+        new SlashCommandBuilder().setName('force-off').setDescription('Force off').addUserOption(o=>o.setName('target').setRequired(true).setDescription('Target')),
         new SlashCommandBuilder().setName('강제연장').setDescription('Force OT').addUserOption(o=>o.setName('대상').setRequired(true).setDescription('Target')),
+        new SlashCommandBuilder().setName('force-ot').setDescription('Force OT').addUserOption(o=>o.setName('target').setRequired(true).setDescription('Target')),
         new SlashCommandBuilder().setName('리셋').setDescription('Reset one user').addUserOption(o=>o.setName('대상').setRequired(true).setDescription('Target')),
         new SlashCommandBuilder().setName('전체리셋').setDescription('Reset all attendance data'), new SlashCommandBuilder().setName('reset-all').setDescription('Reset all attendance data'),
         new SlashCommandBuilder().setName('내정보').setDescription('My info'), new SlashCommandBuilder().setName('my-info').setDescription('My info'),

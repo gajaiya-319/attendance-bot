@@ -1,11 +1,14 @@
 'use strict';
 
 function createRoleService({ CONFIG }) {
+    const workerSuffixPattern = /\s*-\s*(?:(?:Great\s*)?(?:Manager|Trainee|Traine)\s+)?[PH]\s*(?:Day|Night)\s*Time(?:\s*\([^)]*\))?(?:\s+.*)?$/i;
+    const namedWorkerSuffixPattern = /\s*-\s*(?:(?:Great\s*)?(?:Manager|Trainee|Traine)\s+)?(?:Heine|Paagrio)\s*(?:Day|Night)\s*Time(?:\s*\([^)]*\))?(?:\s+.*)?$/i;
+
     function buildGuestNickname(displayName) {
         const base = String(displayName || 'Unknown')
             .replace(/\s+-\s+Guest$/i, '')
-            .replace(/\s*-\s*[PH]\s*(?:Day|Night)\s*Time\s*$/i, '')
-            .replace(/\s*-\s*(?:Heine|Paagrio)\s*(?:Day|Night)\s*Time\s*$/i, '')
+            .replace(workerSuffixPattern, '')
+            .replace(namedWorkerSuffixPattern, '')
             .trim() || 'Unknown';
         const suffix = ' - Guest';
         return `${base.slice(0, 32 - suffix.length)}${suffix}`;
@@ -13,8 +16,8 @@ function createRoleService({ CONFIG }) {
 
     function getWorkerNicknameBase(displayName) {
         return String(displayName || 'Unknown')
-            .replace(/\s*-\s*[PH]\s*(?:Day|Night)\s*Time\s*$/i, '')
-            .replace(/\s*-\s*(?:Heine|Paagrio)\s*(?:Day|Night)\s*Time\s*$/i, '')
+            .replace(workerSuffixPattern, '')
+            .replace(namedWorkerSuffixPattern, '')
             .replace(/\s+-\s+Guest$/i, '')
             .trim() || 'Unknown';
     }
@@ -34,7 +37,7 @@ function createRoleService({ CONFIG }) {
 
     function getWorkerRoleProfileFromNickname(displayName) {
         const name = String(displayName || '');
-        const match = name.match(/\s-\s*([PH])\s*(Day|Night)\s*Time\s*$/i);
+        const match = name.match(/\s-\s*(?:(?:Great\s*)?(?:Manager|Trainee|Traine)\s+)?([PH])\s*(Day|Night)\s*Time(?:\s*\([^)]*\))?(?:\s+.*)?$/i);
         if (!match) return null;
         return {
             server: match[1].toUpperCase() === 'H' ? 'HEINE' : 'PAAGRIO',

@@ -82,11 +82,31 @@ function createReportRenderer({
         ].join('|');
     }
 
-    function renderEmbedCodeBlock(text, maxLength = 1010) {
+    function renderEmbedCodeBlock(text, maxLength = 900) {
         const wrapperLength = 8;
         const hardLimit = Math.max(0, Math.min(maxLength, 1024 - wrapperLength));
-        const body = truncateWidth(String(text || 'NONE'), hardLimit).slice(0, hardLimit);
+        const raw = String(text || 'NONE');
+        const suffix = raw.length > hardLimit ? '\n...' : '';
+        const bodyLimit = Math.max(0, hardLimit - suffix.length);
+        const body = truncateWidth(raw, bodyLimit).slice(0, bodyLimit) + suffix;
         return `\`\`\`\n${body}\n\`\`\``;
+    }
+
+    function renderEmbedFieldValue(value, maxLength = 1024) {
+        const raw = String(value || '\u200B');
+        const hardLimit = Math.max(1, maxLength);
+        if (raw.length <= hardLimit) return raw;
+        const suffix = '...';
+        return `${truncateWidth(raw, hardLimit - suffix.length).slice(0, hardLimit - suffix.length)}${suffix}`;
+    }
+
+    function normalizeEmbedField(field) {
+        return {
+            ...field,
+            name: renderEmbedFieldValue(field?.name || '\u200B', 256),
+            value: renderEmbedFieldValue(field?.value || '\u200B', 1024),
+            inline: Boolean(field?.inline)
+        };
     }
 
     return {
@@ -96,7 +116,9 @@ function createReportRenderer({
         renderReportTopRow,
         renderReportStatsLegend,
         renderSessionMetricRow,
-        renderEmbedCodeBlock
+        renderEmbedCodeBlock,
+        renderEmbedFieldValue,
+        normalizeEmbedField
     };
 }
 

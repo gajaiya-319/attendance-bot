@@ -2,6 +2,7 @@
 
 const fsSyncDefault = require('fs');
 const fsDefault = require('fs').promises;
+const pathDefault = require('path');
 const momentDefault = require('moment-timezone');
 const { CONFIG } = require('../config/constants');
 
@@ -33,7 +34,8 @@ function createDataStore({
     config = CONFIG,
     fsSync = fsSyncDefault,
     fs = fsDefault,
-    moment = momentDefault
+    moment = momentDefault,
+    path = pathDefault
 } = {}) {
     const db = createInitialState(config);
     const meta = {
@@ -42,6 +44,7 @@ function createDataStore({
         lastSavedAt: null,
         lastBackupAt: null
     };
+    let activeSavePromise = null;
 
     function assignState(next = {}) {
         const normalized = normalizeState(next, db);
@@ -80,6 +83,50 @@ function createDataStore({
         await fs.rename(tmpPath, filePath);
     }
 
+    function sanitizeBackupReason(reason = 'manual') {
+        const safe = String(reason || 'manual')
+            .replace(/[^a-zA-Z0-9_-]+/g, '-')
+            .replace(/^-+|-+$/g, '')
+            .slice(0, 48);
+        return safe || 'manual';
+    }
+
+    function isSafeBackupFileName(fileName) {
+        if (!fileName || typeof fileName !== 'string') return false;
+        if (fileName !== path.basename(fileName)) return false;
+        return /^attendanceData-(?:\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}|\d{12})-[a-zA-Z0-9._-]+\.json$/.test(fileName);
+    }
+
+    function validateRestorableState(state) {
+        const issues = [];
+        if (!state || typeof state !== 'object' || Array.isArray(state)) {
+            return ['backup root must be an object'];
+        }
+        if (!state.attendanceData || typeof state.attendanceData !== 'object' || Array.isArray(state.attendanceData)) {
+            issues.push('attendanceData must be an object');
+        }
+        if (!Array.isArray(state.overtimeUsers)) issues.push('overtimeUsers must be an array');
+        if (state.dayOffReservations && (typeof state.dayOffReservations !== 'object' || Array.isArray(state.dayOffReservations))) {
+            issues.push('dayOffReservations must be an object');
+        }
+        if (state.liveExceptions && (typeof state.liveExceptions !== 'object' || Array.isArray(state.liveExceptions))) {
+            issues.push('liveExceptions must be an object');
+        }
+        for (const [id, user] of Object.entries(state.attendanceData || {})) {
+            if (!user || typeof user !== 'object' || Array.isArray(user)) {
+                issues.push(`attendanceData.${id} must be an object`);
+                continue;
+            }
+            if (user.id && String(user.id) !== String(id)) {
+                issues.push(`attendanceData.${id} id mismatch (${user.id})`);
+            }
+            if (user.sessions && !Array.isArray(user.sessions)) {
+                issues.push(`attendanceData.${id}.sessions must be an array`);
+            }
+        }
+        return issues;
+    }
+
     function loadSystem() {
         try {
             if (!fsSync.existsSync(config.FILES.DATA)) return db;
@@ -92,28 +139,33 @@ function createDataStore({
         }
     }
 
-    async function saveSystemAsync(state = db) {
-        assignState(state);
-        if (meta.isSaving) {
-            meta.pendingSave = true;
-            return;
-        }
-
+    async function flushSaveQueue() {
         meta.isSaving = true;
         try {
-            const payload = serialize(db);
-            await writeJsonAtomic(config.FILES.DATA, payload);
-            await writeJsonAtomic(config.FILES.BACKUP, payload);
-            meta.lastSavedAt = moment().tz(config.TIMEZONE).toISOString();
+            do {
+                meta.pendingSave = false;
+                const payload = serialize(db);
+                await writeJsonAtomic(config.FILES.DATA, payload);
+                await writeJsonAtomic(config.FILES.BACKUP, payload);
+                meta.lastSavedAt = moment().tz(config.TIMEZONE).toISOString();
+            } while (meta.pendingSave);
         } catch (e) {
             console.error('[SAVE ERROR]', e);
         } finally {
             meta.isSaving = false;
-            if (meta.pendingSave) {
-                meta.pendingSave = false;
-                saveSystemAsync(db);
-            }
+            activeSavePromise = null;
         }
+    }
+
+    async function saveSystemAsync(state = db) {
+        assignState(state);
+        if (meta.isSaving) {
+            meta.pendingSave = true;
+            return activeSavePromise;
+        }
+
+        activeSavePromise = flushSaveQueue();
+        return activeSavePromise;
     }
 
     async function createBackupSnapshot(reason = 'manual', state = db) {
@@ -121,14 +173,15 @@ function createDataStore({
             assignState(state);
             await fs.mkdir(config.FILES.BACKUP_DIR, { recursive: true });
             const stamp = moment().tz(config.TIMEZONE).format('YYYY-MM-DD-HH-mm-ss');
-            const fileName = `attendanceData-${stamp}-${reason}.json`;
-            const backupPath = `${config.FILES.BACKUP_DIR}/${fileName}`;
+            const safeReason = sanitizeBackupReason(reason);
+            const fileName = `attendanceData-${stamp}-${safeReason}.json`;
+            const backupPath = path.join(config.FILES.BACKUP_DIR, fileName);
             const payload = serialize(db, {
-                backupReason: reason,
+                backupReason: safeReason,
                 createdAt: moment().tz(config.TIMEZONE).toISOString()
             });
 
-            await fs.writeFile(backupPath, payload);
+            await writeJsonAtomic(backupPath, payload);
             meta.lastBackupAt = moment().tz(config.TIMEZONE).toISOString();
 
             const files = (await fs.readdir(config.FILES.BACKUP_DIR))
@@ -137,7 +190,7 @@ function createDataStore({
             const overflow = files.length - config.FILES.MAX_BACKUPS;
             if (overflow > 0) {
                 for (const oldFile of files.slice(0, overflow)) {
-                    await fs.unlink(`${config.FILES.BACKUP_DIR}/${oldFile}`).catch(() => {});
+                    await fs.unlink(path.join(config.FILES.BACKUP_DIR, oldFile)).catch(() => {});
                 }
             }
             return backupPath;
@@ -171,11 +224,17 @@ function createDataStore({
             assignState(currentState);
             const backups = await listBackupSnapshots();
             const targetName = fileName || backups[0];
-            if (!targetName || !backups.includes(targetName)) return false;
+            if (!targetName || !isSafeBackupFileName(targetName) || !backups.includes(targetName)) return false;
 
             await createBackupSnapshot('pre-restore', db);
-            const raw = await fs.readFile(`${config.FILES.BACKUP_DIR}/${targetName}`, 'utf8');
-            assignState(JSON.parse(raw));
+            const raw = await fs.readFile(path.join(config.FILES.BACKUP_DIR, targetName), 'utf8');
+            const parsed = JSON.parse(raw);
+            const issues = validateRestorableState(parsed);
+            if (issues.length) {
+                console.error('[BACKUP RESTORE VALIDATION ERROR]', issues.join('; '));
+                return false;
+            }
+            assignState(parsed);
             await saveSystemAsync(db);
             return targetName;
         } catch (e) {
@@ -194,7 +253,10 @@ function createDataStore({
         createBackupSnapshot,
         createScheduledBackupIfDue,
         listBackupSnapshots,
-        restoreBackupSnapshot
+        restoreBackupSnapshot,
+        sanitizeBackupReason,
+        isSafeBackupFileName,
+        validateRestorableState
     };
 }
 

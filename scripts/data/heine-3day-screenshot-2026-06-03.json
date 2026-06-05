@@ -1,0 +1,47 @@
+{
+  "periodLabel": "31~2일 3일차 (하이네)",
+  "savedBy": "screenshot-2026-06-03",
+  "rows": [
+    {
+      "server": "하이네",
+      "totalAdena": 3236000,
+      "grossSalary": 492135,
+      "txFee": 24607,
+      "playerShare": 321543,
+      "ownerShare": 176886,
+      "totalPeso": 12861
+    }
+  ],
+  "players": {
+    "day": [
+      { "name": "Zurin", "totalAdena": 181000, "expectedPeso": null },
+      { "name": "BitShelby", "totalAdena": 431000, "expectedPeso": null },
+      { "name": "ianoyyy", "totalAdena": 280000, "expectedPeso": null },
+      { "name": "Mark", "totalAdena": 100000, "expectedPeso": null },
+      { "name": "Choy", "totalAdena": 212000, "expectedPeso": null },
+      { "name": "Balot", "totalAdena": 227000, "expectedPeso": null }
+    ],
+    "night": [
+      { "name": "Mizushin", "totalAdena": 299000, "expectedPeso": null },
+      { "name": "Juni", "totalAdena": 621000, "expectedPeso": null },
+      { "name": "Ding-dong", "totalAdena": 435000, "expectedPeso": null },
+      { "name": "denise", "totalAdena": 450000, "expectedPeso": null }
+    ]
+  },
+  "shiftTotals": {
+    "day": {
+      "totalAdena": 1431000,
+      "grossSalary": 209485,
+      "playerShare": 159357,
+      "ownerShare": 89555,
+      "totalPeso": 6374
+    },
+    "night": {
+      "totalAdena": 1805000,
+      "grossSalary": 282650,
+      "playerShare": 162186,
+      "ownerShare": 87331,
+      "totalPeso": 6487
+    }
+  }
+}

@@ -1,241 +1,77 @@
-# Attendance Bot Runbook
+# 출퇴근·급여 봇 운영 RUNBOOK
 
-This runbook is for operating and checking the Discord attendance bot.
+로컬 PM2 프로세스 `attendance-bot` (`index.js`). 상태는 `attendanceData.json` + `logs/` + Google Sheets.
 
-## Before Restarting
+## 1. 스프레드시트 2개 (역할 분리)
 
-Run these checks from this folder:
+| 통합문서 | env | 용도 |
+|----------|-----|------|
+| **Work list** | `PURCHASE_SPREADSHEET_ID` | `Paagrio Great` / `Heine Great` — **3일 급여 원본** |
+| **급여토탈관리** | `PAYROLL_ARCHIVE_SPREADSHEET_ID` (보통 `PAYROLL_SUMMARY_SPREADSHEET_ID`와 동일) | `Raw_Data`, `최근_3일_요약`, `월간_누적_요약` |
 
-```powershell
-cd "C:\Users\hyun yong\Documents\Codex\2026-05-16\require-dotenv-config-const-fssync-require"
-npm.cmd test
-node -e "const fs=require('fs'); const src=fs.readFileSync('INDEX.JS','utf8'); new Function(src); console.log('syntax ok');"
+- **3일 실시간:** Work list Great 탭 → 봇이 **1분마다** `최근_3일_요약`에 API 반영 (급여토탈 + Work list에 `최근_3일_요약` 탭이 있으면 둘 다).
+- **월간 누적:** 급여토탈 `월간_누적_요약` **5~7행** = `Raw_Data` SUMIF만 (봇 월마감·이력 블록 **없음**).
+- **마감 기록:** Discord `/급여기록` → 급여토탈 `Raw_Data`에 행 추가 (Great 탭 스냅샷).
+
+## 2. 운영 3단계 (팀 규칙)
+
+1. **매일·실시간** — `최근_3일_요약`만 본다 (Great와 맞는지 가끔 확인).
+2. **약 75시간마다** — `/급여기록` 또는 봇 **자동** 저장 → `Raw_Data` (Great 삭제 전 필수).
+3. **월말** — `월간_누적_요약` 5~7행 + `Raw_Data`로 정산 (**시트에서 수동**; 봇이 월 초기화·박제 안 함).
+
+## 3. Discord / 자동화
+
+| 기능 | 설명 |
+|------|------|
+| `/급여기록` | 서버주인만. Raw_Data append. 동시 저장 시 `archive-in-progress` |
+| 자동 급여기록 | `PAYROLL_AUTO_ARCHIVE_ENABLED=true`, `PAYROLL_AUTO_ARCHIVE_HOURS=75`, **6시간마다** 체크 |
+| 자동 알림 DM | 성공/실패 → `OWNER_IDS` + `PURCHASE_OWNER_DM_IDS` |
+| 3일 sync 실패 | 연속 N회 실패 시 DM (`PAYROLL_LIVE_SYNC_ALERT_THRESHOLD`, 기본 3) |
+
+## 4. 자주 쓰는 명령
+
+```bash
+npm run deploy              # 테스트 → PM2 restart → health 대기
+npm run ops:health          # PM2·runtime·에러 로그
+npm run ops:google-check    # 시트·키 (API 읽기)
+node scripts/restore-monthly-summary-simple.js   # 월간 탭 5~7행 레이아웃 복구
+npm run ops:sync-live-3day  # 3일 요약 수동 1회 동기화
 ```
 
-Expected results:
+## 5. `.env` 필수·권장
 
-```txt
-time-logic tests passed
-state-policy tests passed
-syntax ok
-```
+- `TOKEN` — Discord 봇
+- `PURCHASE_GOOGLE_KEY_FILE` / `GOOGLE_APPLICATION_CREDENTIALS` — 서비스 계정 JSON 경로
+- `PURCHASE_SPREADSHEET_ID`, `PAYROLL_ARCHIVE_SPREADSHEET_ID`
+- `OWNER_IDS`, `PURCHASE_OWNER_DM_IDS` — 급여 DM 알림
 
-If `npm test` fails in PowerShell because of execution policy, use:
+선택: `PAYROLL_AUTO_ARCHIVE_*`, `PAYROLL_SYNC_WORKLIST_SUMMARY`, `PAYROLL_LIVE_SYNC_ALERT_THRESHOLD`
 
-```powershell
-npm.cmd test
-```
+## 6. Heartbeat (부하 분리)
 
-## Restart
+| 루프 | 주기 (기본) | env | 내용 |
+|------|-------------|-----|------|
+| **attendance** | 60초 | `HEARTBEAT_ATTENDANCE_MS` | 음성·출퇴근·라이브예외·휴무예약·역할·대시보드 |
+| **maintenance** | 5분 | `HEARTBEAT_MAINTENANCE_MS` | 백업·패널·ops 큐·운영점검·휴무 정리 |
+| **급여 3일** | 1분 cron | — | `최근_3일_요약` API sync (heartbeat와 별도) |
 
-Use the same method normally used to run the bot.
+한 틱이 길면 `[HEARTBEAT WARN] … skipping` — attendance/maintenance는 **각각** 스킵.
 
-Common local command:
+## 7. 장애 대응
 
-```powershell
-node INDEX.JS
-```
+| 증상 | 조치 |
+|------|------|
+| 3일 숫자 0 / #REF | Great 탭·플레이어 열 확인 → `npm run ops:sync-live-3day` |
+| `/급여기록` not-ready | Great 탭 파싱 실패; 탭 이름·Total Gain Adena 행 확인 |
+| 월간 이상 레이아웃 | `node scripts/restore-monthly-summary-simple.js` 후 시트 새로고침 |
+| heartbeat WARN | `npm run ops:health` → PM2 error 로그; `npm run deploy` |
+| ops 큐 쌓임 | `/ops` 재시도 또는 `logs/ops-pending.json` 확인 |
 
-After restart, run this in Discord:
+## 8. 데이터 위치 (로컬)
 
-```txt
-/refresh
-```
+- `attendanceData.json` — 출퇴근·휴무·라이브 예외
+- `logs/payroll-operation-log.jsonl` — 급여기록 로그
+- `logs/runtime-health.json` — 기동·명령 등록
+- `backups/` — attendance JSON 스냅샷
 
-## Backup
-
-Before risky changes or manual data fixes, create a backup:
-
-```txt
-/backup-create
-```
-
-Check available backups:
-
-```txt
-/backup-list
-```
-
-Restore only when necessary:
-
-```txt
-/backup-restore
-```
-
-Restore is owner-only and changes live attendance data.
-
-## Time Rules
-
-Timezone:
-
-```txt
-Asia/Manila
-```
-
-Current schedule:
-
-```txt
-Day default: 09:00-21:00
-Day Tuesday: 09:00-19:00
-Night default: 21:00-09:00 next day
-Night Tuesday: 19:00-04:00 next day
-Maintenance: Wednesday 04:00-09:00
-Pre-shift live buffer: 10 minutes
-```
-
-Time logic is tested in:
-
-```txt
-tests/time-logic.test.js
-```
-
-State transition policy is tested in:
-
-```txt
-tests/state-policy.test.js
-```
-
-## DC / LIVE OFF Policy
-
-Grace periods:
-
-```txt
-DC grace: 10 minutes
-LIVE OFF warning: 10 minutes
-LIVE OFF auto clock-out: 10 minutes
-```
-
-If a user exceeds DC or LIVE OFF grace:
-
-```txt
-The bot auto-closes attendance.
-If it is before scheduled end, this may count as early clock-out.
-```
-
-DM policy:
-
-```txt
-LIVE OFF: a gentle reminder is sent after 10 minutes.
-DC: no immediate DM is sent.
-DC timeout: one DM is sent when the bot auto-clocks the user out.
-After DC timeout, returning to voice keeps FINISHED and sends one "CLOCK IN required" guide.
-```
-
-## Auto Resume Policy
-
-If auto clock-out was caused by `dc-timeout` or `live-off-timeout`:
-
-```txt
-Return within 60 minutes + LIVE ON
-=> attendance resumes automatically
-=> reversible early penalty is removed
-```
-
-If the user returns after more than 60 minutes:
-
-```txt
-The bot does NOT resume automatically.
-The user receives a DM.
-The user must keep LIVE ON and press CLOCK IN.
-Attendance is not counted until CLOCK IN is pressed while LIVE ON.
-```
-
-If the user presses CLOCK IN while LIVE OFF in this state:
-
-```txt
-Attendance remains FINISHED.
-The user is told to turn LIVE ON and press CLOCK IN again.
-```
-
-## Finished Display Policy
-
-After clock-out:
-
-```txt
-FINISHED is shown for 30 minutes, even if the user leaves voice.
-After 30 minutes, they are hidden from the dashboard.
-```
-
-Overtime users are excluded from this hiding rule.
-
-## Day Off Policy
-
-Day off users are not auto-clocked in by voice or LIVE ON.
-
-If a day off user appears in voice or turns LIVE ON:
-
-```txt
-Day Off is kept.
-The bot notifies the user/admin flow.
-```
-
-If the user is actually working, an admin should handle it.
-
-## Useful Admin Commands
-
-```txt
-/refresh
-/sync-working
-/permission-check
-/data-audit
-/status-audit
-/time-audit
-/dayoff-list
-/dayoff-log
-/backup-create
-/backup-list
-```
-
-High-risk commands:
-
-```txt
-/backup-restore
-/reset-user
-/reset-all
-/manual-adjust
-/force-in
-/force-out
-/force-early-out
-/force-off
-/force-ot
-/clear-roles
-/fire
-```
-
-Use high-risk commands only after creating a backup.
-
-Successful high-risk admin actions are logged to the log channel with actor, target, and details.
-
-## Common Troubleshooting
-
-User is FINISHED but says they are working:
-
-```txt
-Check if they exceeded DC/LIVE OFF grace.
-If within 60 minutes and LIVE ON, refresh should auto-resume.
-If over 60 minutes, they must turn LIVE ON and press CLOCK IN.
-```
-
-User pressed CLOCK IN but attendance did not start:
-
-```txt
-Check if they are in voice and LIVE ON.
-CLOCK IN while LIVE OFF does not count.
-```
-
-User is not visible on dashboard:
-
-```txt
-They may be FINISHED and hidden after 30 minutes.
-They may not match the current shift role.
-They may be Day Off.
-Run /refresh if state looks stale.
-```
-
-Time looks wrong:
-
-```txt
-Run /time-audit.
-Run npm.cmd test locally.
-Check CONFIG.TIMEZONE.
-```
+비밀·키는 `.env`와 JSON 키 파일만 — git에 올리지 않음.

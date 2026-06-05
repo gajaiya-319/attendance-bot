@@ -1,9 +1,24 @@
 'use strict';
 
+const {
+    buildDayOffApprovedDm,
+    buildDayOffRejectedDm
+} = require('../utils/attendanceDmMessages');
+
 const DAYOFF_STATUS_EMOJIS = ['\u274C', '\u2705', '\u23F3', '\uD83D\uDD01'];
 const DAYOFF_APPROVAL_EMOJI = '\u2705';
 
 function createDayOffService({ CONFIG, moment, EmbedBuilder, padWidth, truncateWidth, getReservations }) {
+    function renderEmbedCodeBlock(text, maxLength = 900) {
+        const wrapperLength = 8;
+        const hardLimit = Math.max(0, Math.min(maxLength, 1024 - wrapperLength));
+        const raw = String(text || 'No data.');
+        const suffix = raw.length > hardLimit ? '\n...' : '';
+        const bodyLimit = Math.max(0, hardLimit - suffix.length);
+        const body = truncateWidth(raw, bodyLimit).slice(0, bodyLimit) + suffix;
+        return `\`\`\`\n${body}\n\`\`\``;
+    }
+
     function getDayOffChannelId() {
         return CONFIG.DAYOFF_CHANNEL || CONFIG.DAYOFF_CHAN || null;
     }
@@ -116,36 +131,20 @@ function createDayOffService({ CONFIG, moment, EmbedBuilder, padWidth, truncateW
     }
 
     function buildDayOffDm(reservation) {
-        return [
-            'Your day-off request has been approved.',
-            '',
-            `Name: ${reservation.name}`,
-            `Shift: ${reservation.shiftLabel}`,
-            `Leave Date: ${reservation.leaveDate}`,
-            '',
-            'Please make sure your schedule is adjusted accordingly.',
-            'Enjoy your day off and come back well rested.'
-        ].join('\n');
+        return buildDayOffApprovedDm(reservation);
     }
 
     function buildDayOffRejectDm(reservation) {
-        const reason = reservation.rejectReason || 'Rejected by Graet';
-        return [
-            'Your day-off request has been rejected.',
-            '',
-            `Name: ${reservation.name}`,
-            `Shift: ${reservation.shiftLabel}`,
-            `Leave Date: ${reservation.leaveDate}`,
-            `Rejected by: ${reservation.rejectedByName || 'Management'}`,
-            `Reason: ${reason}`,
-            '',
-            'Please contact management if you need clarification.'
-        ].join('\n');
+        return buildDayOffRejectedDm(reservation);
     }
 
     function hasApprovalReaction(message) {
         const reaction = message.reactions.cache.find(r => r.emoji.name === DAYOFF_APPROVAL_EMOJI);
         return Boolean(reaction && reaction.count > 0);
+    }
+
+    function hasApprovalText(message) {
+        return /\bapproved\s+by\b/i.test(message?.content || '');
     }
 
     function parseDayOffCommandDate(input) {
@@ -204,13 +203,14 @@ function createDayOffService({ CONFIG, moment, EmbedBuilder, padWidth, truncateW
             ? rows.slice(0, 30).map(formatDayOffReservationLine).join('\n')
             : 'No day off reservations.';
 
-        return new EmbedBuilder()
+        const embed = new EmbedBuilder()
             .setTitle('DAY OFF Reservation List')
             .setColor('#3B82F6')
             .setDescription(`Status: ${statusName}\nCount: ${rows.length}`)
-            .addFields({ name: 'List', value: `\`\`\`\n${content}\n\`\`\``, inline: false })
             .setFooter({ text: 'WAIT pending | OK approved | WORK worked | CANCEL cancelled | REJECT rejected' })
             .setTimestamp();
+        embed.addFields({ name: 'List', value: renderEmbedCodeBlock(content), inline: false });
+        return embed;
     }
 
     return {
@@ -224,6 +224,7 @@ function createDayOffService({ CONFIG, moment, EmbedBuilder, padWidth, truncateW
         buildDayOffDm,
         buildDayOffRejectDm,
         hasApprovalReaction,
+        hasApprovalText,
         parseDayOffCommandDate,
         getDayOffReservationsByStatus,
         formatDayOffReservationLine,

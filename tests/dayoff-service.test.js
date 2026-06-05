@@ -67,9 +67,11 @@ reservations = {
 };
 assert.strictEqual(service.getDayOffReservationsByStatus('approved').length, 1);
 assert.match(service.formatDayOffReservationLine(reservations.a), /^OK 2026-05-21/);
-assert.strictEqual(service.buildDayOffDm(reservations.a).includes('approved'), true);
+assert.strictEqual(service.buildDayOffDm(reservations.a).includes('승인'), true);
 assert.strictEqual(service.buildDayOffRejectDm({ ...reservations.a, rejectReason: 'No coverage' }).includes('No coverage'), true);
 assert.strictEqual(service.hasApprovalReaction({ reactions: { cache: [{ emoji: { name: '\u2705' }, count: 1 }] } }), true);
+assert.strictEqual(service.hasApprovalText({ content: 'Reason: Family Reunion (Approved by Sir Great on May 31, 2026)' }), true);
+assert.strictEqual(service.hasApprovalText({ content: 'Reason: Family Reunion' }), false);
 assert.strictEqual(service.buildDayOffListEmbed('all').data.title, 'DAY OFF Reservation List');
 
 console.log('dayoff-service tests passed');

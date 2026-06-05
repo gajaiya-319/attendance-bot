@@ -1,12 +1,23 @@
 node_modules
 .env
+sheet-bot-key.json
+*sheet*key*.json
+.env.example.local
 
 # Runtime attendance data. These files belong to the running bot/server,
 # not to source control.
 attendanceData.json
 attendanceData.json.bak
 logs/*.jsonl
+logs/*.json
+logs/runtime-health.json
+logs/maintenance-overrides.json
+logs/ops-pending*.json
 backups/attendanceData-*.json
+backups/backup-audit-reviewed.json
 
 # Local scratch files.
 snippet.js
+.cursor/
+outputs/
+attendanceData.before*.json

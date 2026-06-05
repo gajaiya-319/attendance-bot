@@ -37,4 +37,8 @@ assert.strictEqual(renderer.renderSessionMetricRow(user), 'BitShelby   |근무|0
 assert(renderer.renderEmbedCodeBlock('x'.repeat(2000)).length <= 1020);
 assert(renderer.renderEmbedCodeBlock('시간'.repeat(800)).length <= 1024);
 
+assert.strictEqual(renderer.renderEmbedFieldValue('x'.repeat(2000)).length, 1024);
+assert.strictEqual(renderer.normalizeEmbedField({ name: 'n'.repeat(300), value: 'v'.repeat(2000) }).name.length, 256);
+assert.strictEqual(renderer.normalizeEmbedField({ name: 'n'.repeat(300), value: 'v'.repeat(2000) }).value.length, 1024);
+
 console.log('report-renderer tests passed');

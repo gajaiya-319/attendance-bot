@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>&#128081;GRAET TEAM&#128081; &#52636;&#44208;&#44288;&#47532;</title>
+  <style>
+    body { margin: 0; padding: 16px; background: #121212; color: #e8eaed; font-family: "Malgun Gothic", Arial, sans-serif; }
+    .container { max-width: 1100px; margin: 0 auto; }
+    h2 { margin: 0 0 18px; padding-bottom: 12px; border-bottom: 1px solid #333; font-size: 22px; }
+    #loading { padding: 42px 0; text-align: center; color: #aaa; }
+    #dashboard { display: none; }
+    #last-updated { display: inline-block; margin-left: 8px; color: #8ab4f8; font-size: 12px; font-weight: normal; }
+    .legend { display: flex; flex-wrap: wrap; gap: 12px; margin: 16px 0; font-size: 13px; font-weight: 700; }
+    .legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .box { width: 12px; height: 12px; border-radius: 3px; }
+    .jung { background: #4CAF50; }
+    .ji { background: #FFC107; }
+    .gyul { background: #E53935; }
+    .jo { background: #FF9800; }
+    .yeon { background: #8E24AA; }
+    .hyu { background: #757575; }
+    .chart-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+    .chart-label { width: 92px; text-align: right; color: #bbb; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .bar { flex: 1; display: flex; height: 20px; background: #222; border-radius: 3px; overflow: hidden; }
+    .seg { height: 100%; min-width: 2px; }
+    .axis { display: flex; margin: 6px 0 30px 104px; padding-top: 5px; border-top: 1px solid #444; color: #888; font-size: 12px; }
+    .axis div { flex: 1; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 14px; }
+    th, td { padding: 13px 8px; text-align: center; border-bottom: 1px solid #242424; }
+    th { color: #c7c7c7; border-bottom-color: #444; }
+    .highlight { color: #ff6b6b; font-weight: 700; }
+    .summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 22px; }
+    .card { border: 1px solid #333; background: #181818; padding: 15px; border-radius: 6px; text-align: center; }
+    .card span { display: block; color: #bbb; font-size: 13px; margin-bottom: 8px; }
+    .card b { font-size: 20px; }
+    .controls { display: flex; flex-direction: column; gap: 18px; margin-bottom: 28px; }
+    .control-row { display: flex; align-items: center; flex-wrap: wrap; gap: 14px; }
+    .control-label { width: 70px; color: #bbb; font-size: 20px; font-weight: 800; }
+    .shift-label { margin-left: 24px; }
+    button { min-width: 96px; min-height: 54px; background: transparent; color: #b7b7b7; border: 1px solid #333; padding: 13px 24px; border-radius: 6px; cursor: pointer; font-size: 18px; font-weight: 700; }
+    button.active { background: #283593; color: #fff; border-color: #3949ab; }
+    .empty { padding: 26px; text-align: center; color: #888; border: 1px dashed #333; border-radius: 6px; }
+    @media (max-width: 720px) {
+      body { padding: 12px; }
+      h2 { font-size: 19px; }
+      .chart-label { width: 74px; font-size: 12px; }
+      .axis { margin-left: 86px; }
+      .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      table { font-size: 12px; }
+      th, td { padding: 10px 5px; }
+      .table-wrap { overflow-x: auto; }
+      .table-wrap table { min-width: 760px; }
+      .control-row { gap: 10px; }
+      .control-label { width: 60px; font-size: 18px; }
+      button { min-width: 88px; min-height: 52px; padding: 12px 16px; font-size: 16px; }
+      .filter-row { display: grid; grid-template-columns: 60px repeat(3, auto); justify-content: start; }
+      .filter-row .shift-label { margin-left: 0; grid-column: 1; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>&#128081;GRAET TEAM&#128081; &#50900;&#44036; &#52636;&#44208; &#53685;&#44228; <span id="last-updated"></span></h2>
+
+    <div id="loading">&#44396;&#44544; &#49884;&#53944;&#50640;&#49436; &#52636;&#44208; &#44592;&#47197;&#51012; &#48520;&#47084;&#50724;&#45716; &#51473;&#51077;&#45768;&#45796;...</div>
+
+    <div id="dashboard">
+      <div class="legend">
+        <span><i class="box jung"></i>&#51221;&#52636;</span>
+        <span><i class="box ji"></i>&#51648;&#44033;</span>
+        <span><i class="box gyul"></i>&#44208;&#49437;</span>
+        <span><i class="box jo"></i>&#51312;&#53748;</span>
+        <span><i class="box yeon"></i>&#50672;&#51109;&#44540;&#47924;</span>
+        <span><i class="box hyu"></i>&#55092;&#47924;</span>
+      </div>
+
+      <div id="chart-body"></div>
+      <div class="axis"><div>0</div><div>5</div><div>10</div><div>15</div><div>20</div><div>25</div><div style="text-align:right; flex:0 0 22px;">30</div></div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>&#51060;&#47492;</th><th>&#51221;&#52636;</th><th>&#51648;&#44033;</th><th>&#44208;&#49437;</th><th>&#51312;&#53748;</th><th>&#50672;&#51109;&#44540;&#47924;</th><th>&#55092;&#47924;</th>
+              <th>&#52636;&#44540;&#47456;(%)</th><th>&#44208;&#49437;&#47456;(%)</th><th>&#51648;&#44033;&#47456;(%)</th>
+            </tr>
+          </thead>
+          <tbody id="table-body"></tbody>
+        </table>
+      </div>
+
+      <div class="summary">
+        <div class="card"><span>&#54364;&#49884; &#51064;&#50896;</span><b id="total-users">0</b></div>
+        <div class="card"><span>&#54217;&#44512; &#52636;&#44540;&#47456;</span><b id="avg-att">0%</b></div>
+        <div class="card"><span>&#54217;&#44512; &#44208;&#49437;&#47456;</span><b id="avg-abs">0%</b></div>
+        <div class="card"><span>&#54217;&#44512; &#51648;&#44033;&#47456;</span><b id="avg-late">0%</b></div>
+      </div>
+
+      <div class="controls">
+        <div class="control-row filter-row">
+          <span class="control-label">&#49436;&#48260;</span>
+          <button class="active" onclick="setFilter(this, 'server', 'ALL')">&#51204;&#52404;</button>
+          <button onclick="setFilter(this, 'server', 'HEINE')">HEINE</button>
+          <button onclick="setFilter(this, 'server', 'PAAGRIO')">PAAGRIO</button>
+          <span class="control-label shift-label">&#44540;&#47924;&#51312;</span>
+          <button class="active" onclick="setFilter(this, 'shift', 'ALL')">&#51204;&#52404;</button>
+          <button onclick="setFilter(this, 'shift', 'DAY')">DAY</button>
+          <button onclick="setFilter(this, 'shift', 'NIGHT')">NIGHT</button>
+        </div>
+        <div class="control-row" id="sort-buttons">
+          <span class="control-label">&#51221;&#47148;</span>
+          <button class="active" onclick="setSort(this, 'ATT')">&#52636;&#44540;&#47456;&#49692;</button>
+          <button onclick="setSort(this, 'ABS')">&#44208;&#49437;&#47566;&#51008;&#49692;</button>
+          <button onclick="setSort(this, 'LATE')">&#51648;&#44033;&#47566;&#51008;&#49692;</button>
+          <button onclick="setSort(this, 'OT')">&#50672;&#51109;&#47566;&#51008;&#49692;</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = 'https://script.google.com/macros/s/AKfycbx3a9-T71S_zfRwf-hCCwmLfzJR2mW3E3FTNXHWNaa1s-p5gdJqmCd3L6W9IoVNvBGj/exec?api=raw';
+    let aggregatedData = [];
+    let currentServer = 'ALL';
+    let currentShift = 'ALL';
+    let currentSort = 'ATT';
+
+    function pick(row, keys, fallback = '') {
+      for (const key of keys) {
+        if (row[key] !== undefined && row[key] !== null && String(row[key]).trim() !== '') return String(row[key]).trim();
+      }
+      return fallback;
+    }
+
+    function normalizeServer(value) {
+      const text = String(value || '').trim().toUpperCase();
+      if (text.includes('HEINE') || text.includes('\ud558\uc774\ub124')) return 'HEINE';
+      if (text.includes('PAAGRIO') || text.includes('\ud30c\uc544\uadf8\ub9ac\uc624')) return 'PAAGRIO';
+      return text || '-';
+    }
+
+    function normalizeShift(value) {
+      const text = String(value || '').trim().toUpperCase();
+      if (text.includes('NIGHT') || text.includes('\uc57c\uac04')) return 'NIGHT';
+      if (text.includes('DAY') || text.includes('\uc8fc\uac04')) return 'DAY';
+      return text || '-';
+    }
+
+    function canonicalName(value) {
+      const name = String(value || '')
+        .replace(/\s*[-\u2013\u2014]\s*(?:(?:Great\s*)?(?:Manager|Trainee|Traine)\s+)?(?:[PH]\s*)?(?:Day|Night)\s*Time(?:\s*\([^)]*\))?(?:\s+.*)?$/i, ' ')
+        .replace(/\s*[-\u2013\u2014]\s*(?:(?:Great\s*)?(?:Manager|Trainee|Traine)\s+)?(?:Heine|Paagrio)\s*(?:Day|Night)\s*Time(?:\s*\([^)]*\))?(?:\s+.*)?$/i, ' ')
+        .replace(/\s*[-\u2013\u2014]\s*(?:Great\s*)?(?:Manager|Trainee|Guest)(?:\s+.*)?$/i, ' ')
+        .replace(/\b(?:over\s*time|overtime|ot)\b/gi, ' ')
+        .replace(/ding\s*[-\u2013\u2014]\s*dong/gi, 'Ding dong')
+        .replace(/\s+/g, ' ')
+        .trim();
+      const aliases = {
+        ding: 'Ding dong',
+        'ding-dong': 'Ding dong',
+        'ding dong': 'Ding dong',
+        shijiro: 'Shiijiro'
+      };
+      return aliases[name.toLowerCase()] || name;
+    }
+
+    function nameKey(value) {
+      return canonicalName(value).toLowerCase();
+    }
+
+    function normalizeStatus(value) {
+      const text = String(value || '').trim().toLowerCase();
+      const map = {
+        '\uc815': '\uc815\ucd9c', '\uc815\ucd9c': '\uc815\ucd9c', 'normal': '\uc815\ucd9c', 'on_time': '\uc815\ucd9c', 'ontime': '\uc815\ucd9c', 'clock_in': '\uc815\ucd9c',
+        '\uc9c0': '\uc9c0\uac01', '\uc9c0\uac01': '\uc9c0\uac01', 'late': '\uc9c0\uac01',
+        '\uacb0': '\uacb0\uc11d', '\uacb0\uc11d': '\uacb0\uc11d', 'absent': '\uacb0\uc11d',
+        '\uc870': '\uc870\ud1f4', '\uc870\ud1f4': '\uc870\ud1f4', 'early': '\uc870\ud1f4', 'early_out': '\uc870\ud1f4',
+        '\uc5f0': '\uc5f0\uc7a5\uadfc\ubb34', '\uc5f0\uc7a5\uadfc\ubb34': '\uc5f0\uc7a5\uadfc\ubb34', 'overtime': '\uc5f0\uc7a5\uadfc\ubb34', 'ot': '\uc5f0\uc7a5\uadfc\ubb34',
+        '\ud734': '\ud734\ubb34', '\ud734\ubb34': '\ud734\ubb34', 'day_off': '\ud734\ubb34', 'off': '\ud734\ubb34'
+      };
+      return map[text] || String(value || '').trim();
+    }
+
+    function hasOvertimeNote(value) {
+      return /\uc624\ubc84\ud0c0\uc784|\uc5f0\uc7a5\s*\uadfc\ubb34|\uc5f0\uc7a5\s*\uc2dc\uc791|overtime|\bot\b/i.test(String(value || ''));
+    }
+
+    async function loadRows() {
+      if (window.google && google.script && google.script.run) {
+        google.script.run
+          .withSuccessHandler(handleRows)
+          .withFailureHandler(function(error) {
+            showLoadError(error);
+          })
+          .getRawAttendanceRows();
+        return;
+      }
+
+      try {
+        const response = await fetch(API_URL + '&t=' + Date.now(), { cache: 'no-store' });
+        const rawData = await response.json();
+        if (!Array.isArray(rawData)) {
+          throw new Error(rawData && rawData.error ? rawData.error : 'Invalid API response');
+        }
+        handleRows(rawData);
+      } catch (error) {
+        showLoadError(error);
+      }
+    }
+
+    function showLoadError(error) {
+      document.getElementById('loading').innerText = '\ub370\uc774\ud130\ub97c \ubd88\ub7ec\uc624\ub294 \uc911 \uc624\ub958\uac00 \ubc1c\uc0dd\ud588\uc2b5\ub2c8\ub2e4: ' + (error && error.message ? error.message : error);
+      if (window.console) console.error(error);
+    }
+
+    function handleRows(rawData) {
+      const userMap = {};
+      const dayStatusMap = {};
+      const placeholderRows = [];
+      (rawData || []).forEach(function(row) {
+        const name = canonicalName(pick(row, ['\uc774\ub984', 'name', 'Name']));
+        if (!name) return;
+
+        const server = normalizeServer(pick(row, ['\uc11c\ubc84', '\uc11c\ubc84(\ud300)', 'server', 'Server']));
+        const shift = normalizeShift(pick(row, ['\uadfc\ubb34\uc870', 'shift', 'Shift']));
+        const status = normalizeStatus(pick(row, ['statusNormalized', '\uc0c1\ud0dc', 'status', 'Status']));
+        const dateKey = pick(row, ['\ub0a0\uc9dc', 'date', 'Date']);
+        const note = pick(row, ['\ube44\uace0', 'note', 'Note']);
+        const key = server + '|' + shift + '|' + nameKey(name);
+        if ((!dateKey || dateKey === '-') && (!status || status === '-')) {
+          placeholderRows.push({ key, name, server, shift });
+          return;
+        }
+        const dayKey = key + '|' + dateKey;
+
+        if (!userMap[key]) {
+          userMap[key] = { order: Object.keys(userMap).length, name, server, shift, jung: 0, ji: 0, gyul: 0, jo: 0, yeon: 0, hyu: 0 };
+        }
+        if (!dayStatusMap[dayKey]) dayStatusMap[dayKey] = {};
+
+        if (status === '\uc815\ucd9c' && !dayStatusMap[dayKey].jung) {
+          userMap[key].jung += 1;
+          dayStatusMap[dayKey].jung = true;
+        }
+        else if (status === '\uc9c0\uac01' && !dayStatusMap[dayKey].ji) {
+          userMap[key].ji += 1;
+          dayStatusMap[dayKey].ji = true;
+        }
+        else if (status === '\uacb0\uc11d' && !dayStatusMap[dayKey].gyul) {
+          userMap[key].gyul += 1;
+          dayStatusMap[dayKey].gyul = true;
+        }
+        else if (status === '\uc870\ud1f4' && !dayStatusMap[dayKey].jo) {
+          userMap[key].jo += 1;
+          dayStatusMap[dayKey].jo = true;
+        }
+        else if (status === '\uc5f0\uc7a5\uadfc\ubb34') {
+          if (!dayStatusMap[dayKey].jung) {
+            userMap[key].jung += 1;
+            dayStatusMap[dayKey].jung = true;
+          }
+          if (!dayStatusMap[dayKey].yeon) {
+            userMap[key].yeon += 1;
+            dayStatusMap[dayKey].yeon = true;
+          }
+        }
+        else if (status === '\ud734\ubb34' && !dayStatusMap[dayKey].hyu) {
+          userMap[key].hyu += 1;
+          dayStatusMap[dayKey].hyu = true;
+        }
+
+        if (hasOvertimeNote(note) && !dayStatusMap[dayKey].yeon) {
+          userMap[key].yeon += 1;
+          dayStatusMap[dayKey].yeon = true;
+        }
+      });
+
+      placeholderRows.forEach(function(row) {
+        if (userMap[row.key]) return;
+        userMap[row.key] = { order: Object.keys(userMap).length, name: row.name, server: row.server, shift: row.shift, jung: 0, ji: 0, gyul: 0, jo: 0, yeon: 0, hyu: 0 };
+      });
+
+      aggregatedData = Object.values(userMap);
+      document.getElementById('last-updated').innerText = '\ub9c8\uc9c0\ub9c9 \ubd88\ub7ec\uc624\uae30: ' + new Date().toLocaleString('ko-KR');
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('dashboard').style.display = 'block';
+      render();
+    }
+
+    function activateButton(button, type) {
+      const group = button.parentElement;
+      const buttons = type
+        ? Array.prototype.filter.call(group.querySelectorAll('button'), function(btn) {
+            return (btn.getAttribute('onclick') || '').indexOf("'" + type + "'") !== -1;
+          })
+        : Array.prototype.slice.call(group.querySelectorAll('button'));
+
+      buttons.forEach(function(btn) { btn.classList.remove('active'); });
+      button.classList.add('active');
+    }
+
+    function setFilter(button, type, value) {
+      if (type === 'server') currentServer = value;
+      if (type === 'shift') currentShift = value;
+      activateButton(button, type);
+      render();
+    }
+
+    function setSort(button, value) {
+      currentSort = value;
+      activateButton(button);
+      render();
+    }
+
+    function render() {
+      let filtered = aggregatedData.filter(function(d) {
+        return (currentServer === 'ALL' || d.server === currentServer) && (currentShift === 'ALL' || d.shift === currentShift);
+      }).map(function(d) {
+        const attended = d.jung + d.ji + d.jo;
+        const base = attended + d.gyul;
+        return Object.assign({}, d, {
+          attRate: base === 0 ? 0 : (attended / base) * 100,
+          absRate: base === 0 ? 0 : (d.gyul / base) * 100,
+          lateRate: base === 0 ? 0 : (d.ji / base) * 100
+        });
+      });
+
+      if (currentSort === 'ATT') filtered.sort((a, b) =>
+        b.attRate - a.attRate ||
+        b.jung - a.jung ||
+        a.gyul - b.gyul ||
+        a.ji - b.ji ||
+        a.jo - b.jo ||
+        b.yeon - a.yeon ||
+        a.order - b.order
+      );
+      if (currentSort === 'ABS') filtered.sort((a, b) => b.gyul - a.gyul || a.order - b.order);
+      if (currentSort === 'LATE') filtered.sort((a, b) => b.ji - a.ji || a.order - b.order);
+      if (currentSort === 'OT') filtered.sort((a, b) => b.yeon - a.yeon || a.order - b.order);
+
+      let tBase = 0, tAttended = 0, tGyul = 0, tJi = 0;
+      filtered.forEach(function(d) {
+        tAttended += d.jung + d.ji + d.jo;
+        tGyul += d.gyul;
+        tJi += d.ji;
+        tBase += d.jung + d.ji + d.jo + d.gyul;
+      });
+
+      document.getElementById('total-users').innerText = filtered.length;
+      document.getElementById('avg-att').innerText = Math.round(tBase === 0 ? 0 : (tAttended / tBase) * 100) + '%';
+      document.getElementById('avg-abs').innerText = Math.round(tBase === 0 ? 0 : (tGyul / tBase) * 100) + '%';
+      document.getElementById('avg-late').innerText = Math.round(tBase === 0 ? 0 : (tJi / tBase) * 100) + '%';
+
+      const chart = document.getElementById('chart-body');
+      chart.innerHTML = filtered.length ? '' : '<div class="empty">\uc120\ud0dd\ud55c \uc870\uac74\uc5d0 \ud45c\uc2dc\ud560 \ucd9c\uacb0 \uae30\ub85d\uc774 \uc5c6\uc2b5\ub2c8\ub2e4.</div>';
+      filtered.forEach(function(d) {
+        const row = document.createElement('div');
+        row.className = 'chart-row';
+        row.innerHTML =
+          '<div class="chart-label" title="' + d.name + '">' + d.name + '</div>' +
+          '<div class="bar">' +
+          segment(d.jung, 'jung', '\uc815\ucd9c') +
+          segment(d.ji, 'ji', '\uc9c0\uac01') +
+          segment(d.gyul, 'gyul', '\uacb0\uc11d') +
+          segment(d.jo, 'jo', '\uc870\ud1f4') +
+          segment(d.yeon, 'yeon', '\uc5f0\uc7a5\uadfc\ubb34') +
+          segment(d.hyu, 'hyu', '\ud734\ubb34') +
+          '</div>';
+        chart.appendChild(row);
+      });
+
+      const tbody = document.getElementById('table-body');
+      tbody.innerHTML = '';
+      filtered.forEach(function(d) {
+        const tr = document.createElement('tr');
+        tr.innerHTML =
+          '<td>' + d.name + '</td>' +
+          '<td>' + d.jung + '</td><td>' + d.ji + '</td><td>' + d.gyul + '</td>' +
+          '<td>' + d.jo + '</td><td>' + d.yeon + '</td><td>' + d.hyu + '</td>' +
+          '<td>' + d.attRate.toFixed(1) + '%</td>' +
+          '<td class="' + (d.absRate >= 10 ? 'highlight' : '') + '">' + d.absRate.toFixed(1) + '%</td>' +
+          '<td class="' + (d.lateRate >= 10 ? 'highlight' : '') + '">' + d.lateRate.toFixed(1) + '%</td>';
+        tbody.appendChild(tr);
+      });
+    }
+
+    function segment(count, className, label) {
+      if (count <= 0) return '';
+      return '<div class="seg ' + className + '" style="width:' + ((count / 30) * 100) + '%" title="' + label + ': ' + count + '"></div>';
+    }
+
+    loadRows();
+  </script>
+</body>
+</html>

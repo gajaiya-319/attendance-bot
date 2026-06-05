@@ -1658,6 +1658,7 @@ async function renderDashboardCore({ forceMemberRefresh = false } = {}) {
                 const user = attendanceData[m.id];
                 const voiceState = guild.voiceStates.cache.get(m.id);
                 const isVoiceConnected = Boolean(m.voice?.channelId || voiceState?.channelId);
+                const roleMatchesCurrentShift = !dashboardMaintenance && m.roles.cache.has(roleId);
                 const finishedAt = user?.checkOutRaw || user?.attendanceStatusChangedAt;
                 const finishedTooLong = Boolean(
                     user?.isFinished &&
@@ -1666,8 +1667,7 @@ async function renderDashboardCore({ forceMemberRefresh = false } = {}) {
                     finishedAt &&
                     now.diff(moment(finishedAt).tz(CONFIG.TIMEZONE), 'minutes') > CONFIG.FINISHED_VISIBLE_AFTER_MINS
                 );
-                if (finishedTooLong && !user?.dayOff && !overtimeUsers.some(ot => ot.id === m.id)) return false;
-                const roleMatchesCurrentShift = !dashboardMaintenance && m.roles.cache.has(roleId);
+                if (finishedTooLong && !roleMatchesCurrentShift && !user?.dayOff && !overtimeUsers.some(ot => ot.id === m.id)) return false;
                 const recentManualAction = Boolean(
                     user?.manualPanelTouchedAt &&
                     now.diff(moment(user.manualPanelTouchedAt).tz(CONFIG.TIMEZONE), 'minutes') <= 10 &&

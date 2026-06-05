@@ -1,0 +1,38 @@
+{
+  "periodLabel": "31~2일 3일차 (파아그리오)",
+  "savedBy": "screenshot-2026-06-03",
+  "rows": [
+    {
+      "server": "파아그리오",
+      "totalAdena": 10177000,
+      "grossSalary": 1169935,
+      "txFee": 58497,
+      "playerShare": 722425,
+      "ownerShare": 389523,
+      "totalPeso": 28897
+    }
+  ],
+  "players": {
+    "day": [
+      { "name": "Ryuji", "day31": 250000, "day1": 295000, "day2": 250000, "ot": 0, "totalAdena": 795000, "expectedPeso": 2382 },
+      { "name": "giru kun", "day31": 237000, "day1": 250000, "day2": 300000, "ot": 0, "totalAdena": 787000, "expectedPeso": 2157 },
+      { "name": "kram", "day31": 127000, "day1": 233000, "day2": 220000, "ot": 0, "totalAdena": 580000, "expectedPeso": 1527 },
+      { "name": "Zeki", "day31": 212000, "day1": 231000, "day2": 263000, "ot": 0, "totalAdena": 706000, "expectedPeso": 1831 },
+      { "name": "Bellet", "day31": 0, "day1": 0, "day2": 72000, "ot": 0, "totalAdena": 72000, "expectedPeso": 116 },
+      { "name": "Lance", "day31": 241000, "day1": 270000, "day2": 258000, "ot": 0, "totalAdena": 769000, "expectedPeso": 2720 },
+      { "name": "Katsuki", "day31": 0, "day1": 235000, "day2": 0, "ot": 0, "totalAdena": 235000, "expectedPeso": 641 },
+      { "name": "Tonstar", "day31": 49000, "day1": 81000, "day2": 220000, "ot": 231000, "totalAdena": 581000, "expectedPeso": 1527 },
+      { "name": "Zurin", "day31": 0, "day1": 0, "day2": 102000, "ot": 0, "totalAdena": 102000, "expectedPeso": 277 }
+    ],
+    "night": [
+      { "name": "Chuwi", "day31": 0, "day1": 310000, "day2": 330000, "ot": 0, "totalAdena": 640000, "expectedPeso": 2019 },
+      { "name": "k3nchin", "day31": 270000, "day1": 0, "day2": 400000, "ot": 0, "totalAdena": 670000, "expectedPeso": 1887 },
+      { "name": "Brave", "day31": 260000, "day1": 300000, "day2": 0, "ot": 0, "totalAdena": 560000, "expectedPeso": 1586 },
+      { "name": "Shijiro", "day31": 250000, "day1": 250000, "day2": 278000, "ot": 114000, "totalAdena": 892000, "expectedPeso": 2513 },
+      { "name": "Daba", "day31": 230000, "day1": 270000, "day2": 356000, "ot": 0, "totalAdena": 856000, "expectedPeso": 2383 },
+      { "name": "Gabi", "day31": 261000, "day1": 300000, "day2": 335000, "ot": 0, "totalAdena": 896000, "expectedPeso": 2499 },
+      { "name": "AB", "day31": 217000, "day1": 286000, "day2": 281000, "ot": 0, "totalAdena": 784000, "expectedPeso": 2120 },
+      { "name": "Magic89", "day31": 0, "day1": 0, "day2": 252000, "ot": 0, "totalAdena": 252000, "expectedPeso": 712 }
+    ]
+  }
+}

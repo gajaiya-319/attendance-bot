@@ -447,10 +447,6 @@ function createAttendanceService(deps) {
         if (!clockInRule.ok) {
             user.shift = shift;
             user.preShiftLiveAt = now.toISOString();
-            user.isFinished = false;
-            user.dayOff = false;
-            user.disconnected = false;
-            user.disconnectedAt = null;
             const waitLogKey = `${shift}:${clockInRule.bounds.start.format('YYYY-MM-DD HH:mm')}:too-early`;
             const shouldLogPreShiftWait = user.lastPreShiftWaitLogKey !== waitLogKey;
             if (shouldLogPreShiftWait) user.lastPreShiftWaitLogKey = waitLogKey;
@@ -605,6 +601,371 @@ function createAttendanceService(deps) {
         };
     }
 
+    function applyDayOffCore(user, now, source = 'day-off', reason = 'day-off-applied') {
+        if (!user) return { ok: false, reason: 'missing-user' };
+        const at = moment(now).tz(CONFIG.TIMEZONE);
+        const session = getOpenSession(user)
+            ? finishAttendanceSession(user, at, source, reason, at)
+            : null;
+
+        user.dayOff = true;
+        user.status = null;
+        user.checkedIn = false;
+        user.disconnected = false;
+        user.disconnectedAt = null;
+        user.isFinished = true;
+        user.pendingClockOut = null;
+        user.voiceJoinedAt = null;
+        user.liveOffStartedAt = null;
+        user.liveOffWarnedFor = null;
+        user.pendingManualOT = false;
+        user.manualResumeRequired = false;
+        user.manualResumeRequiredSince = null;
+        user.manualResumeRequiredReason = null;
+        user.finishedPresence = 'left_voice';
+        user.finalLeftAt = at.toISOString();
+        transitionRecordedStatus(user, {
+            attendanceStatus: 'DAY_OFF',
+            voiceStatus: 'OFFLINE'
+        }, at, source, reason);
+        appendAttendanceEvent(user, 'day_off_applied', at, source, { reason });
+
+        const overtimeUsers = getOvertimeUsers();
+        const overtimeBefore = overtimeUsers.length;
+        const filteredOvertimeUsers = overtimeUsers.filter(o => o.id !== user.id);
+        overtimeUsers.splice(0, overtimeUsers.length, ...filteredOvertimeUsers);
+
+        return {
+            ok: true,
+            user,
+            session,
+            removedOvertimeEntry: overtimeBefore !== overtimeUsers.length
+        };
+    }
+
+    function applyFinishedStateCore(user, now, source = 'state-finish', reason = 'finished-state-applied') {
+        if (!user) return { ok: false, reason: 'missing-user' };
+        const at = moment(now).tz(CONFIG.TIMEZONE);
+        const session = getOpenSession(user)
+            ? finishAttendanceSession(user, at, source, reason, at)
+            : null;
+
+        user.checkedIn = false;
+        user.dayOff = false;
+        user.disconnected = false;
+        user.disconnectedAt = null;
+        user.isFinished = true;
+        user.status = null;
+        user.pendingClockOut = null;
+        user.voiceJoinedAt = null;
+        user.liveOffStartedAt = null;
+        user.liveOffWarnedFor = null;
+        user.pendingManualOT = false;
+        user.checkOutTime = at.format('hh:mm A');
+        user.checkOutRaw = at.toISOString();
+        user.lastClockOutSource = source;
+        if (user.shift) {
+            user.shiftSessionKey = getShiftSessionKey(user.shift, at);
+        }
+        transitionRecordedStatus(user, {
+            attendanceStatus: 'FINISHED',
+            voiceStatus: 'OFFLINE'
+        }, at, source, reason);
+        setFinishedPresence(user, 'left_voice', at, source);
+        appendAttendanceEvent(user, 'finished_state_applied', at, source, { reason });
+
+        const overtimeUsers = getOvertimeUsers();
+        const overtimeBefore = overtimeUsers.length;
+        const filteredOvertimeUsers = overtimeUsers.filter(o => o.id !== user.id);
+        overtimeUsers.splice(0, overtimeUsers.length, ...filteredOvertimeUsers);
+
+        return {
+            ok: true,
+            user,
+            session,
+            removedOvertimeEntry: overtimeBefore !== overtimeUsers.length
+        };
+    }
+
+    function applyLiveExceptionCore(user, shift, now, source = 'live-exception', reason = 'live-exception-applied', options = {}) {
+        if (!user || !shift) return { ok: false, reason: 'missing-user-or-shift' };
+        const at = moment(now).tz(CONFIG.TIMEZONE);
+        const voiceStatus = options.voiceStatus || 'EXCEPTION';
+        const wasCheckedIn = Boolean(user.checkedIn);
+        const shouldStartNewSession = options.startSession !== false && Boolean(user.isFinished || !user.checkedIn || !getOpenSession(user));
+
+        user.checkedIn = true;
+        user.dayOff = false;
+        user.dayOffExpireAt = null;
+        user.disconnected = Boolean(options.disconnected);
+        user.disconnectedAt = options.disconnected ? (user.disconnectedAt || at.toISOString()) : null;
+        user.isFinished = false;
+        user.shift = shift;
+        user.status = 'exception';
+        user.checkInTime = user.checkInTime || at.format('hh:mm A');
+        user.checkInRaw = user.checkInRaw || at.toISOString();
+        user.checkOutTime = null;
+        user.checkOutRaw = null;
+        user.lastClockOutSource = null;
+        user.finishedPresence = null;
+        user.finalLeftAt = null;
+        user.voiceJoinedAt = null;
+        user.liveOffStartedAt = null;
+        user.liveOffWarnedFor = null;
+        user.pendingClockOut = null;
+        user.finishedLiveOffReminderMarks = [];
+        if (voiceStatus !== 'DISCONNECTED') user.lastLiveOnAt = at.toISOString();
+        transitionRecordedStatus(user, {
+            attendanceStatus: 'WORKING',
+            voiceStatus
+        }, at, source, reason);
+
+        const session = shouldStartNewSession
+            ? startAttendanceSession(user, shift, at, source)
+            : getOpenSession(user);
+
+        const overtimeUsers = getOvertimeUsers();
+        const overtimeBefore = overtimeUsers.length;
+        const filteredOvertimeUsers = overtimeUsers.filter(o => o.id !== user.id);
+        overtimeUsers.splice(0, overtimeUsers.length, ...filteredOvertimeUsers);
+
+        appendAttendanceEvent(user, 'live_exception_applied', at, source, {
+            reason,
+            shift,
+            voiceStatus,
+            startedSession: Boolean(shouldStartNewSession && session),
+            wasCheckedIn
+        });
+
+        return {
+            ok: true,
+            user,
+            session,
+            wasCheckedIn,
+            startedSession: Boolean(shouldStartNewSession && session),
+            removedOvertimeEntry: overtimeBefore !== overtimeUsers.length
+        };
+    }
+
+    function clearStaleDayOffCore(user, shift, now, source = 'voice_snapshot', reason = 'stale-dayoff-cleared') {
+        if (!user) return { ok: false, reason: 'missing-user' };
+        const at = moment(now).tz(CONFIG.TIMEZONE);
+        const previousExpireAt = user.dayOffExpireAt || null;
+        const wasFinished = Boolean(user.isFinished);
+
+        user.dayOff = false;
+        user.dayOffExpireAt = null;
+        user.isFinished = false;
+        user.status = null;
+        user.finishedPresence = null;
+        user.finalLeftAt = null;
+        user.dayOffPresenceNotifiedFor = null;
+        user.dayOffClockInPromptSessionKey = null;
+        user.dayOffClockInPromptStartedAt = null;
+        user.dayOffClockInPromptMarks = [];
+        if ((user.offCount || 0) > 0) user.offCount -= 1;
+        transitionRecordedStatus(user, {
+            attendanceStatus: user.checkedIn ? 'WORKING' : 'PRE_SHIFT',
+            voiceStatus: 'LIVE_ON'
+        }, at, source, reason);
+        appendAttendanceEvent(user, 'stale_dayoff_cleared_for_current_worker', at, source, {
+            shift,
+            previousExpireAt,
+            wasFinished,
+            reason
+        });
+
+        return {
+            ok: true,
+            user,
+            previousExpireAt,
+            wasFinished
+        };
+    }
+
+    function clearDayOffReservationStateCore(user, now, source = 'day-off-reservation', reason = 'day-off-reservation-cleared') {
+        if (!user) return { ok: false, reason: 'missing-user' };
+        const at = moment(now).tz(CONFIG.TIMEZONE);
+        const previousExpireAt = user.dayOffExpireAt || null;
+        const wasDayOff = Boolean(user.dayOff);
+
+        user.dayOff = false;
+        user.dayOffExpireAt = null;
+        user.dayOffPresenceNotifiedFor = null;
+        user.dayOffClockInPromptSessionKey = null;
+        user.dayOffClockInPromptStartedAt = null;
+        user.dayOffClockInPromptMarks = [];
+        if (wasDayOff && (user.offCount || 0) > 0) user.offCount -= 1;
+        if (wasDayOff && !user.checkedIn && user.attendanceStatus === 'DAY_OFF') {
+            transitionRecordedStatus(user, {
+                attendanceStatus: user.isFinished ? 'FINISHED' : 'PRE_SHIFT',
+                voiceStatus: user.voiceStatus || 'OFFLINE'
+            }, at, source, reason);
+        }
+        appendAttendanceEvent(user, 'dayoff_reservation_state_cleared', at, source, {
+            reason,
+            wasDayOff,
+            previousExpireAt
+        });
+
+        return {
+            ok: true,
+            user,
+            wasDayOff,
+            previousExpireAt
+        };
+    }
+
+    function applyManualResumeRequiredCore(user, now, source = 'button-or-command', reason = 'manual-resume-live-required', options = {}) {
+        if (!user) return { ok: false, reason: 'missing-user' };
+        const at = moment(now).tz(CONFIG.TIMEZONE);
+        const voiceStatus = options.voiceStatus || 'OFFLINE';
+
+        user.checkedIn = false;
+        user.isFinished = true;
+        user.disconnected = false;
+        user.disconnectedAt = null;
+        user.voiceJoinedAt = null;
+        user.liveOffStartedAt = null;
+        user.liveOffWarnedFor = null;
+        user.pendingClockOut = null;
+        setFinishedPresence(user, voiceStatus === 'OFFLINE' ? 'left_voice' : 'in_voice', at, source);
+        transitionRecordedStatus(user, {
+            attendanceStatus: 'FINISHED',
+            voiceStatus
+        }, at, source, reason);
+        appendAttendanceEvent(user, 'manual_resume_required_kept_finished', at, source, {
+            reason,
+            voiceStatus
+        });
+
+        return { ok: true, user };
+    }
+
+    function applyPendingOvertimeReservationCore(user, now, source = 'button-or-command', reason = 'manual-ot-reserved', options = {}) {
+        if (!user) return { ok: false, reason: 'missing-user' };
+        const at = moment(now).tz(CONFIG.TIMEZONE);
+        const voiceConnected = Boolean(options.voiceConnected);
+
+        user.pendingManualOT = true;
+        user.isFinished = false;
+        user.manualResumeRequired = false;
+        user.manualResumeRequiredSince = null;
+        user.manualResumeRequiredReason = null;
+        if (voiceConnected) markLiveOffState(user, at);
+        appendAttendanceEvent(user, 'manual_overtime_reserved', at, source, {
+            reason,
+            voiceConnected
+        });
+
+        return { ok: true, user };
+    }
+
+    function expireDayOffStateCore(user, now, source = 'day-off-expiry', reason = 'day-off-expired') {
+        if (!user) return { ok: false, reason: 'missing-user' };
+        const at = moment(now).tz(CONFIG.TIMEZONE);
+        const previousExpireAt = user.dayOffExpireAt || null;
+
+        user.dayOff = false;
+        user.dayOffExpireAt = null;
+        user.isFinished = false;
+        user.status = null;
+        user.finishedPresence = null;
+        user.finalLeftAt = null;
+        transitionRecordedStatus(user, {
+            attendanceStatus: 'PRE_SHIFT',
+            voiceStatus: user.voiceStatus || 'OFFLINE'
+        }, at, source, reason);
+        appendAttendanceEvent(user, 'dayoff_expired', at, source, {
+            previousExpireAt,
+            reason
+        });
+
+        return { ok: true, user, previousExpireAt };
+    }
+
+    function resetFinishedForPreClockInCore(user, now, source = 'button-or-command', reason = 'clock-in-retry-before-live', options = {}) {
+        if (!user) return { ok: false, reason: 'missing-user' };
+        const at = moment(now).tz(CONFIG.TIMEZONE);
+        const voiceStatus = options.voiceStatus || user.voiceStatus || 'OFFLINE';
+
+        user.isFinished = false;
+        user.finishedPresence = null;
+        user.finalLeftAt = null;
+        transitionRecordedStatus(user, {
+            attendanceStatus: 'PRE_SHIFT',
+            voiceStatus
+        }, at, source, reason);
+        appendAttendanceEvent(user, 'finished_reset_for_clock_in_retry', at, source, {
+            reason,
+            voiceStatus
+        });
+
+        return { ok: true, user };
+    }
+
+    function applyCurrentShiftLiveOnCore(user, shift, now, source = 'dashboard-overtime-cleanup', reason = 'current-shift-live-on') {
+        if (!user || !shift) return { ok: false, reason: 'missing-user-or-shift' };
+        const at = moment(now).tz(CONFIG.TIMEZONE);
+
+        user.shift = shift;
+        user.isFinished = false;
+        user.checkedIn = true;
+        user.disconnected = false;
+        user.disconnectedAt = null;
+        user.voiceJoinedAt = null;
+        user.liveOffStartedAt = null;
+        user.liveOffWarnedFor = null;
+        user.shiftSessionKey = getShiftSessionKey(shift, at);
+        user.lastLiveLogKey = getShiftSessionKey(shift, at);
+        transitionRecordedStatus(user, {
+            attendanceStatus: 'WORKING',
+            voiceStatus: 'LIVE_ON'
+        }, at, source, reason);
+        appendAttendanceEvent(user, 'current_shift_live_on_applied', at, source, {
+            shift,
+            reason
+        });
+
+        return { ok: true, user };
+    }
+
+    function applySmartResetCore(user, now, source = 'smart-reset', reason = 'smart-reset') {
+        if (!user) return { ok: false, reason: 'missing-user' };
+        const at = moment(now).tz(CONFIG.TIMEZONE);
+
+        user.strikeReceivedThisShift = false;
+        user.checkedIn = false;
+        user.dayOff = false;
+        user.dayOffExpireAt = null;
+        user.disconnected = false;
+        user.disconnectedAt = null;
+        user.isFinished = false;
+        user.status = null;
+        user.pendingClockOut = null;
+        user.voiceJoinedAt = null;
+        user.liveOffStartedAt = null;
+        user.liveOffWarnedFor = null;
+        user.finishedPresence = null;
+        user.finalLeftAt = null;
+        transitionRecordedStatus(user, {
+            attendanceStatus: 'PRE_SHIFT',
+            voiceStatus: 'OFFLINE'
+        }, at, source, reason);
+        appendAttendanceEvent(user, 'smart_reset_applied', at, source, { reason });
+
+        const overtimeUsers = getOvertimeUsers();
+        const overtimeBefore = overtimeUsers.length;
+        const filteredOvertimeUsers = overtimeUsers.filter(o => o.id !== user.id);
+        overtimeUsers.splice(0, overtimeUsers.length, ...filteredOvertimeUsers);
+
+        return {
+            ok: true,
+            user,
+            removedOvertimeEntry: overtimeBefore !== overtimeUsers.length
+        };
+    }
+
     function getOvertimeStartMoment(user, now = moment().tz(CONFIG.TIMEZONE)) {
         return getScheduledEndMoment(user, now, {
             shiftOverride: user?.shift || null,
@@ -623,18 +984,40 @@ function createAttendanceService(deps) {
         return Boolean(bounds?.start && moment(now).tz(CONFIG.TIMEZONE).isBefore(bounds.start));
     }
 
-    function applyPreShiftOvertimeCore(member, user, shift, now, source = 'button-or-command') {
-        if (!member || !user || !shift || !canStartPreShiftOvertime(user, now)) {
-            return { ok: false, reason: 'not-pre-shift-overtime-window' };
-        }
+    function canStartPostShiftOvertime(user, now = moment().tz(CONFIG.TIMEZONE)) {
+        if (!user || user.checkedIn || user.dayOff) return false;
+        if (user.pendingManualOT || user.manualResumeRequired) return false;
+        if (getOvertimeUsers().some(ot => ot.id === user.id)) return false;
+        if (!['day', 'night'].includes(user.shift)) return false;
 
         const at = moment(now).tz(CONFIG.TIMEZONE);
+        const overtimeStart = getOvertimeStartMoment(user, at);
+        if (!overtimeStart || at.isBefore(overtimeStart)) return false;
+        if (at.diff(overtimeStart, 'hours', true) > CONFIG.PURGE_MANUAL_OT) return false;
+
+        const session = getRelevantSessionForTime(user, at);
+        if (!session?.clockInAt || !session?.clockOutAt || !session?.scheduledEndAt) return false;
+
+        const scheduledEnd = moment(session.scheduledEndAt).tz(CONFIG.TIMEZONE);
+        const clockOutAt = moment(session.clockOutAt).tz(CONFIG.TIMEZONE);
+        const closedAtShiftEnd = Math.abs(clockOutAt.diff(scheduledEnd, 'minutes')) <= 5;
+        const handoffClosed = user.lastClockOutSource === 'shift-handoff-auto-finish' ||
+            session.clockOutSource === 'shift-handoff-auto-finish';
+
+        return Boolean(closedAtShiftEnd && handoffClosed);
+    }
+
+    function applyOvertimeCore(user, now, type = 'AUTO', source = 'overtime', reason = 'overtime-started', options = {}) {
+        if (!user) return { ok: false, reason: 'missing-user' };
+        const at = options.startedAt ? moment(options.startedAt).tz(CONFIG.TIMEZONE) : moment(now).tz(CONFIG.TIMEZONE);
+        const voiceStatus = options.voiceStatus || 'LIVE_ON';
+        const sessionSource = options.sessionSource || `${String(type).toLowerCase()}-ot`;
+
         user.checkedIn = true;
         user.dayOff = false;
         user.isFinished = false;
         user.disconnected = false;
         user.disconnectedAt = null;
-        user.voiceJoinedAt = null;
         user.liveOffStartedAt = null;
         user.liveOffWarnedFor = null;
         user.pendingClockOut = null;
@@ -646,18 +1029,36 @@ function createAttendanceService(deps) {
         user.manualResumePromptMarks = [];
         user.finishedPresence = null;
         user.finalLeftAt = null;
-        user.lastLiveOnAt = at.toISOString();
-        user.shift = shift;
-        user.checkInTime = at.format('hh:mm A');
-        user.checkInRaw = at.toISOString();
-        const session = startAttendanceSession(user, shift, at, 'pre-shift-ot');
+        user.lastLiveOnAt = moment(now).tz(CONFIG.TIMEZONE).toISOString();
+        user.checkInTime = user.checkInTime || at.format('hh:mm A');
+        user.checkInRaw = user.checkInRaw || at.toISOString();
 
-        const added = addOvertimeUser(user, 'PRE_OT', at);
+        const session = startAttendanceSession(user, user.shift, at, sessionSource);
+        if (session) {
+            session.scheduledStartAt = options.sessionScheduledAt
+                ? moment(options.sessionScheduledAt).tz(CONFIG.TIMEZONE).toISOString()
+                : at.toISOString();
+            session.scheduledEndAt = options.sessionScheduledAt
+                ? moment(options.sessionScheduledAt).tz(CONFIG.TIMEZONE).toISOString()
+                : at.toISOString();
+            session.otType = type;
+            session.otStartedAt = at.toISOString();
+            if (options.restoredFromSessionId) session.restoredFromSessionId = options.restoredFromSessionId;
+        }
+
+        const added = addOvertimeUser(user, type, at);
         transitionRecordedStatus(user, {
             attendanceStatus: 'OVERTIME',
-            voiceStatus: 'LIVE_ON'
-        }, at, source, 'pre-shift-ot-started');
-        if (added) {
+            voiceStatus
+        }, at, source, reason);
+        appendAttendanceEvent(user, 'overtime_started', at, source, {
+            type,
+            reason,
+            added,
+            restoredFromSessionId: options.restoredFromSessionId || null
+        });
+
+        if (added && options.award !== false) {
             user.totalOT = (user.totalOT || 0) + 1;
             user.points = (user.points || 0) + CONFIG.POINTS.OT;
         }
@@ -665,8 +1066,29 @@ function createAttendanceService(deps) {
         return {
             ok: true,
             user,
-            session,
             added,
+            otStart: at,
+            session
+        };
+    }
+
+    function applyPreShiftOvertimeCore(member, user, shift, now, source = 'button-or-command') {
+        if (!member || !user || !shift || !canStartPreShiftOvertime(user, now)) {
+            return { ok: false, reason: 'not-pre-shift-overtime-window' };
+        }
+
+        const at = moment(now).tz(CONFIG.TIMEZONE);
+        user.shift = shift;
+        const result = applyOvertimeCore(user, at, 'PRE_OT', source, 'pre-shift-ot-started', {
+            sessionSource: 'pre-shift-ot'
+        });
+        user.voiceJoinedAt = null;
+
+        return {
+            ok: true,
+            user,
+            session: result.session,
+            added: result.added,
             startedAt: at,
             shiftStart: getShiftBounds(shift, at).start
         };
@@ -678,46 +1100,25 @@ function createAttendanceService(deps) {
 
         const overtimeStart = getOvertimeStartMoment(user, now);
         const otStart = overtimeStart || moment(now).tz(CONFIG.TIMEZONE);
-        const added = addOvertimeUser(user, 'MANUAL', overtimeStart || now);
-        user.pendingManualOT = false;
-        if (!added) {
+        if (getOvertimeUsers().some(ot => ot.id === user.id)) {
             return {
                 ok: false,
                 reason: 'already-overtime',
-                added,
+                added: false,
                 otStart
             };
         }
-
-        user.checkedIn = true;
-        user.dayOff = false;
-        user.isFinished = false;
-        user.disconnected = false;
-        user.disconnectedAt = null;
-        user.liveOffStartedAt = null;
-        user.pendingClockOut = null;
-        user.checkInTime = user.checkInTime || otStart.format('hh:mm A');
-        user.checkInRaw = user.checkInRaw || otStart.toISOString();
-        const session = startAttendanceSession(user, user.shift, otStart, 'manual-ot');
-        if (session) {
-            session.scheduledStartAt = otStart.toISOString();
-            session.scheduledEndAt = otStart.toISOString();
-            session.otType = 'MANUAL';
-            session.otStartedAt = otStart.toISOString();
-        }
-        transitionRecordedStatus(user, {
-            attendanceStatus: 'OVERTIME',
-            voiceStatus: 'LIVE_ON'
-        }, otStart, 'manual-ot', 'pending-manual-ot-activated');
-        user.totalOT = (user.totalOT || 0) + 1;
-        user.points = (user.points || 0) + CONFIG.POINTS.OT;
+        const result = applyOvertimeCore(user, now, 'MANUAL', 'manual-ot', 'pending-manual-ot-activated', {
+            startedAt: otStart,
+            sessionSource: 'manual-ot'
+        });
 
         return {
             ok: true,
             user,
-            added,
+            added: result.added,
             otStart,
-            session
+            session: result.session
         };
     }
 
@@ -731,7 +1132,8 @@ function createAttendanceService(deps) {
 
     function getRestorableOvertimeSession(user, shift, now = moment().tz(CONFIG.TIMEZONE)) {
         const overtimeUsers = getOvertimeUsers();
-        if (!user?.isFinished || user.checkedIn || user.dayOff || overtimeUsers.some(ot => ot.id === user.id)) return null;
+        const canConsiderRestore = Boolean(user?.isFinished || user?.attendanceStatus === 'PRE_SHIFT');
+        if (!canConsiderRestore || user.checkedIn || user.dayOff || overtimeUsers.some(ot => ot.id === user.id)) return null;
         const session = getLatestOvertimeSession(user);
         if (!session) return null;
 
@@ -759,39 +1161,14 @@ function createAttendanceService(deps) {
 
         const otType = restorable.session.otType || 'AUTO';
         const otStartedAt = restorable.otStartedAt;
-        user.checkedIn = true;
-        user.dayOff = false;
-        user.isFinished = false;
-        user.disconnected = false;
-        user.disconnectedAt = null;
-        user.voiceJoinedAt = null;
-        user.liveOffStartedAt = null;
-        user.liveOffWarnedFor = null;
-        user.pendingClockOut = null;
-        user.manualResumeRequired = false;
-        user.manualResumeRequiredSince = null;
-        user.manualResumeRequiredReason = null;
-        user.lastManualResumePromptKey = null;
-        user.manualResumePromptMarks = [];
-        user.finishedPresence = null;
-        user.finalLeftAt = null;
-        user.lastLiveOnAt = moment(now).tz(CONFIG.TIMEZONE).toISOString();
         user.shift = shift || user.shift;
-
-        const session = startAttendanceSession(user, user.shift, now, 'overtime-restore');
-        if (session) {
-            session.scheduledStartAt = moment(now).tz(CONFIG.TIMEZONE).toISOString();
-            session.scheduledEndAt = moment(now).tz(CONFIG.TIMEZONE).toISOString();
-            session.otType = otType;
-            session.otStartedAt = otStartedAt.toISOString();
-            session.restoredFromSessionId = restorable.session.id || null;
-        }
-
-        addOvertimeUser(user, otType, otStartedAt);
-        transitionRecordedStatus(user, {
-            attendanceStatus: 'OVERTIME',
-            voiceStatus: 'LIVE_ON'
-        }, now, source, 'overtime-restored-after-finish');
+        const result = applyOvertimeCore(user, now, otType, source, 'overtime-restored-after-finish', {
+            startedAt: otStartedAt,
+            sessionSource: 'overtime-restore',
+            sessionScheduledAt: now,
+            restoredFromSessionId: restorable.session.id || null,
+            award: false
+        });
         appendAttendanceEvent(user, 'overtime_restored_after_finish', now, source, {
             restoredFromSessionId: restorable.session.id || null,
             otStartedAt: otStartedAt.toISOString(),
@@ -801,7 +1178,7 @@ function createAttendanceService(deps) {
         return {
             ok: true,
             user,
-            session,
+            session: result.session,
             restoredFromSessionId: restorable.session.id || null,
             otStartedAt,
             otType
@@ -835,6 +1212,42 @@ function createAttendanceService(deps) {
         appendAttendanceEvent(user, 'clockout_candidate_recovered', recovered, user.pendingClockOut.source, { reason });
         user.pendingClockOut = null;
         return true;
+    }
+
+    function applyDisconnectedCore(user, now, source = 'voice-state', options = {}) {
+        if (!user) return { ok: false, reason: 'missing-user' };
+        const at = moment(now).tz(CONFIG.TIMEZONE);
+        let changed = false;
+
+        if (options.ensureCheckedIn) {
+            user.checkedIn = true;
+            user.dayOff = false;
+            user.isFinished = false;
+            changed = true;
+        }
+        if (!user.disconnected) {
+            user.disconnected = true;
+            user.disconnectedAt = at.toISOString();
+            changed = true;
+        }
+        const session = getOpenSession(user);
+        if (session) startSessionPeriod(session.dcPeriods, at, source === 'heartbeat' ? 'voice-left-heartbeat' : 'voice-left');
+        if (createPendingClockOut(user, 'voice_leave', at, options.graceMins || CONFIG.GRACE_PERIOD_MINS, options.pendingReason || 'voice leave grace started')) {
+            changed = true;
+        }
+        if (options.incrementDc !== false) {
+            user.dcCount = (user.dcCount || 0) + 1;
+            changed = true;
+        }
+        if (transitionRecordedStatus(user, {
+            attendanceStatus: (user.checkedIn || options.ensureCheckedIn) ? 'WORKING' : undefined,
+            voiceStatus: 'DISCONNECTED'
+        }, at, source, options.reason || 'voice-disconnected')) changed = true;
+        appendAttendanceEvent(user, 'disconnected_started', at, source, {
+            graceMins: options.graceMins || CONFIG.GRACE_PERIOD_MINS
+        });
+
+        return { ok: true, changed, user, session };
     }
 
     function markLiveOffState(user, now) {
@@ -879,6 +1292,37 @@ function createAttendanceService(deps) {
         user.liveOffWarnedFor = null;
         user.liveOffWarningMarks = [];
         return changed;
+    }
+
+    function applyLiveOnCore(user, now, source = 'voice-state', reason = 'live-on-recovered') {
+        if (!user) return { ok: false, reason: 'missing-user' };
+        const at = moment(now).tz(CONFIG.TIMEZONE);
+        let changed = false;
+        const session = getOpenSession(user);
+        if (session) {
+            closeOpenSessionPeriod(session.liveOffPeriods, at);
+            closeOpenSessionPeriod(session.dcPeriods, at);
+        }
+        if (recoverPendingClockOut(user, at, reason)) changed = true;
+        if (user.disconnected) {
+            user.disconnected = false;
+            user.disconnectedAt = null;
+            changed = true;
+        }
+        if (user.voiceJoinedAt || user.liveOffStartedAt || user.liveOffWarnedFor || user.liveOffWarningMarks?.length) {
+            changed = true;
+        }
+        user.voiceJoinedAt = null;
+        user.liveOffStartedAt = null;
+        user.liveOffWarnedFor = null;
+        user.liveOffWarningMarks = [];
+        user.lastLiveOnAt = at.toISOString();
+        if (transitionRecordedStatus(user, {
+            voiceStatus: 'LIVE_ON'
+        }, at, source, reason)) changed = true;
+        appendAttendanceEvent(user, 'live_on_recovered', at, source, { reason });
+
+        return { ok: true, changed, user, session };
     }
 
     function normalizeCurrentShiftSessionCore(member, user, shift, now) {
@@ -996,9 +1440,22 @@ function createAttendanceService(deps) {
         getUserLatestSessionSummary,
         applyClockInCore,
         applyClockOutCore,
+        applyDayOffCore,
+        applyFinishedStateCore,
+        applyLiveExceptionCore,
+        clearStaleDayOffCore,
+        clearDayOffReservationStateCore,
+        applyManualResumeRequiredCore,
+        applyPendingOvertimeReservationCore,
+        expireDayOffStateCore,
+        resetFinishedForPreClockInCore,
+        applyCurrentShiftLiveOnCore,
+        applySmartResetCore,
         getOvertimeStartMoment,
         canStartOvertimeNow,
         canStartPreShiftOvertime,
+        canStartPostShiftOvertime,
+        applyOvertimeCore,
         applyPreShiftOvertimeCore,
         applyPendingManualOvertimeCore,
         getLatestOvertimeSession,
@@ -1006,8 +1463,10 @@ function createAttendanceService(deps) {
         applyRestoreOvertimeAfterFinishCore,
         createPendingClockOut,
         recoverPendingClockOut,
+        applyDisconnectedCore,
         markLiveOffState,
         clearLiveOffState,
+        applyLiveOnCore,
         normalizeCurrentShiftSessionCore
     };
 }

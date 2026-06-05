@@ -57,4 +57,46 @@ assert.strictEqual(tooEarly.ok, false, 'too early clock-in is rejected');
 
 assert.strictEqual(time.getDayOffLogicalDateForShift('night', at('2026-05-20 03:30')), '2026-05-19', 'night day-off logical date carries back before 09:00');
 
+const maintenanceOverrides = {
+    '2026-06-02': { enabled: false, reason: 'holiday' },
+    '2026-06-03': { enabled: true, reason: 'delayed maintenance' }
+};
+const overrideTime = createTimeLogic({ CONFIG, SHIFT_SCHEDULE, MAINTENANCE_WINDOWS, MAINTENANCE_OVERRIDES: maintenanceOverrides, moment });
+
+function assertOverrideBounds(label, shift, ref, expectedStart, expectedEnd) {
+    const bounds = overrideTime.getShiftBounds(shift, at(ref));
+    assert.strictEqual(bounds.start.format('YYYY-MM-DD HH:mm'), expectedStart, `${label} start`);
+    assert.strictEqual(bounds.end.format('YYYY-MM-DD HH:mm'), expectedEnd, `${label} end`);
+}
+
+assertOverrideBounds('Cancelled Tuesday maintenance day shift', 'day', '2026-06-02 19:30', '2026-06-02 09:00', '2026-06-02 21:00');
+assertOverrideBounds('Cancelled Tuesday maintenance night shift', 'night', '2026-06-02 20:30', '2026-06-02 21:00', '2026-06-03 09:00');
+assert.strictEqual(overrideTime.getOperationalShift(at('2026-06-02 19:30')), 'day', 'cancelled Tuesday update keeps day shift active until 21:00');
+assert.strictEqual(overrideTime.isMaintenanceWindow(at('2026-06-03 06:00')), false, 'cancelled Tuesday update suppresses default Wednesday maintenance');
+
+assertOverrideBounds('Delayed Wednesday maintenance day shift', 'day', '2026-06-03 12:00', '2026-06-03 09:00', '2026-06-03 19:00');
+assertOverrideBounds('Delayed Wednesday maintenance night shift', 'night', '2026-06-03 20:00', '2026-06-03 19:00', '2026-06-04 04:00');
+assert.strictEqual(overrideTime.isMaintenanceWindow(at('2026-06-04 06:00')), true, 'delayed Wednesday update opens maintenance on the next morning');
+assertOverrideBounds('Next Tuesday returns to normal maintenance day shift', 'day', '2026-06-09 12:00', '2026-06-09 09:00', '2026-06-09 19:00');
+assertOverrideBounds('Next Tuesday returns to normal maintenance night shift', 'night', '2026-06-09 20:00', '2026-06-09 19:00', '2026-06-10 04:00');
+assert.strictEqual(overrideTime.isMaintenanceWindow(at('2026-06-10 06:00')), true, 'next Tuesday default maintenance window still applies');
+
+const overnightWindowTime = createTimeLogic({
+    CONFIG,
+    SHIFT_SCHEDULE,
+    MAINTENANCE_WINDOWS,
+    MAINTENANCE_OVERRIDES: {
+        '2026-06-03': {
+            enabled: true,
+            windowDate: '2026-06-04',
+            windowStart: '23:00',
+            windowEnd: '01:00'
+        }
+    },
+    moment
+});
+assert.strictEqual(overnightWindowTime.isMaintenanceWindow(at('2026-06-04 23:30')), true, 'override maintenance window can cross midnight');
+assert.strictEqual(overnightWindowTime.isMaintenanceWindow(at('2026-06-05 00:30')), true, 'override maintenance remains active after midnight');
+assert.strictEqual(overnightWindowTime.isMaintenanceWindow(at('2026-06-05 01:00')), false, 'override maintenance exits at next-day end');
+
 console.log('time-logic tests passed');

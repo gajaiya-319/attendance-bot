@@ -1,4 +1,9 @@
-﻿require('dotenv').config();
+if (process.env.ATTENDANCE_BOT_LEGACY !== '1') {
+    require('./index.js');
+    return;
+}
+
+require('dotenv').config();
 
 const fsSync = require('fs');
 const fs = require('fs').promises;
@@ -56,12 +61,15 @@ const CONFIG = {
     TIMEZONE: 'Asia/Manila',
     PURGE_NORMAL: 14,
     PURGE_MANUAL_OT: 40,
-    GRACE_PERIOD_MINS: 20,
-    LIVE_OFF_DM_AFTER_MINS: 20,
-    LIVE_OFF_CLOCK_OUT_MINS: 20,
+    // ✨ [업데이트] 유예 기간 20분 -> 10분으로 축소
+    GRACE_PERIOD_MINS: 10,
+    LIVE_OFF_DM_AFTER_MINS: 10,
+    LIVE_OFF_CLOCK_OUT_MINS: 10,
     CLOCK_OUT_GRACE_MINS: 5,
     AUTO_OT_AFTER_MINS: 5,
     PRE_SHIFT_LIVE_BUFFER_MINS: 10,
+    FINISHED_VISIBLE_AFTER_MINS: 30,
+    AUTO_TIMEOUT_RESUME_WINDOW_MINS: 60,
     GUEST_ASSIGN_AFTER_HOURS: 24,
     NICKNAME_ROLE_SYNC: true,
     EXCEPTIONS: {
@@ -83,6 +91,19 @@ const SHIFT_SCHEDULE = {
 const MAINTENANCE_WINDOWS = [
     { day: 'Wednesday', start: '04:00', end: '09:00' }
 ];
+
+const {
+    applyClockTime,
+    buildShiftBoundsForBusinessDate,
+    getOperationalShift,
+    isMaintenanceWindow,
+    getDayOffLogicalDateForShift,
+    getShiftBounds,
+    getShiftSessionKey,
+    getRecognizedClockInMoment,
+    isWithinPreShiftWindow,
+    getDashboardShift
+} = require('./time-logic')({ CONFIG, SHIFT_SCHEDULE, MAINTENANCE_WINDOWS, moment });
 
 if (!process.env.TOKEN) {
     console.error('[CONFIG ERROR] Missing TOKEN in .env');
@@ -210,7 +231,7 @@ function ensureUserData(member, shift = null) {
     if (!attendanceData[member.id]) {
         attendanceData[member.id] = {
             id: member.id,
-            name: member.displayName || member.name || 'Unknown',
+            name: member.displayName || member.user?.username || 'Unknown',
             shift: s,
             checkedIn: false,
             dayOff: false,
@@ -248,11 +269,20 @@ function ensureUserData(member, shift = null) {
             activeSessionId: null,
             sessions: [],
             pendingManualOT: false,
+            manualResumeRequired: false,
+            manualResumeRequiredSince: null,
+            manualResumeRequiredReason: null,
+            lastManualResumePromptKey: null,
+            reversibleEarlyPenaltyKey: null,
+            reversibleEarlyPenaltyAppliedAt: null,
+            reversibleEarlyPenaltyPoints: null,
             liveOffWarnedFor: null,
+            lastFinishedReturnPromptKey: null,
             lastActionAt: 0
         };
     }
-    attendanceData[member.id].name = member.displayName || member.name || attendanceData[member.id].name || 'Unknown';
+    // ✨ [업데이트] Username cannot be blank 버그 수정 (member.name 대신 member.user?.username)
+    attendanceData[member.id].name = member.displayName || member.user?.username || attendanceData[member.id].name || 'Unknown';
     if (s) attendanceData[member.id].shift = s;
     attendanceData[member.id].offCount = attendanceData[member.id].offCount || 0;
     attendanceData[member.id].totalOT = attendanceData[member.id].totalOT || 0;
@@ -278,6 +308,14 @@ function ensureUserData(member, shift = null) {
     if (!Array.isArray(attendanceData[member.id].sessions)) attendanceData[member.id].sessions = [];
     if (!Object.prototype.hasOwnProperty.call(attendanceData[member.id], 'activeSessionId')) attendanceData[member.id].activeSessionId = null;
     if (!Object.prototype.hasOwnProperty.call(attendanceData[member.id], 'pendingManualOT')) attendanceData[member.id].pendingManualOT = false;
+    if (!Object.prototype.hasOwnProperty.call(attendanceData[member.id], 'manualResumeRequired')) attendanceData[member.id].manualResumeRequired = false;
+    if (!Object.prototype.hasOwnProperty.call(attendanceData[member.id], 'manualResumeRequiredSince')) attendanceData[member.id].manualResumeRequiredSince = null;
+    if (!Object.prototype.hasOwnProperty.call(attendanceData[member.id], 'manualResumeRequiredReason')) attendanceData[member.id].manualResumeRequiredReason = null;
+    if (!Object.prototype.hasOwnProperty.call(attendanceData[member.id], 'lastManualResumePromptKey')) attendanceData[member.id].lastManualResumePromptKey = null;
+    if (!Object.prototype.hasOwnProperty.call(attendanceData[member.id], 'reversibleEarlyPenaltyKey')) attendanceData[member.id].reversibleEarlyPenaltyKey = null;
+    if (!Object.prototype.hasOwnProperty.call(attendanceData[member.id], 'reversibleEarlyPenaltyAppliedAt')) attendanceData[member.id].reversibleEarlyPenaltyAppliedAt = null;
+    if (!Object.prototype.hasOwnProperty.call(attendanceData[member.id], 'reversibleEarlyPenaltyPoints')) attendanceData[member.id].reversibleEarlyPenaltyPoints = null;
+    if (!Object.prototype.hasOwnProperty.call(attendanceData[member.id], 'lastFinishedReturnPromptKey')) attendanceData[member.id].lastFinishedReturnPromptKey = null;
     return attendanceData[member.id];
 }
 
@@ -524,75 +562,6 @@ const formatExactWidth = (str, width) => padWidth(truncateWidth(str, width), wid
 /**
  * [ TIME LOGIC ]
  */
-function applyClockTime(base, clockText) {
-    const [hour, minute] = clockText.split(':').map(Number);
-    return base.clone().hour(hour).minute(minute).second(0).millisecond(0);
-}
-
-function getShiftRuleForDate(shift, businessDate) {
-    const rules = SHIFT_SCHEDULE[shift];
-    if (!rules) return null;
-    return rules[businessDate.format('dddd')] || rules.default;
-}
-
-function buildShiftBoundsForBusinessDate(shift, businessDate) {
-    const dayStart = moment(businessDate).tz(CONFIG.TIMEZONE).startOf('day');
-    const rule = getShiftRuleForDate(shift, dayStart);
-    if (!rule) return null;
-    return {
-        start: applyClockTime(dayStart, rule.start),
-        end: applyClockTime(dayStart.clone().add(rule.endOffsetDays || 0, 'days'), rule.end)
-    };
-}
-
-function getShiftBusinessDate(shift, now) {
-    const mNow = moment(now).tz(CONFIG.TIMEZONE);
-    if (shift !== 'night') return mNow.clone().startOf('day');
-
-    const todayBounds = buildShiftBoundsForBusinessDate('night', mNow);
-    const previousBounds = buildShiftBoundsForBusinessDate('night', mNow.clone().subtract(1, 'day'));
-    if (!todayBounds) return mNow.clone().startOf('day');
-    if (previousBounds && mNow.isBefore(previousBounds.end) && mNow.isBefore(todayBounds.start)) {
-        return mNow.clone().subtract(1, 'day').startOf('day');
-    }
-    return mNow.clone().startOf('day');
-}
-
-function getOperationalShift(now = moment().tz(CONFIG.TIMEZONE)) {
-    const mNow = moment(now).tz(CONFIG.TIMEZONE);
-    const day = mNow.format('dddd');
-    const hour = mNow.hour();
-    if (day === 'Tuesday') return hour >= 9 && hour < 19 ? 'day' : 'night';
-    if (day === 'Wednesday' && hour < 4) return 'night';
-    if (day === 'Wednesday' && hour < 9) return null;
-    return hour >= 9 && hour < 21 ? 'day' : 'night';
-}
-
-function isMaintenanceWindow(now = moment().tz(CONFIG.TIMEZONE)) {
-    const mNow = moment(now).tz(CONFIG.TIMEZONE);
-    return MAINTENANCE_WINDOWS.some(window => {
-        if (mNow.format('dddd') !== window.day) return false;
-        const start = applyClockTime(mNow, window.start);
-        const end = applyClockTime(mNow, window.end);
-        return mNow.isSameOrAfter(start) && mNow.isBefore(end);
-    });
-}
-
-function getDayOffLogicalDateForShift(shift, now = moment().tz(CONFIG.TIMEZONE)) {
-    const mNow = moment(now).tz(CONFIG.TIMEZONE);
-    if (shift === 'night' && mNow.hour() < 9) {
-        return mNow.clone().subtract(1, 'days').format('YYYY-MM-DD');
-    }
-    return mNow.format('YYYY-MM-DD');
-}
-
-function getDashboardShift(now = moment().tz(CONFIG.TIMEZONE)) {
-    const operationalShift = getOperationalShift(now);
-    if (operationalShift) return operationalShift;
-    if (isWithinPreShiftWindow('day', now)) return 'day';
-    return 'night';
-}
-
 function getMemberShiftRole(member) {
     if (!member?.roles?.cache) return null;
     const hasD = member.roles.cache.has(CONFIG.ROLES.DAY);
@@ -600,40 +569,6 @@ function getMemberShiftRole(member) {
     if (!hasD && !hasN) return null;
     if (hasD && hasN) return getOperationalShift() || getDashboardShift();
     return hasD ? 'day' : 'night';
-}
-
-function getShiftBounds(shift, now) {
-    const businessDate = getShiftBusinessDate(shift, now);
-    const bounds = buildShiftBoundsForBusinessDate(shift, businessDate);
-    if (bounds) return bounds;
-    const mNow = moment(now).tz(CONFIG.TIMEZONE);
-    return { start: mNow.clone().second(0).millisecond(0), end: mNow.clone().second(0).millisecond(0) };
-}
-
-function getShiftSessionKey(shift, now) {
-    const bounds = getShiftBounds(shift, now);
-    return `${shift || 'none'}:${bounds.start.format('YYYY-MM-DD HH:mm')}`;
-}
-
-function getRecognizedClockInMoment(shift, now) {
-    const mNow = moment(now).tz(CONFIG.TIMEZONE);
-    const bounds = getShiftBounds(shift, mNow);
-    const bufferStart = bounds.start.clone().subtract(CONFIG.PRE_SHIFT_LIVE_BUFFER_MINS, 'minutes');
-    if (mNow.isBefore(bufferStart)) {
-        return { ok: false, recognizedAt: null, bounds, tooEarly: true, preShift: true };
-    }
-    if (mNow.isBefore(bounds.start)) {
-        return { ok: true, recognizedAt: bounds.start.clone(), bounds, tooEarly: false, preShift: true };
-    }
-    return { ok: true, recognizedAt: mNow, bounds, tooEarly: false, preShift: false };
-}
-
-function isWithinPreShiftWindow(shift, now) {
-    if (!shift) return false;
-    const mNow = moment(now).tz(CONFIG.TIMEZONE);
-    const bounds = getShiftBounds(shift, mNow);
-    const bufferStart = bounds.start.clone().subtract(CONFIG.PRE_SHIFT_LIVE_BUFFER_MINS, 'minutes');
-    return mNow.isSameOrAfter(bufferStart) && mNow.isBefore(bounds.start);
 }
 
 function shouldShowAsPreShiftStandby(member, user, now) {
@@ -948,19 +883,126 @@ function canStartOvertimeNow(user, now = moment().tz(CONFIG.TIMEZONE)) {
     return Boolean(overtimeStart && moment(now).tz(CONFIG.TIMEZONE).isSameOrAfter(overtimeStart));
 }
 
+function isCurrentShiftRegularWorker(member, now = moment().tz(CONFIG.TIMEZONE)) {
+    if (!member?.roles?.cache) return false;
+    const activeShift = getOperationalShift(now);
+    if (!activeShift) return false;
+    const roleId = activeShift === 'day' ? CONFIG.ROLES.DAY : CONFIG.ROLES.NIGHT;
+    if (!member.roles.cache.has(roleId)) return false;
+    const bounds = getShiftBounds(activeShift, now);
+    return Boolean(bounds && now.isSameOrAfter(bounds.start) && now.isBefore(bounds.end));
+}
+
+function getLatestOvertimeSession(user) {
+    if (!user || !Array.isArray(user.sessions)) return null;
+    return user.sessions
+        .filter(session => session?.otStartedAt || session?.otType)
+        .sort((a, b) => moment(b.clockInAt || b.otStartedAt || b.scheduledEndAt || 0).valueOf() -
+            moment(a.clockInAt || a.otStartedAt || a.scheduledEndAt || 0).valueOf())[0] || null;
+}
+
+function getRestorableOvertimeSession(user, shift, now = moment().tz(CONFIG.TIMEZONE)) {
+    if (!user?.isFinished || user.checkedIn || user.dayOff || overtimeUsers.some(ot => ot.id === user.id)) return null;
+    const session = getLatestOvertimeSession(user);
+    if (!session) return null;
+
+    const otStartedAt = moment(session.otStartedAt || session.scheduledEndAt || session.clockOutAt).tz(CONFIG.TIMEZONE);
+    if (!otStartedAt.isValid() || now.isBefore(otStartedAt)) return null;
+    if (now.diff(otStartedAt, 'hours', true) > CONFIG.PURGE_MANUAL_OT) return null;
+
+    const currentBounds = getShiftBounds(shift || user.shift, now);
+    const previousEnd = session.scheduledEndAt ? moment(session.scheduledEndAt).tz(CONFIG.TIMEZONE) : null;
+    if (
+        currentBounds?.start &&
+        previousEnd &&
+        currentBounds.start.isAfter(previousEnd) &&
+        now.isSameOrAfter(currentBounds.start)
+    ) {
+        return null;
+    }
+
+    return { session, otStartedAt };
+}
+
+async function restoreOvertimeAfterFinish(member, user, shift, now, source = 'voice_snapshot') {
+    const restorable = getRestorableOvertimeSession(user, shift, now);
+    if (!restorable) return false;
+
+    const otType = restorable.session.otType || 'AUTO';
+    const otStartedAt = restorable.otStartedAt;
+    user.checkedIn = true;
+    user.dayOff = false;
+    user.isFinished = false;
+    user.disconnected = false;
+    user.disconnectedAt = null;
+    user.voiceJoinedAt = null;
+    user.liveOffStartedAt = null;
+    user.liveOffWarnedFor = null;
+    user.pendingClockOut = null;
+    user.manualResumeRequired = false;
+    user.manualResumeRequiredSince = null;
+    user.manualResumeRequiredReason = null;
+    user.finishedPresence = null;
+    user.finalLeftAt = null;
+    user.lastLiveOnAt = now.toISOString();
+    user.shift = shift || user.shift;
+
+    const session = startAttendanceSession(user, user.shift, now, 'overtime-restore');
+    if (session) {
+        session.scheduledStartAt = now.toISOString();
+        session.scheduledEndAt = now.toISOString();
+        session.otType = otType;
+        session.otStartedAt = otStartedAt.toISOString();
+        session.restoredFromSessionId = restorable.session.id || null;
+    }
+
+    addOvertimeUser(user, otType, otStartedAt);
+    transitionRecordedStatus(user, {
+        attendanceStatus: 'OVERTIME',
+        voiceStatus: 'LIVE_ON'
+    }, now, source, 'overtime-restored-after-finish');
+    appendAttendanceEvent(user, 'overtime_restored_after_finish', now, source, {
+        restoredFromSessionId: restorable.session.id || null,
+        otStartedAt: otStartedAt.toISOString(),
+        otType
+    });
+    await updateWorkingRole(member, true);
+    await recordLog(user, 'ot', 'Overtime restored after bot restart / finished state recovery');
+    return true;
+}
+
 async function activatePendingManualOvertime(user, now) {
     if (!user?.pendingManualOT) return false;
     if (!canStartOvertimeNow(user, now)) return false;
     const overtimeStart = getOvertimeStartMoment(user, now);
+    const otStart = overtimeStart || moment(now).tz(CONFIG.TIMEZONE);
     const added = addOvertimeUser(user, 'MANUAL', overtimeStart || now);
     user.pendingManualOT = false;
     if (added) {
+        user.checkedIn = true;
+        user.dayOff = false;
+        user.isFinished = false;
+        user.disconnected = false;
+        user.disconnectedAt = null;
+        user.liveOffStartedAt = null;
+        user.pendingClockOut = null;
+        user.checkInTime = user.checkInTime || otStart.format('hh:mm A');
+        user.checkInRaw = user.checkInRaw || otStart.toISOString();
+        const session = startAttendanceSession(user, user.shift, otStart, 'manual-ot');
+        if (session) {
+            session.scheduledStartAt = otStart.toISOString();
+            session.scheduledEndAt = otStart.toISOString();
+            session.otType = 'MANUAL';
+            session.otStartedAt = otStart.toISOString();
+        }
         transitionRecordedStatus(user, {
             attendanceStatus: 'OVERTIME',
             voiceStatus: 'LIVE_ON'
-        }, overtimeStart || now, 'manual-ot', 'pending-manual-ot-activated');
+        }, otStart, 'manual-ot', 'pending-manual-ot-activated');
         user.totalOT = (user.totalOT || 0) + 1;
         user.points = (user.points || 0) + CONFIG.POINTS.OT;
+        const member = client.guilds.cache.get(CONFIG.GUILD_ID)?.members.cache.get(user.id);
+        if (member) await updateWorkingRole(member, true);
         await recordLog(user, 'ot', '수동 연장 근무 시작');
         return true;
     }
@@ -1055,9 +1097,39 @@ async function notifyAfterFinishPresence(member, user, shift, now, action = 'LIV
 
     await recordLog(user, 'reconnect', `퇴근 후 라이브 감지 (FINISHED 유지, 자동 출근 안 함)`);
     await member.send([
-        'You are already clocked out.',
-        'Your live stream was detected, but it will not be counted as work automatically.',
-        'If you are working overtime, please use the OVERTIME button or contact an admin.'
+        'IMPORTANT: You are already clocked out.',
+        '',
+        'Your live stream was detected, but your attendance will NOT restart automatically.',
+        '',
+        'If you are starting work again, you MUST press the CLOCK IN button while your live stream is ON.',
+        'If you do not press CLOCK IN, your attendance will NOT be counted.',
+        '',
+        'If you are working overtime, use the OVERTIME button or contact an admin.'
+    ].join('\n')).catch(() => null);
+    return true;
+}
+
+async function notifyFinishedReturnToVoice(member, user, shift, now, action = 'Returned to voice after clock-out') {
+    if (!member || !user || !shift) return false;
+    const clockOutKey = user.checkOutRaw || user.lastClockOutDetectedAt || getShiftSessionKey(shift, now);
+    const key = `${clockOutKey}:${action}`;
+    appendAttendanceEvent(user, 'finished_return_to_voice_detected', now, 'voice_snapshot', {
+        action,
+        result: 'finished_kept'
+    });
+    if (user.lastFinishedReturnPromptKey === key) return false;
+    user.lastFinishedReturnPromptKey = key;
+
+    await member.send([
+        '🌿 Welcome back',
+        '',
+        'I can see that you returned to the voice channel, but your attendance is still FINISHED.',
+        '',
+        'To start counting work time again:',
+        '1. Turn your live stream ON.',
+        '2. Press the CLOCK IN button on the attendance panel.',
+        '',
+        'Live stream ON by itself will not restart attendance. 🙂'
     ].join('\n')).catch(() => null);
     return true;
 }
@@ -1067,6 +1139,8 @@ async function normalizeCurrentShiftSession(member, user, shift, now) {
     const sessionKey = getShiftSessionKey(shift, now);
     if (user.shiftSessionKey === sessionKey) return false;
 
+    const previousShift = user.shift || null;
+    const shiftChanged = Boolean(previousShift && previousShift !== shift);
     user.shiftSessionKey = sessionKey;
     user.shift = shift;
     user.status = null;
@@ -1086,6 +1160,7 @@ async function normalizeCurrentShiftSession(member, user, shift, now) {
     );
     const alreadyFinishedThisSession = Boolean(
         user.isFinished &&
+        !shiftChanged &&
         user.checkOutRaw &&
         moment(user.checkOutRaw).tz(CONFIG.TIMEZONE).isSameOrAfter(bounds.start)
     );
@@ -1183,6 +1258,11 @@ async function recordLog(user, actionType, customText = null, earlyOverrideTime 
             }
             user.totalEarly = (user.totalEarly || 0) + 1;
             user.points = (user.points || 0) + CONFIG.POINTS.EARLY_OUT;
+            if (options.reversibleEarlyPenaltyKey) {
+                user.reversibleEarlyPenaltyKey = options.reversibleEarlyPenaltyKey;
+                user.reversibleEarlyPenaltyAppliedAt = eventTime.toISOString();
+                user.reversibleEarlyPenaltyPoints = Math.abs(CONFIG.POINTS.EARLY_OUT);
+            }
         }
     }
 
@@ -1247,6 +1327,9 @@ async function handleClockIn(member, user, shift, now, isAuto = false) {
     u.disconnectedAt = null;
     u.liveOffStartedAt = null;
     u.pendingClockOut = null;
+    u.manualResumeRequired = false;
+    u.manualResumeRequiredSince = null;
+    u.manualResumeRequiredReason = null;
     u.preShiftLiveAt = clockInRule.preShift ? now.toISOString() : null;
     u.lastPreShiftWaitLogKey = null;
     u.lastLiveOnAt = now.toISOString();
@@ -1321,6 +1404,12 @@ async function handleClockOut(member, user, now, customLogText = null, earlyOver
     user.pendingClockOut = null;
     user.checkOutTime = outMoment.format('hh:mm A');
     user.checkOutRaw = outMoment.toISOString();
+    user.lastClockOutSource = options.clockOutSource || 'clock-out';
+    user.lastClockOutReason = customLogText || null;
+    user.lastClockOutDetectedAt = detectedAt.toISOString();
+    const reversibleEarlyPenaltyKey = ['dc-timeout', 'live-off-timeout'].includes(options.clockOutSource)
+        ? `${options.clockOutSource}:${outMoment.toISOString()}`
+        : null;
     setFinishedPresence(user, member?.voice?.channelId ? 'in_voice' : 'left_voice', outMoment, options.clockOutSource || 'clock-out');
     finishAttendanceSession(user, outMoment, options.clockOutSource || 'clock-out', customLogText, detectedAt);
     appendAttendanceEvent(user, 'clock_out_confirmed', outMoment, options.clockOutSource || 'clock-out', {
@@ -1329,7 +1418,7 @@ async function handleClockOut(member, user, now, customLogText = null, earlyOver
     });
     overtimeUsers = overtimeUsers.filter(o => o.id !== memberId);
     await updateWorkingRole(member, false);
-    await recordLog(user, 'out', customLogText, earlyOverrideTime || outMoment, { ...options, effectiveTime: outMoment });
+    await recordLog(user, 'out', customLogText, earlyOverrideTime || outMoment, { ...options, reversibleEarlyPenaltyKey, effectiveTime: outMoment });
 }
 
 /**
@@ -1442,15 +1531,27 @@ function getLegacyDashboardState(user, context) {
     return now.isAfter(bounds.start) && now.diff(bounds.start, 'minutes') > 120 ? 'ABSENT' : 'WAITING';
 }
 
+// ✨ [업데이트] 정규 퇴근 시간이 지났고 연장 근무(OT)가 아니면 FINISHED 처리
 function getHybridDashboardState(user, context) {
     const legacy = getLegacyDashboardState(user, context);
     const attendanceStatus = user.attendanceStatus || null;
     const voiceStatus = user.voiceStatus || null;
+    const { now } = context;
+
+    // ✨ [핵심 수정] 봇의 현재 시간이 아닌, '유저의 실제 출근 시간'을 기준으로 퇴근 시점을 정확히 계산합니다.
+    const shiftEnd = getScheduledEndMoment(user, now);
+    const isShiftEnded = shiftEnd && now.isSameOrAfter(shiftEnd);
+    const isOT = overtimeUsers.some(ot => ot.id === user.id);
 
     if (!attendanceStatus && !voiceStatus) return legacy;
     if (user.dayOff || attendanceStatus === 'DAY_OFF') return 'LEAVE';
-    if (attendanceStatus === 'FINISHED' || user.isFinished) return 'FINISHED';
     if (voiceStatus === 'EXCEPTION' || context.liveException) return 'LIVE_EXCEPTION';
+    if (attendanceStatus === 'FINISHED' || user.isFinished) return 'FINISHED';
+
+    if (isShiftEnded && !isOT && user.checkedIn) {
+        return 'FINISHED';
+    }
+
     if (voiceStatus === 'DISCONNECTED' || user.disconnected) return 'DISCONNECTED';
 
     if (attendanceStatus === 'OVERTIME' || attendanceStatus === 'WORKING') {
@@ -1572,31 +1673,33 @@ async function renderDashboardCore({ forceMemberRefresh = false } = {}) {
                 const user = attendanceData[m.id];
                 const voiceState = guild.voiceStates.cache.get(m.id);
                 const isVoiceConnected = Boolean(m.voice?.channelId || voiceState?.channelId);
-                const finishedAndOffline = Boolean(
+                const roleMatchesCurrentShift = !dashboardMaintenance && m.roles.cache.has(roleId);
+                const finishedAt = user?.checkOutRaw || user?.attendanceStatusChangedAt;
+                const finishedTooLong = Boolean(
                     user?.isFinished &&
                     !user?.checkedIn &&
                     !user?.disconnected &&
-                    (user.finishedPresence === 'left_voice' || (!user.finishedPresence && !isVoiceConnected))
+                    finishedAt &&
+                    now.diff(moment(finishedAt).tz(CONFIG.TIMEZONE), 'minutes') > CONFIG.FINISHED_VISIBLE_AFTER_MINS
                 );
-                if (finishedAndOffline && !user?.dayOff && !overtimeUsers.some(ot => ot.id === m.id)) return false;
-                const roleMatchesCurrentShift = !dashboardMaintenance && m.roles.cache.has(roleId);
+                if (finishedTooLong && !roleMatchesCurrentShift && !user?.dayOff && !overtimeUsers.some(ot => ot.id === m.id)) return false;
                 const recentManualAction = Boolean(
                     user?.manualPanelTouchedAt &&
                     now.diff(moment(user.manualPanelTouchedAt).tz(CONFIG.TIMEZONE), 'minutes') <= 10 &&
                     user?.shift === activeDisplayShift
                 );
                 const preShiftStandby = shouldShowAsPreShiftStandby(m, user, now);
+                
+                // ✨ [업데이트] 불필요한 voiceJoinedAt 등 제거 및 피니시 후 채널 잔류자 유지
                 const hasTrackedState = Boolean(
                     user &&
                     !user.dayOff &&
                     (
                         user.checkedIn ||
                         user.disconnected ||
-                        user.voiceJoinedAt ||
-                        user.liveOffStartedAt ||
-                        (user.preShiftLiveAt && isWithinPreShiftWindow(user.shift || getMemberShiftRole(m), now)) ||
                         user.pendingManualOT ||
-                        overtimeUsers.some(ot => ot.id === m.id)
+                        overtimeUsers.some(ot => ot.id === m.id) ||
+                        (user.isFinished && isVoiceConnected) 
                     )
                 );
                 return roleMatchesCurrentShift || recentManualAction || preShiftStandby || hasTrackedState;
@@ -1763,7 +1866,7 @@ async function renderDashboardCore({ forceMemberRefresh = false } = {}) {
             { name: `🟣 LIVE EXCEPTION (${liveExceptionUsers.length}명)`, value: renderStatusList(liveExceptionUsers, '🟣', now, 'exception'), inline: false },
             { name: `❌ ABSENT (${absent.length}명)`, value: renderStatusList(absent, '❌', now, 'absent'), inline: false },
             { name: `⏳ STANDBY (${standby.length}명)`, value: renderStatusList(standby, '⏳', now, 'standby'), inline: false },
-            { name: `⏳ FINISHED (${finished.length}명)`, value: renderStatusList(finished, '⚪', now, 'finished'), inline: false },
+            { name: `⚪ FINISHED (${finished.length}명)`, value: renderStatusList(finished, '⚪', now, 'finished'), inline: false },
             { name: `🔵 DAY OFF (${leave.length}명)`, value: renderStatusList(leave, '🔵', now), inline: false }
         );
 
@@ -1814,6 +1917,7 @@ async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().
     const becameLive = !wasStreaming && isStreaming;
     const stoppedStreaming = wasStreaming && !isStreaming;
     const maintenance = isMaintenanceWindow(now);
+    const activeLiveException = getActiveLiveException(member.id, now);
 
     if (maintenance && !isWithinPreShiftWindow(shift, now)) {
         if (joinedVoice) appendAttendanceEvent(user, 'voice_join_maintenance', now, source, { live: isStreaming });
@@ -1822,7 +1926,10 @@ async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().
     }
 
     const bounds = getShiftBounds(shift, now);
-    if (!now.isBetween(bounds.start, bounds.end, null, '[]') && !isWithinPreShiftWindow(shift, now)) {
+    
+    // ✨ [핵심 수정] 출근한 사람(checkedIn)이거나 이미 퇴근 대기 중인 사람(isFinished)은 
+    // 근무 시간이 지나도 채널 상태 감지를 무시하지 않도록 강제 예외 처리합니다.
+    if (!user.checkedIn && !user.isFinished && !user.pendingManualOT && !now.isBetween(bounds.start, bounds.end, null, '[]') && !isWithinPreShiftWindow(shift, now)) {
         return false;
     }
 
@@ -1831,6 +1938,36 @@ async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().
             return setFinishedPresence(user, 'left_voice', now, source);
         }
         if (setFinishedPresence(user, 'in_voice', now, source)) changed = true;
+    }
+
+    if (activeLiveException && isConnected) {
+        const wasInactive = Boolean(!user.checkedIn || user.isFinished || user.disconnected || user.voiceStatus !== 'EXCEPTION');
+        user.checkedIn = true;
+        user.dayOff = false;
+        user.disconnected = false;
+        user.disconnectedAt = null;
+        user.isFinished = false;
+        user.shift = shift;
+        user.status = 'exception';
+        user.voiceJoinedAt = null;
+        user.liveOffStartedAt = null;
+        user.liveOffWarnedFor = null;
+        user.pendingClockOut = null;
+        user.finishedPresence = null;
+        user.lastLiveOnAt = now.toISOString();
+        if (!user.checkInRaw) {
+            user.checkInRaw = activeLiveException.approvedAt || now.toISOString();
+            user.checkInTime = moment(user.checkInRaw).tz(CONFIG.TIMEZONE).format('hh:mm A');
+        }
+        if (transitionRecordedStatus(user, {
+            attendanceStatus: 'WORKING',
+            voiceStatus: 'EXCEPTION'
+        }, now, source, 'live-exception-active')) changed = true;
+        if (wasInactive) {
+            await updateWorkingRole(member, true);
+            changed = true;
+        }
+        return changed;
     }
 
     if (!isConnected) {
@@ -1843,7 +1980,16 @@ async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().
         if (transitionRecordedStatus(user, {
             voiceStatus: user.checkedIn ? 'DISCONNECTED' : 'OFFLINE'
         }, now, source, user.checkedIn ? 'voice-disconnected' : 'voice-offline')) changed = true;
+        
         if (user.checkedIn && !user.disconnected) {
+            // ✨ 정규 퇴근 시간 이후에 채널을 나가면 즉시 퇴근 처리 (유예 없음)
+            const shiftEnd = getScheduledEndMoment(user, now); 
+            if (shiftEnd && now.isSameOrAfter(shiftEnd)) {
+                await handleClockOut(member, user, now, '정규 퇴근 시간 이후 채널 이탈 (즉시 자동 퇴근)', now, { clockOutSource: 'auto-out-after-shift' });
+                changed = true;
+                return true;
+            }
+
             user.disconnected = true;
             user.disconnectedAt = now.toISOString();
             { const session = getOpenSession(user); if (session) startSessionPeriod(session.dcPeriods, now, source === 'heartbeat' ? 'voice-left-heartbeat' : 'voice-left'); }
@@ -1871,6 +2017,132 @@ async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().
         user.pendingManualOT &&
         canStartOvertimeNow(user, now)
     );
+    const lastClockOutEvent = Array.isArray(user.attendanceEvents)
+        ? user.attendanceEvents.slice().reverse().find(event => event?.type === 'clock_out_confirmed')
+        : null;
+    const lastClockOutSource = user.lastClockOutSource || lastClockOutEvent?.source || null;
+    const lastClockOutAt = user.checkOutRaw || lastClockOutEvent?.at || null;
+    const lastAutoTimeoutClockOutAt = lastClockOutAt ? moment(lastClockOutAt).tz(CONFIG.TIMEZONE) : null;
+    const autoTimeoutResumeMins = lastAutoTimeoutClockOutAt
+        ? now.diff(lastAutoTimeoutClockOutAt, 'minutes')
+        : null;
+    const isAutoTimeoutClockOut = ['dc-timeout', 'live-off-timeout'].includes(lastClockOutSource);
+    const scheduledEnd = getScheduledEndMoment(user, now);
+    const isBeforeScheduledEnd = Boolean(scheduledEnd && now.isBefore(scheduledEnd));
+    const canResumeFromAutoTimeout = Boolean(
+        isStreaming &&
+        user.isFinished &&
+        !user.checkedIn &&
+        isAutoTimeoutClockOut &&
+        isBeforeScheduledEnd &&
+        autoTimeoutResumeMins !== null &&
+        autoTimeoutResumeMins <= CONFIG.AUTO_TIMEOUT_RESUME_WINDOW_MINS &&
+        !user.manualResumeRequired &&
+        !overtimeUsers.some(ot => ot.id === member.id)
+    );
+    if (canResumeFromAutoTimeout) {
+        const resumePenaltyKey = `${lastClockOutSource}:${lastAutoTimeoutClockOutAt.toISOString()}`;
+        if (user.reversibleEarlyPenaltyKey === resumePenaltyKey) {
+            user.totalEarly = Math.max(0, (user.totalEarly || 0) - 1);
+            user.points = (user.points || 0) + (user.reversibleEarlyPenaltyPoints || Math.abs(CONFIG.POINTS.EARLY_OUT));
+            user.reversibleEarlyPenaltyKey = null;
+            user.reversibleEarlyPenaltyAppliedAt = null;
+            user.reversibleEarlyPenaltyPoints = null;
+            appendAttendanceEvent(user, 'early_penalty_reversed', now, source, {
+                reason: 'auto-timeout-resumed-live-on',
+                clockOutSource: lastClockOutSource,
+                clockOutAt: lastClockOutAt
+            });
+        }
+        user.checkedIn = true;
+        user.isFinished = false;
+        user.disconnected = false;
+        user.disconnectedAt = null;
+        user.voiceJoinedAt = null;
+        user.liveOffStartedAt = null;
+        user.liveOffWarnedFor = null;
+        user.pendingClockOut = null;
+        user.finishedPresence = null;
+        user.finalLeftAt = null;
+        user.lastLiveOnAt = now.toISOString();
+        transitionRecordedStatus(user, {
+            attendanceStatus: 'WORKING',
+            voiceStatus: 'LIVE_ON'
+        }, now, source, 'auto-timeout-resumed-live-on');
+        startAttendanceSession(user, shift, now, 'auto-timeout-resume');
+        await updateWorkingRole(member, true);
+        await recordLog(user, 'reconnect', '자동 조기퇴근 후 라이브 복구 (근무 재개)');
+        return true;
+    }
+    const shouldPromptManualResume = Boolean(
+        isStreaming &&
+        user.isFinished &&
+        !user.checkedIn &&
+        isAutoTimeoutClockOut &&
+        isBeforeScheduledEnd &&
+        autoTimeoutResumeMins !== null &&
+        autoTimeoutResumeMins > CONFIG.AUTO_TIMEOUT_RESUME_WINDOW_MINS &&
+        !overtimeUsers.some(ot => ot.id === member.id)
+    );
+    if (shouldPromptManualResume) {
+        const promptKey = `${lastClockOutSource}:${lastClockOutAt}:manual-resume-required`;
+        user.manualResumeRequired = true;
+        user.manualResumeRequiredSince = now.toISOString();
+        user.manualResumeRequiredReason = lastClockOutSource;
+        if (user.lastManualResumePromptKey !== promptKey) {
+            user.lastManualResumePromptKey = promptKey;
+            appendAttendanceEvent(user, 'manual_resume_required', now, source, {
+                clockOutSource: lastClockOutSource,
+                clockOutAt: lastClockOutAt,
+                minutesSinceClockOut: autoTimeoutResumeMins
+            });
+            await member.send([
+                'IMPORTANT: Your attendance is NOT active right now.',
+                '',
+                'Your previous attendance was already closed because the DC/LIVE OFF grace period was exceeded.',
+                '',
+                'Since more than 60 minutes have passed, the bot will not resume your shift automatically.',
+                '',
+                'You MUST press the CLOCK IN button on the attendance panel while your live stream is ON.',
+                'If you do not press CLOCK IN, your attendance will NOT be counted.',
+                '',
+                'If this was a mistake, please contact an admin.'
+            ].join('\n')).catch(() => null);
+            await recordLog(user, 'reconnect', '자동 조기퇴근 후 60분 초과 복귀 감지 (CLOCK IN 버튼 필요)');
+        }
+        return true;
+    }
+    if (isStreaming && user.isFinished && !user.checkedIn && await restoreOvertimeAfterFinish(member, user, shift, now, source)) {
+        return true;
+    }
+    if (user.isFinished && !user.checkedIn) {
+        if (!isConnected) {
+            if (setFinishedPresence(user, 'left_voice', now, source)) changed = true;
+            if (transitionRecordedStatus(user, {
+                attendanceStatus: 'FINISHED',
+                voiceStatus: 'OFFLINE'
+            }, now, source, 'finished-presence-offline')) changed = true;
+            return changed;
+        }
+
+        if (setFinishedPresence(user, 'in_voice', now, source)) changed = true;
+        if (transitionRecordedStatus(user, {
+            attendanceStatus: 'FINISHED',
+            voiceStatus: isStreaming ? 'LIVE_ON' : 'LIVE_OFF'
+        }, now, source, 'finished-presence-kept')) changed = true;
+        if (joinedVoice) {
+            const notified = await notifyFinishedReturnToVoice(member, user, shift, now, 'Returned to voice after clock-out');
+            if (notified) changed = true;
+        }
+        if (isStreaming) {
+            const notified = await notifyAfterFinishPresence(member, user, shift, now, 'LIVE ON after clock-out');
+            return changed || notified;
+        }
+        appendAttendanceEvent(user, joinedVoice ? 'voice_join_after_finish' : 'voice_live_off_after_finish', now, source, {
+            result: 'finished_kept'
+        });
+        return true;
+    }
     if (isStreaming && user.isFinished && !user.checkedIn && !canResumeAsApprovedOt && !overtimeUsers.some(ot => ot.id === member.id)) {
         return await notifyAfterFinishPresence(member, user, shift, now, 'LIVE ON after clock-out');
     }
@@ -1888,6 +2160,14 @@ async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().
             return true;
         }
         if (user.checkedIn && !user.isFinished && !getActiveLiveException(member.id, now)) {
+            // ✨ 정규 퇴근 시간 이후에 방송을 끄면 즉시 퇴근 처리 (유예 없음)
+            const shiftEnd = getScheduledEndMoment(user, now); 
+            if (shiftEnd && now.isSameOrAfter(shiftEnd)) {
+                await handleClockOut(member, user, now, '정규 퇴근 시간 이후 방송 종료 (자동 퇴근)', now, { clockOutSource: 'auto-out-after-shift-live-off' });
+                changed = true;
+                return true;
+            }
+
             const started = markLiveOffState(user, now);
             const liveOffAt = user.liveOffStartedAt || user.voiceJoinedAt;
             const liveOffMins = liveOffAt ? now.diff(moment(liveOffAt).tz(CONFIG.TIMEZONE), 'minutes') : 0;
@@ -1902,13 +2182,13 @@ async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().
             }
             if (!isLiveOffClockOutDue && liveOffMins >= CONFIG.LIVE_OFF_DM_AFTER_MINS && user.liveOffWarnedFor !== warnKey) {
                 await member.send([
-                    'Hello, this is an attendance reminder.',
+                    '🌿 Gentle reminder',
                     '',
-                    'You are currently in the voice channel, but your live stream is OFF.',
-                    'Please turn on your live stream so your attendance can be counted.',
+                    'You are in the voice channel, but your live stream appears to be OFF.',
+                    'When you are ready, please turn your live stream back on so your work time can keep counting.',
                     '',
-                    'If the live stream remains off, this time will not be recognized as working time.',
-                    'Thank you.'
+                    `If it stays off for about ${CONFIG.LIVE_OFF_CLOCK_OUT_MINS} minutes, the bot may clock you out automatically.`,
+                    'Thank you. 🙂'
                 ].join('\n')).catch(() => null);
                 user.liveOffWarnedFor = warnKey;
                 changed = true;
@@ -1949,6 +2229,10 @@ async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().
     }
 
     if (!user.checkedIn) {
+        if (user.isFinished) {
+            return changed; 
+        }
+
         if (await handleClockIn(member, user, shift, now, true)) changed = true;
         if (await activatePendingManualOvertime(user, now)) changed = true;
         return true;
@@ -2228,7 +2512,7 @@ async function sendOpsReport(type = 'Regular') {
             { name: 'Attention', value: `\`\`\`\n${attention}\n\`\`\``, inline: false },
             { name: 'Target Top 5', value: `\`\`\`\n${top}\n\`\`\``, inline: false },
             { name: 'Session Credited Time', value: `\`\`\`\n${sessionMetrics}\n\`\`\``, inline: false },
-            { name: 'Full Metrics', value: `\`\`\`\n PTS | Name             |  정  지  결  조  연  휴 | DC\n${metrics}\n\`\`\``, inline: false }
+            { name: 'Full Metrics', value: `\`\`\`\n PTS | Name              |  정  지  결  조  연  휴 | DC\n${metrics}\n\`\`\``, inline: false }
         );
         return logChan.send({ embeds: [embed] });
     } catch (e) {
@@ -2717,7 +3001,8 @@ async function checkGracePeriods() {
         if (
             u.disconnected &&
             (u.pendingClockOut?.source === 'voice_leave' || u.disconnectedAt) &&
-            now.isSameOrAfter(moment(u.pendingClockOut?.expiresAt || moment(u.disconnectedAt).tz(CONFIG.TIMEZONE).add(CONFIG.GRACE_PERIOD_MINS, 'minutes')))
+            now.isSameOrAfter(moment(u.pendingClockOut?.expiresAt || moment(u.disconnectedAt).tz(CONFIG.TIMEZONE).add(CONFIG.GRACE_PERIOD_MINS, 'minutes'))) &&
+            !getActiveLiveException(id, now)
         ) {
             const m = client.guilds.cache.get(CONFIG.GUILD_ID)?.members.cache.get(id);
             const effectiveDcOut = moment(u.pendingClockOut?.at || u.disconnectedAt).tz(CONFIG.TIMEZONE);
@@ -2730,6 +3015,21 @@ async function checkGracePeriods() {
                 forceIcon: '🔴',
                 clockOutSource: 'dc-timeout'
             });
+            if (m?.send) {
+                await m.send([
+                    '🌿 Quick update',
+                    '',
+                    `You were disconnected for about ${CONFIG.GRACE_PERIOD_MINS} minutes, so the bot has clocked you out automatically.`,
+                    '',
+                    `If you come back within ${CONFIG.AUTO_TIMEOUT_RESUME_WINDOW_MINS} minutes before your scheduled end, please follow these steps:`,
+                    '1. Join the voice channel again.',
+                    '2. Turn your live stream ON.',
+                    '3. The bot can resume your shift automatically.',
+                    '',
+                    `Important: after ${CONFIG.AUTO_TIMEOUT_RESUME_WINDOW_MINS} minutes, live stream ON by itself will NOT restart attendance. You must press CLOCK IN again.`,
+                    'No extra DC reminders will be sent for this clock-out. 🙂'
+                ].join('\n')).catch(() => null);
+            }
             changed = true;
         }
     }
@@ -2747,14 +3047,25 @@ async function autoOvertimeCheck() {
     for (const id in attendanceData) {
         if (CONFIG.EXCEPTIONS.SHARED_SEAT_USER && id === CONFIG.EXCEPTIONS.SHARED_SEAT_USER) continue;
         const u = attendanceData[id];
-        if (!u.checkedIn || u.dayOff || overtimeUsers.some(ot => ot.id === id)) continue;
+        if ((!u.checkedIn && !u.pendingManualOT) || u.dayOff || overtimeUsers.some(ot => ot.id === id)) continue;
         if (!['day', 'night'].includes(u.shift)) continue;
+
+        const member = guild?.members.cache.get(id);
+        if (isCurrentShiftRegularWorker(member, now)) {
+            if (u.checkedIn && u.attendanceStatus === 'OVERTIME') {
+                transitionRecordedStatus(u, {
+                    attendanceStatus: 'WORKING',
+                    voiceStatus: member?.voice?.streaming || guild?.voiceStates.cache.get(id)?.streaming ? 'LIVE_ON' : (member?.voice?.channelId || guild?.voiceStates.cache.get(id)?.channelId ? 'LIVE_OFF' : 'OFFLINE')
+                }, now, 'auto-overtime-check', 'current-shift-regular-worker');
+                changed = true;
+            }
+            continue;
+        }
 
         const targetEnd = getOvertimeStartMoment(u, now);
         if (!targetEnd) continue;
 
         if (u.pendingManualOT && now.isSameOrAfter(targetEnd)) {
-            const member = guild?.members.cache.get(id);
             const voiceState = guild?.voiceStates.cache.get(id);
             const isStreamingNow = Boolean(member?.voice?.streaming || voiceState?.streaming);
             if (isStreamingNow && addOvertimeUser(u, 'MANUAL', targetEnd)) {
@@ -2772,7 +3083,6 @@ async function autoOvertimeCheck() {
         }
 
         if (now.isSameOrAfter(targetEnd.clone().add(CONFIG.AUTO_OT_AFTER_MINS, 'minutes'))) {
-            const member = guild?.members.cache.get(id);
             const voiceState = guild?.voiceStates.cache.get(id);
             const isStreamingNow = Boolean(member?.voice?.streaming || voiceState?.streaming);
             const hasLiveException = Boolean(getActiveLiveException(id, now));
@@ -2977,6 +3287,20 @@ function parseDayOffRequest(message) {
     );
     const leaveLine = content.match(/leave\s*date\s*:?\s*([A-Za-z]+)\s+(\d{1,2})(?:\s*,?\s*(\d{4}))?/i);
 
+    // ✨ [업데이트] 빈 이름 제출 차단 
+    if (!submittedName) {
+        return { 
+            ok: false, 
+            code: 'missing-name', 
+            emoji: '❌', 
+            displayName, 
+            submittedName, 
+            nameMismatch: false, 
+            shift, 
+            shiftLabel 
+        };
+    }
+
     if (!leaveLine) {
         const hasLeaveDate = /leave\s*date/i.test(content);
         return {
@@ -3047,6 +3371,19 @@ async function setDayOffStatusEmoji(message, emoji) {
 async function writeDayOffLog(text) {
     const logChan = await client.channels.fetch(CONFIG.LOG_CHANNEL).catch(() => null);
     if (logChan) await logChan.send(text).catch(e => console.error('[DAYOFF LOG ERROR]', e));
+}
+
+async function writeAdminActionLog(action, actorMember, targetMember = null, details = []) {
+    const now = moment().tz(CONFIG.TIMEZONE);
+    const actorName = actorMember?.displayName || actorMember?.user?.username || actorMember?.id || 'Unknown';
+    const targetName = targetMember?.displayName || targetMember?.user?.username || targetMember?.id || 'N/A';
+    const lines = [
+        `\`[${now.format('MM/DD HH:mm')}]\` 🛡️ ADMIN ACTION: **${action}**`,
+        `👑 Actor: **${actorName}** (${actorMember?.id || 'unknown'})`,
+        `👤 Target: **${targetName}**${targetMember?.id ? ` (${targetMember.id})` : ''}`,
+        ...details.filter(Boolean).map(line => `📌 ${line}`)
+    ];
+    await writeDayOffLog(lines.join('\n'));
 }
 
 async function appendDayOffAudit(event, payload = {}) {
@@ -3179,7 +3516,17 @@ async function processDayOffMessage(message, { silent = false } = {}) {
         await setDayOffStatusEmoji(message, parsed.emoji);
         await saveSystemAsync();
 
-        if (parsed.code === 'invalid-month') {
+        // ✨ [업데이트] 이름 누락 경고 
+        if (parsed.code === 'missing-name') {
+            if (!silent) await sendTemporaryDayOffReply(message, `${message.author} Username cannot be blank. Please explicitly provide your name in the request format.`);
+            await writeDayOffLog(`❌ 휴무 신청 실패\n👥 대상: ${parsed.displayName}\n📝 사유: 이름이 공란입니다.`);
+            await appendDayOffAudit('FAILED', {
+                messageId: message.id,
+                userId: message.author.id,
+                name: parsed.displayName,
+                reason: 'missing-name'
+            });
+        } else if (parsed.code === 'invalid-month') {
             if (!silent) await sendTemporaryDayOffReply(message, `${message.author} The month name is invalid. Please check the English spelling. Example: May, Dec`);
             await writeDayOffLog(`❌ 휴무 신청 실패\n👥 이름: ${parsed.displayName}\n📝 사유: 월 이름이 올바르지 않습니다.\n⏰ 처리 시간: ${moment().tz(CONFIG.TIMEZONE).format('YYYY-MM-DD HH:mm')}`);
             await appendDayOffAudit('FAILED', {
@@ -4021,6 +4368,7 @@ client.on(Events.InteractionCreate, async i => {
                 if (!s) return i.reply({ content: 'No role.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
                 const u = ensureUserData(t, s);
                 await handleClockIn(t, u, s, now);
+                await writeAdminActionLog('FORCE_IN', i.member, t, [`shift=${s}`]);
                 await saveSystemAsync();
                 renderDashboardCore();
                 return i.reply({ content: 'Forced In.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
@@ -4034,6 +4382,7 @@ client.on(Events.InteractionCreate, async i => {
                     return i.reply({ content: 'Target is not checked in.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
                 }
                 await handleClockOut(t, u, now, '관리자 강제 퇴근', null, { skipEarlyPenalty: true });
+                await writeAdminActionLog('FORCE_OUT', i.member, t, ['skipEarlyPenalty=true']);
                 await saveSystemAsync();
                 renderDashboardCore();
                 return i.reply({ content: 'Forced Out.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
@@ -4047,6 +4396,7 @@ client.on(Events.InteractionCreate, async i => {
                     return i.reply({ content: 'Target is not checked in.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
                 }
                 await handleClockOut(t, u, now, '관리자 조기퇴근 처리');
+                await writeAdminActionLog('FORCE_EARLY_OUT', i.member, t);
                 await saveSystemAsync();
                 renderDashboardCore();
                 return i.reply({ content: 'Forced Early Out.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
@@ -4066,6 +4416,7 @@ client.on(Events.InteractionCreate, async i => {
                 overtimeUsers = overtimeUsers.filter(o => o.id !== t.id);
                 await updateWorkingRole(t, false);
                 await recordLog(u, 'off', '관리자 강제 휴무');
+                await writeAdminActionLog('FORCE_OFF', i.member, t, [s ? `shift=${s}` : 'shift=unknown']);
                 await saveSystemAsync();
                 renderDashboardCore();
                 return i.reply({ content: 'Forced Off.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
@@ -4083,6 +4434,7 @@ client.on(Events.InteractionCreate, async i => {
                     u.points = (u.points || 0) + CONFIG.POINTS.OT;
                     await recordLog(u, 'ot', '관리자 강제 연장');
                 }
+                await writeAdminActionLog('FORCE_OT', i.member, t, [`shift=${s}`, `checkedIn=${Boolean(u.checkedIn)}`]);
                 await saveSystemAsync();
                 renderDashboardCore();
                 return i.reply({ content: 'Forced OT.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
@@ -4157,6 +4509,7 @@ client.on(Events.InteractionCreate, async i => {
                 if (!applyManualAdjustment(u, field, value)) {
                     return i.reply({ content: 'Invalid field/value.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
                 }
+                await writeAdminActionLog('MANUAL_ADJUST', i.member, t, [`field=${field}`, `value=${value}`]);
                 await saveSystemAsync();
                 renderDashboardCore();
                 return i.reply({ content: `Updated ${u.name}: ${field} = ${value}`, flags: MessageFlags.Ephemeral }).then(() => autoDel());
@@ -4171,6 +4524,7 @@ client.on(Events.InteractionCreate, async i => {
                 overtimeUsers = overtimeUsers.filter(o => o.id !== t.id);
                 await updateWorkingRole(t, false);
                 await t.kick('Attendance bot fire command').catch(e => console.error('[KICK ERROR]', e));
+                await writeAdminActionLog('FIRE_KICK', i.member, t, ['backup=before-fire']);
                 await saveSystemAsync();
                 renderDashboardCore();
                 return i.reply({ content: 'Fired/Kicked.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
@@ -4190,6 +4544,7 @@ client.on(Events.InteractionCreate, async i => {
                 u.disconnected = false;
                 u.isFinished = true;
                 overtimeUsers = overtimeUsers.filter(o => o.id !== t.id);
+                await writeAdminActionLog('CLEAR_ROLES', i.member, t, [`roles=${roleIds.join(',')}`]);
                 await saveSystemAsync();
                 renderDashboardCore();
                 return i.reply({ content: 'Roles cleared.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
@@ -4205,6 +4560,7 @@ client.on(Events.InteractionCreate, async i => {
                 overtimeUsers = overtimeUsers.filter(o => o.id !== t.id);
                 ensureUserData(t);
                 await updateWorkingRole(t, false);
+                await writeAdminActionLog('RESET_USER', i.member, t, ['backup=before-user-reset']);
                 await saveSystemAsync();
                 await renderDashboardCore({ forceMemberRefresh: true });
                 return i.editReply({ content: '✅ 개인 리셋 완료.' }).then(() => autoDel());
@@ -4219,6 +4575,7 @@ client.on(Events.InteractionCreate, async i => {
                 overtimeUsers = [];
                 liveExceptions = {};
                 await syncWorkingRoles();
+                await writeAdminActionLog('RESET_ALL', i.member, null, ['backup=before-full-reset']);
                 await saveSystemAsync();
                 await renderDashboardCore({ forceMemberRefresh: true });
                 return i.editReply({ content: '✅ 전체 리셋 완료. 출석 데이터와 OT 상태를 초기화했습니다.' }).then(() => autoDel());
@@ -4238,7 +4595,8 @@ client.on(Events.InteractionCreate, async i => {
         }
 
         if (i.isButton()) {
-            const m = i.member;
+            await refreshGuildMembers(i.guild, { force: true, minIntervalMs: 0 });
+            const m = await i.guild.members.fetch({ user: i.user.id, force: true }).catch(() => i.member);
             const s = determineShift(m);
             if (!s) return i.reply({ content: 'No role.', flags: MessageFlags.Ephemeral }).then(() => autoDel());
             const u = ensureUserData(m, s);
@@ -4269,10 +4627,33 @@ client.on(Events.InteractionCreate, async i => {
                         flags: MessageFlags.Ephemeral
                     }).then(() => autoDel(5000));
                 }
-                u.isFinished = false;
-                const isStreamingNow = Boolean(m.voice?.streaming);
-                const isVoiceConnected = Boolean(m.voice?.channelId);
+                const voiceState = i.guild.voiceStates.cache.get(m.id);
+                const isVoiceConnected = Boolean(voiceState?.channelId);
+                const isStreamingNow = Boolean(voiceState?.channelId && voiceState?.streaming);
                 if (!isStreamingNow) {
+                    if (u.manualResumeRequired) {
+                        u.checkedIn = false;
+                        u.isFinished = true;
+                        u.disconnected = false;
+                        u.disconnectedAt = null;
+                        u.voiceJoinedAt = null;
+                        u.liveOffStartedAt = null;
+                        u.liveOffWarnedFor = null;
+                        u.pendingClockOut = null;
+                        transitionRecordedStatus(u, {
+                            attendanceStatus: 'FINISHED',
+                            voiceStatus: isVoiceConnected ? 'LIVE_OFF' : 'OFFLINE'
+                        }, now, 'button-or-command', 'manual-resume-live-required');
+                        await saveSystemAsync();
+                        await renderDashboardCore({ forceMemberRefresh: true });
+                        return i.reply({
+                            content: isVoiceConnected
+                                ? 'Your attendance is still FINISHED. Turn on your live stream first, then press CLOCK IN again. Attendance will not be counted until you press CLOCK IN while LIVE ON.'
+                                : 'Your attendance is still FINISHED. Join a voice channel, turn on your live stream, then press CLOCK IN again. Attendance will not be counted until then.',
+                            flags: MessageFlags.Ephemeral
+                        }).then(() => autoDel(7000));
+                    }
+                    u.isFinished = false;
                     if (isVoiceConnected) markLiveOffState(u, now);
                     await saveSystemAsync();
                     await renderDashboardCore({ forceMemberRefresh: true });
@@ -4283,12 +4664,22 @@ client.on(Events.InteractionCreate, async i => {
                         flags: MessageFlags.Ephemeral
                     }).then(() => autoDel(3000));
                 }
+                u.isFinished = false;
                 if (u.disconnected) {
                     u.disconnected = false;
                     u.disconnectedAt = null;
                     await recordLog(u, 'reconnect', 'DC 복구');
                 } else {
-                    await handleClockIn(m, u, s, now, false);
+                    const clockedIn = await handleClockIn(m, u, s, now, false);
+                    if (!clockedIn) {
+                        const bounds = getShiftBounds(s, now);
+                        await saveSystemAsync();
+                        await renderDashboardCore({ forceMemberRefresh: true });
+                        return i.reply({
+                            content: `Clock-in was not counted. Detected shift: ${s.toUpperCase()}. Your shift starts at ${bounds.start.format('hh:mm A')}. Please check your DAY/NIGHT role, then press CLOCK IN again while LIVE ON.`,
+                            flags: MessageFlags.Ephemeral
+                        }).then(() => autoDel(7000));
+                    }
                 }
             } else if (type === 'out') {
                 await handleClockOut(m, u, now);
@@ -4302,8 +4693,9 @@ client.on(Events.InteractionCreate, async i => {
                         flags: MessageFlags.Ephemeral
                     }).then(() => autoDel(5000));
                 }
-                const isStreamingNow = Boolean(m.voice?.streaming);
-                const isVoiceConnected = Boolean(m.voice?.channelId);
+                const voiceState = i.guild.voiceStates.cache.get(m.id);
+                const isVoiceConnected = Boolean(voiceState?.channelId);
+                const isStreamingNow = Boolean(voiceState?.channelId && voiceState?.streaming);
                 const overtimeStart = getOvertimeStartMoment(u, now);
                 const isOvertimeWindow = canStartOvertimeNow(u, now);
                 if (!isStreamingNow) {
