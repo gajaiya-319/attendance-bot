@@ -481,11 +481,12 @@ async function renderDashboardCore({ forceMemberRefresh = false, reconcileSessio
             dashboardStableKey !== dashboardLastPublishedStableKey
         ) {
             const currentMs = Date.now();
+            if (!dashboardPendingStableKeyAt) {
+                dashboardPendingStableKeyAt = currentMs;
+            }
             if (dashboardPendingStableKey !== dashboardStableKey) {
                 dashboardPendingStableKey = dashboardStableKey;
-                dashboardPendingStableKeyAt = currentMs;
-                console.log('[DASHBOARD SETTLE] New dashboard state detected; waiting before publishing.');
-                return;
+                console.log('[DASHBOARD SETTLE] Latest dashboard state changed; preserving the original publish deadline.');
             }
             if (currentMs - dashboardPendingStableKeyAt < DASHBOARD_STATE_SETTLE_MS) {
                 console.log('[DASHBOARD SETTLE] Dashboard state still settling; keeping previous status message.');
