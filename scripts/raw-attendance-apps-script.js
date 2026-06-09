@@ -189,6 +189,12 @@ function closeThreeDaysAndAppend() {
     const source = sheet.getRange(THREE_DAY_LIVE_BLOCK);
     const values = snapshotThreeDayLiveBlock_(sheet);
     const closedSignature = JSON.stringify([values[2].slice(1), values[3].slice(1)]);
+    const existingSignature = String(sheet.getRange(THREE_DAY_CLOSED_SIGNATURE_CELL).getValue() || '');
+    if (existingSignature && existingSignature === closedSignature) {
+      setupThreeDayCloseCheckbox();
+      ss.toast(round + '\uD68C\uCC28 \uB370\uC774\uD130\uB294 \uC774\uBBF8 \uB9C8\uAC10\uB418\uC5C8\uC2B5\uB2C8\uB2E4.', '3\uC77C \uB9C8\uAC10 \uC911\uBCF5 \uBC29\uC9C0', 5);
+      return { success: true, skipped: true, reason: 'already-closed', round: round };
+    }
 
     source.copyFormatToRange(sheet, 2, 8, targetRow, targetRow + THREE_DAY_HISTORY_BLOCK_ROWS - 1);
     sheet.getRange(targetRow, 2, THREE_DAY_HISTORY_BLOCK_ROWS, 7).setValues(values);
@@ -201,8 +207,6 @@ function closeThreeDaysAndAppend() {
 
     sheet.getRange('B1').setValue('\u23F1\uFE0F [' + (round + 1) + '\uD68C\uCC28] 3\uC77C \uB2E8\uC704 \uAE09\uC5EC \uAE30\uB85D \uC694\uC57D');
     sheet.getRange(THREE_DAY_CLOSED_SIGNATURE_CELL).setValue(closedSignature);
-    sheet.getRange('C5:H7').setValue(0);
-    sheet.getRange('B3').setValue('\u25B6 \uB2E4\uC74C \uD68C\uCC28 \uB370\uC774\uD130 \uB300\uAE30 \uC911');
     setupThreeDayCloseCheckbox();
     ss.toast(round + '\uD68C\uCC28 3\uC77C \uAE09\uC5EC \uAE30\uB85D\uC744 \uAC19\uC740 \uD0ED \uC544\uB798\uC5D0 \uBCF4\uC874\uD588\uC2B5\uB2C8\uB2E4.', '3\uC77C \uB9C8\uAC10 \uC644\uB8CC', 5);
     return { success: true, round: round, row: targetRow };
