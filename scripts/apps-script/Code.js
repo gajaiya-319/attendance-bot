@@ -36,6 +36,7 @@ const THREE_DAY_CLOSE_CHECKBOX = 'H2';
 const THREE_DAY_LIVE_BLOCK = 'B3:H7';
 const THREE_DAY_HISTORY_START_ROW = 10;
 const THREE_DAY_HISTORY_BLOCK_ROWS = 5;
+const THREE_DAY_HISTORY_GAP_ROWS = 2;
 const THREE_DAY_CLOSED_SIGNATURE_CELL = 'Z1';
 const MONTHLY_LIVE_BLOCK = 'B4:H7';
 const MONTHLY_HISTORY_START_ROW = 11;
@@ -152,9 +153,13 @@ function closeMonthAndReset() {
   }
 }
 
-function findNextThreeDayHistoryRow_(sheet) {
-  const lastRow = Math.max(sheet.getLastRow(), THREE_DAY_HISTORY_START_ROW - 3);
-  return Math.max(THREE_DAY_HISTORY_START_ROW, lastRow + 3);
+function prepareLatestThreeDayHistoryRow_(sheet) {
+  const startRow = THREE_DAY_HISTORY_START_ROW;
+  const existingTitle = clean_(sheet.getRange(startRow, 2).getDisplayValue(), '');
+  if (existingTitle) {
+    sheet.insertRowsBefore(startRow, THREE_DAY_HISTORY_BLOCK_ROWS + THREE_DAY_HISTORY_GAP_ROWS);
+  }
+  return startRow;
 }
 
 function currentThreeDayRound_(sheet) {
@@ -185,7 +190,6 @@ function closeThreeDaysAndAppend() {
     if (!sheet) throw new Error('최근_3일_요약 시트를 찾을 수 없습니다.');
 
     const round = currentThreeDayRound_(sheet);
-    const targetRow = findNextThreeDayHistoryRow_(sheet);
     const source = sheet.getRange(THREE_DAY_LIVE_BLOCK);
     const values = snapshotThreeDayLiveBlock_(sheet);
     const closedSignature = JSON.stringify([values[2].slice(1), values[3].slice(1)]);
@@ -196,6 +200,7 @@ function closeThreeDaysAndAppend() {
       return { success: true, skipped: true, reason: 'already-closed', round: round };
     }
 
+    const targetRow = prepareLatestThreeDayHistoryRow_(sheet);
     source.copyFormatToRange(sheet, 2, 8, targetRow, targetRow + THREE_DAY_HISTORY_BLOCK_ROWS - 1);
     sheet.getRange(targetRow, 2, THREE_DAY_HISTORY_BLOCK_ROWS, 7).setValues(values);
 
