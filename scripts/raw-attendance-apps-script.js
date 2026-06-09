@@ -32,6 +32,14 @@ const RAW_DATA_SHEET_NAME = 'Raw_Data';
 const RECENT_THREE_DAY_SUMMARY_SHEET = '\uCD5C\uADFC_3\uC77C_\uC694\uC57D';
 const MONTHLY_SUMMARY_SHEET = '\uC6D4\uAC04_\uB204\uC801_\uC694\uC57D';
 const PAYROLL_TOTAL_COLUMN = 12;
+const THREE_DAY_CLOSE_CHECKBOX = 'H2';
+const THREE_DAY_LIVE_BLOCK = 'B3:H7';
+const THREE_DAY_HISTORY_START_ROW = 10;
+const THREE_DAY_HISTORY_BLOCK_ROWS = 5;
+const THREE_DAY_CLOSED_SIGNATURE_CELL = 'Z1';
+const MONTHLY_LIVE_BLOCK = 'B4:H7';
+const MONTHLY_HISTORY_START_ROW = 11;
+const MONTHLY_HISTORY_BLOCK_ROWS = 4;
 
 function doGet(e) {
   try {
@@ -51,6 +59,156 @@ function doGet(e) {
 
 function getRawAttendanceRows() {
   return getRawAttendanceRows_();
+}
+
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu('\uD83D\uDEE0\uFE0F \uAE09\uC5EC \uAD00\uB9AC')
+    .addItem('\u23F1\uFE0F 3\uC77C \uAE09\uC5EC \uB9C8\uAC10 \uBC0F \uC544\uB798\uC5D0 \uBCF4\uC874', 'closeThreeDaysAndAppend')
+    .addItem('\u2611\uFE0F \uB9C8\uAC10 \uCCB4\uD06C\uBC15\uC2A4 \uC77C\uAD04 \uBCF5\uAD6C', 'setupCheckboxButtons')
+    .addToUi();
+}
+
+function onEdit(e) {
+  if (!e || !e.range || e.value !== 'TRUE') return;
+  const range = e.range;
+  if (range.getA1Notation() !== THREE_DAY_CLOSE_CHECKBOX) return;
+  const sheetName = range.getSheet().getName();
+  if (sheetName !== RECENT_THREE_DAY_SUMMARY_SHEET && sheetName !== MONTHLY_SUMMARY_SHEET) return;
+  range.setValue(false);
+  if (sheetName === RECENT_THREE_DAY_SUMMARY_SHEET) closeThreeDaysAndAppend();
+  if (sheetName === MONTHLY_SUMMARY_SHEET) closeMonthAndReset();
+}
+
+function setupThreeDayCloseCheckbox() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(RECENT_THREE_DAY_SUMMARY_SHEET);
+  if (!sheet) throw new Error('최근_3일_요약 시트를 찾을 수 없습니다.');
+  sheet.getRange('G2').setValue('\uD83D\uDC49 3\uC77C \uB9C8\uAC10 \uC2E4\uD589 :')
+    .setFontWeight('bold').setHorizontalAlignment('right').setVerticalAlignment('middle');
+  sheet.getRange(THREE_DAY_CLOSE_CHECKBOX).insertCheckboxes().setValue(false)
+    .setBackground('#BFDBFE').setHorizontalAlignment('center').setVerticalAlignment('middle');
+}
+
+function setupCheckboxButtons() {
+  setupThreeDayCloseCheckbox();
+  const monthSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(MONTHLY_SUMMARY_SHEET);
+  if (monthSheet) {
+    monthSheet.getRange('G2').setValue('\uD83D\uDCC5 \uC774\uBC88 \uB2EC \uB9C8\uAC10 \uC2E4\uD589 :')
+      .setFontWeight('bold').setHorizontalAlignment('right').setVerticalAlignment('middle');
+    monthSheet.getRange(THREE_DAY_CLOSE_CHECKBOX).insertCheckboxes().setValue(false)
+      .setBackground('#FECACA').setHorizontalAlignment('center').setVerticalAlignment('middle');
+  }
+  SpreadsheetApp.getActiveSpreadsheet().toast('\uB9C8\uAC10 \uCCB4\uD06C\uBC15\uC2A4\uB97C \uBCF5\uAD6C\uD588\uC2B5\uB2C8\uB2E4.', '\uAE09\uC5EC \uAD00\uB9AC', 4);
+}
+
+function closeMonthAndReset() {
+  const lock = LockService.getDocumentLock();
+  lock.waitLock(10000);
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const monthSheet = ss.getSheetByName(MONTHLY_SUMMARY_SHEET);
+    const rawSheet = ss.getSheetByName(RAW_DATA_SHEET_NAME);
+    const daySheet = ss.getSheetByName(RECENT_THREE_DAY_SUMMARY_SHEET);
+    if (!monthSheet || !rawSheet) throw new Error('월간_누적_요약 또는 Raw_Data 시트를 찾을 수 없습니다.');
+
+    const source = monthSheet.getRange(MONTHLY_LIVE_BLOCK);
+    const values = source.getValues();
+    const targetRow = Math.max(MONTHLY_HISTORY_START_ROW, monthSheet.getLastRow() + 3);
+    source.copyFormatToRange(monthSheet, 2, 8, targetRow, targetRow + MONTHLY_HISTORY_BLOCK_ROWS - 1);
+    monthSheet.getRange(targetRow, 2, MONTHLY_HISTORY_BLOCK_ROWS, 7).setValues(values);
+
+    const tz = Session.getScriptTimeZone() || 'Asia/Manila';
+    const closedAt = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd HH:mm');
+    const title = String(values[0][0] || '\uC6D4\uAC04 \uB204\uC801').replace('\uD83D\uDFE2', '\uD83D\uDCC5').replace('\uC9C4\uD589 \uC911', '\uB9C8\uAC10 \uAE30\uB85D');
+    monthSheet.getRange(targetRow, 2, 1, 7).merge()
+      .setValue(title + ' \u00B7 ' + closedAt)
+      .setBackground('#E0E7FF').setFontColor('#3730A3').setFontWeight('bold');
+
+    if (rawSheet.getMaxRows() > 1) rawSheet.getRange(2, 1, rawSheet.getMaxRows() - 1, 10).clearContent();
+
+    const now = new Date();
+    monthSheet.getRange('B4:H4').merge()
+      .setValue('\uD83D\uDFE2 ' + Utilities.formatDate(now, tz, 'yyyy\uB144 M\uC6D4') + ' \uC9C4\uD589 \uC911 (Raw_Data \uC2E4\uC2DC\uAC04 \uC5F0\uB3D9)')
+      .setBackground('#DCFCE7').setFontColor('#166534').setFontWeight('bold');
+    applyMonthlyRawDataFormulas_(monthSheet);
+
+    if (daySheet) {
+      const existingSignature = String(
+        daySheet.getRange(THREE_DAY_CLOSED_SIGNATURE_CELL).getValue() || ''
+      );
+      const closedSignature = existingSignature
+        || JSON.stringify(daySheet.getRange('C5:H6').getValues());
+      daySheet.getRange(THREE_DAY_CLOSED_SIGNATURE_CELL).setValue(closedSignature);
+      daySheet.getRange('B1').setValue('\u23F1\uFE0F [1\uD68C\uCC28] 3\uC77C \uB2E8\uC704 \uAE09\uC5EC \uAE30\uB85D \uC694\uC57D');
+      daySheet.getRange('C5:H7').setValue(0);
+      daySheet.getRange('B3').setValue('\u25B6 \uC0C8 \uC6D4 1\uD68C\uCC28 \uB370\uC774\uD130 \uB300\uAE30 \uC911');
+      setupThreeDayCloseCheckbox();
+    }
+    setupCheckboxButtons();
+    ss.toast('\uC6D4\uAC04 \uC694\uC57D\uC744 \uC544\uB798\uC5D0 \uBCF4\uC874\uD558\uACE0 Raw_Data\uB97C \uCD08\uAE30\uD654\uD588\uC2B5\uB2C8\uB2E4.', '\uC6D4\uAC04 \uB9C8\uAC10 \uC644\uB8CC', 6);
+    return { success: true, row: targetRow };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function findNextThreeDayHistoryRow_(sheet) {
+  const lastRow = Math.max(sheet.getLastRow(), THREE_DAY_HISTORY_START_ROW - 3);
+  return Math.max(THREE_DAY_HISTORY_START_ROW, lastRow + 3);
+}
+
+function currentThreeDayRound_(sheet) {
+  const match = String(sheet.getRange('B1').getDisplayValue() || '').match(/\[(\d+)\s*\uD68C\uCC28\]/);
+  return match ? Number(match[1]) : 1;
+}
+
+function snapshotThreeDayLiveBlock_(sheet) {
+  SpreadsheetApp.flush();
+  const values = sheet.getRange(THREE_DAY_LIVE_BLOCK).getValues();
+  const paagrio = values[2] || [];
+  const heine = values[3] || [];
+  const total = values[4] || [];
+
+  for (let col = 1; col < 7; col += 1) {
+    total[col] = parseSheetNumber_(paagrio[col]) + parseSheetNumber_(heine[col]);
+  }
+  values[4] = total;
+  return values;
+}
+
+function closeThreeDaysAndAppend() {
+  const lock = LockService.getDocumentLock();
+  lock.waitLock(10000);
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName(RECENT_THREE_DAY_SUMMARY_SHEET);
+    if (!sheet) throw new Error('최근_3일_요약 시트를 찾을 수 없습니다.');
+
+    const round = currentThreeDayRound_(sheet);
+    const targetRow = findNextThreeDayHistoryRow_(sheet);
+    const source = sheet.getRange(THREE_DAY_LIVE_BLOCK);
+    const values = snapshotThreeDayLiveBlock_(sheet);
+    const closedSignature = JSON.stringify([values[2].slice(1), values[3].slice(1)]);
+
+    source.copyFormatToRange(sheet, 2, 8, targetRow, targetRow + THREE_DAY_HISTORY_BLOCK_ROWS - 1);
+    sheet.getRange(targetRow, 2, THREE_DAY_HISTORY_BLOCK_ROWS, 7).setValues(values);
+
+    const tz = Session.getScriptTimeZone() || 'Asia/Manila';
+    const closedAt = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd HH:mm');
+    sheet.getRange(targetRow, 2, 1, 7).merge()
+      .setValue('\u23F1\uFE0F [' + round + '\uD68C\uCC28] 3\uC77C \uAE09\uC5EC \uB9C8\uAC10 \u00B7 ' + closedAt)
+      .setBackground('#DBEAFE').setFontColor('#1E3A5F').setFontWeight('bold');
+
+    sheet.getRange('B1').setValue('\u23F1\uFE0F [' + (round + 1) + '\uD68C\uCC28] 3\uC77C \uB2E8\uC704 \uAE09\uC5EC \uAE30\uB85D \uC694\uC57D');
+    sheet.getRange(THREE_DAY_CLOSED_SIGNATURE_CELL).setValue(closedSignature);
+    sheet.getRange('C5:H7').setValue(0);
+    sheet.getRange('B3').setValue('\u25B6 \uB2E4\uC74C \uD68C\uCC28 \uB370\uC774\uD130 \uB300\uAE30 \uC911');
+    setupThreeDayCloseCheckbox();
+    ss.toast(round + '\uD68C\uCC28 3\uC77C \uAE09\uC5EC \uAE30\uB85D\uC744 \uAC19\uC740 \uD0ED \uC544\uB798\uC5D0 \uBCF4\uC874\uD588\uC2B5\uB2C8\uB2E4.', '3\uC77C \uB9C8\uAC10 \uC644\uB8CC', 5);
+    return { success: true, round: round, row: targetRow };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function doPost(e) {
@@ -526,9 +684,24 @@ function syncPayrollFromGreatTabs_(params) {
 
   const rawSheet = ensureRawDataSheet_();
   const tz = Session.getScriptTimeZone() || 'Asia/Manila';
-  const timestamp = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd HH:mm:ss');
-  const periodLabel = clean_(params.periodLabel || params.period || '', '') || ('\uD68C\uCC28 ' + Math.max(1, rawSheet.getLastRow()));
-  const savedBy = clean_(params.savedBy, 'Apps Script');
+  const now = new Date();
+  const timestamp = Utilities.formatDate(now, tz, 'yyyy-MM-dd HH:mm:ss');
+  const labels = rawSheet.getLastRow() > 1 ? rawSheet.getRange(2, 2, rawSheet.getLastRow() - 1, 1).getDisplayValues() : [];
+  const maxRound = labels.reduce(function(max, row) {
+    const match = String(row[0] || '').match(/(\d+)\s*\uD68C\uCC28/);
+    return match ? Math.max(max, Number(match[1])) : max;
+  }, 0);
+  const requested = clean_(params.periodLabel || params.period || '', '');
+  const requestedDays = requested.match(/(\d{1,2})\s*~\s*(\d{1,2})\s*\uC77C?/);
+  const start = new Date(now.getTime() - (2 * 24 * 60 * 60 * 1000));
+  const dayRange = requestedDays
+    ? Number(requestedDays[1]) + '~' + Number(requestedDays[2]) + '\uC77C'
+    : Number(Utilities.formatDate(start, tz, 'd')) + '~' + Number(Utilities.formatDate(now, tz, 'd')) + '\uC77C';
+  const periodLabel = (maxRound + 1) + '\uD68C\uCC28 ' + dayRange;
+  const trigger = clean_(params.trigger || params.source || '', '').toLowerCase();
+  const savedBy = (params.automatic === true || trigger.indexOf('auto') >= 0 || trigger.indexOf('cron') >= 0)
+    ? '\uC2DC\uC2A4\uD15C\uC790\uB3D9\uC800\uC7A5'
+    : 'GREAT \uC218\uB3D9\uC800\uC7A5';
 
   const values = snapshots.map(function(row) {
     return [
@@ -546,7 +719,7 @@ function syncPayrollFromGreatTabs_(params) {
   });
 
   const startRow = rawSheet.getLastRow() + 1;
-  rawSheet.getRange(startRow, 1, startRow + values.length - 1, 10).setValues(values);
+  rawSheet.getRange(startRow, 1, values.length, 10).setValues(values);
   return json_({
     success: true,
     mode: 'payroll-sync',
@@ -852,7 +1025,7 @@ function ensureGreatMirrorSheet_(ss, mirrorName, sourceTab) {
     sheet.hideSheet();
   }
   const src = payrollGreatSpreadsheetId_();
-  sheet.getRange('A1').setFormula('=IMPORTRANGE("' + src + '","' + quoteSheet_(sourceTab) + '!A1:M120")');
+  sheet.getRange('A1').setFormula('=IMPORTRANGE("' + src + '","' + quoteSheet_(sourceTab) + '!A1:ZZ120")');
   return sheet;
 }
 
@@ -1058,6 +1231,7 @@ function setupPayrollSummarySheets_(ss) {
 
   daySheet.getRange('B4:H6').setBorder(true, true, true, true, true, true, '#BDC3C7', SpreadsheetApp.BorderStyle.SOLID);
   daySheet.getRange('B8:H8').setBorder(true, true, true, true, true, true, '#BDC3C7', SpreadsheetApp.BorderStyle.SOLID);
+  setupThreeDayCloseCheckbox();
 
   let monthSheet = ss.getSheetByName(MONTHLY_SUMMARY_SHEET);
   if (!monthSheet) monthSheet = ss.insertSheet(MONTHLY_SUMMARY_SHEET);
