@@ -602,14 +602,6 @@ function createPayrollArchiveService({
             const correctionTarget = closedPeriod
                 ? await findClosedPeriodArchiveTarget(state, current.rows.length)
                 : null;
-            if (closedPeriod && !correctionTarget) {
-                return {
-                    ok: false,
-                    code: 'closed-period-archive-not-found',
-                    periodLabel: periodLabel || `${state.periodStart}~${state.periodEnd}`,
-                    periodState: state
-                };
-            }
             const nextRow = correctionTarget?.row || await getNextRawDataRow();
             const nextRound = correctionTarget ? null : await getNextPayrollRoundNumber();
             const timestamp = savedAt.toISOString().replace('T', ' ').slice(0, 19);
@@ -645,12 +637,13 @@ function createPayrollArchiveService({
                 sheet: RAW_DATA_SHEET,
                 savedAt: timestamp,
                 savedBy: sheetSavedBy,
-                corrected: Boolean(correctionTarget)
+                corrected: Boolean(correctionTarget),
+                recoveredClosedPeriod: Boolean(closedPeriod && !correctionTarget)
             };
             if (operationLog && typeof operationLog.record === 'function') {
                 await operationLog.record({
                     kind: 'payroll-archive',
-                    action: correctionTarget ? 'replace' : 'save',
+                    action: correctionTarget ? 'replace' : (closedPeriod ? 'recover' : 'save'),
                     payload: {
                         periodLabel: label,
                         savedBy: savedBy || '',

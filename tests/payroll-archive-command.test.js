@@ -66,6 +66,26 @@ function createInteraction(userId = 'owner', period = null) {
             payrollArchiveService: {
                 saveCurrent: async () => ({
                     ok: true,
+                    recoveredClosedPeriod: true,
+                    row: 8,
+                    periodLabel: '4회차 9~11일',
+                    saved: [],
+                    source: 'great-tabs'
+                })
+            }
+        });
+        const interaction = createInteraction('owner');
+        await command.execute(interaction);
+        assert(interaction.editPayload.content.includes('누락 급여 기록 복구 완료'));
+    }
+
+    {
+        const command = createPayrollArchiveCommand({
+            MessageFlags: { Ephemeral: 64 },
+            isOwner: id => id === 'owner',
+            payrollArchiveService: {
+                saveCurrent: async () => ({
+                    ok: true,
                     corrected: true,
                     row: 8,
                     periodLabel: '4회차 9~11일',
