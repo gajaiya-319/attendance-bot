@@ -96,6 +96,37 @@ function normalizeDateCell(value) {
     return formatDate(parseDateOnly(value)) || String(value || '').trim();
 }
 
+function payrollSavedByLabel(trigger) {
+    const automatic = isAutomaticPayrollTrigger(trigger);
+    return automatic ? '시스템자동저장' : 'GREAT 수동저장';
+}
+
+function isAutomaticPayrollTrigger(trigger) {
+    const normalized = String(trigger || '').toLowerCase();
+    return normalized.includes('cron')
+        || normalized.includes('auto')
+        || normalized.includes('three-day-night-close');
+}
+
+function extractPayrollRoundNumber(value) {
+    const match = String(value || '').match(/(\d+)\s*회차/);
+    return match ? Number(match[1]) : null;
+}
+
+function payrollDayRangeLabel(periodState, requestedLabel = '') {
+    const start = String(periodState?.periodStart || '').match(/-(\d{2})$/);
+    const end = String(periodState?.periodEnd || '').match(/-(\d{2})$/);
+    if (start && end) return `${Number(start[1])}~${Number(end[1])}일`;
+    const requested = String(requestedLabel || '').match(/(\d{1,2})\s*~\s*(\d{1,2})\s*일?/);
+    return requested ? `${Number(requested[1])}~${Number(requested[2])}일` : '';
+}
+
+function formatPayrollPeriodLabel(roundNumber, periodState, requestedLabel = '') {
+    const round = Number.isInteger(roundNumber) && roundNumber > 0 ? roundNumber : 1;
+    const dayRange = payrollDayRangeLabel(periodState, requestedLabel);
+    return `${round}회차${dayRange ? ` ${dayRange}` : ''}`;
+}
+
 function addDays(date, days) {
     const d = new Date(date);
     d.setUTCDate(d.getUTCDate() + days);
@@ -152,6 +183,7 @@ function createPayrollArchiveService({
     spreadsheetId,
     greatSpreadsheetId = spreadsheetId,
     serverTabs = {},
+    serverSheetIds = {},
     operationLog = null,
     logger = console
 }) {
@@ -168,6 +200,32 @@ function createPayrollArchiveService({
     });
     const sheets = google.sheets({ version: 'v4', auth });
     let saveInProgress = false;
+    let resolvedServerTabs = null;
+
+    async function resolveRequiredServerTabs() {
+        if (resolvedServerTabs) return resolvedServerTabs;
+        const required = Object.entries(serverSheetIds)
+            .filter(([, sheetId]) => Number.isInteger(Number(sheetId)) && Number(sheetId) >= 0);
+        if (!required.length) {
+            resolvedServerTabs = { ...serverTabs };
+            return resolvedServerTabs;
+        }
+        const metadata = await sheets.spreadsheets.get({
+            spreadsheetId: greatSpreadsheetId,
+            fields: 'sheets(properties(sheetId,title))'
+        });
+        const byId = new Map((metadata.data.sheets || []).map(sheet => [
+            Number(sheet.properties?.sheetId),
+            String(sheet.properties?.title || '')
+        ]));
+        resolvedServerTabs = {};
+        for (const [server, sheetId] of required) {
+            const title = byId.get(Number(sheetId));
+            if (!title) throw new Error(`Required Work list source gid missing: ${server}=${sheetId}`);
+            resolvedServerTabs[server] = title;
+        }
+        return resolvedServerTabs;
+    }
 
     async function getSheetRows(tabName, sheetId = greatSpreadsheetId, range = 'A1:ZZ120') {
         const response = await sheets.spreadsheets.values.get({
@@ -179,7 +237,8 @@ function createPayrollArchiveService({
     }
 
     async function getWorklistPayrollReferenceDate(now = new Date()) {
-        const tabs = [serverTabs.PAAGRIO, serverTabs.HEINE].filter(Boolean);
+        const exactTabs = await resolveRequiredServerTabs();
+        const tabs = [exactTabs.PAAGRIO, exactTabs.HEINE].filter(Boolean);
         let latest = null;
 
         for (const tab of tabs) {
@@ -321,9 +380,10 @@ function createPayrollArchiveService({
     }
 
     async function readFromGreatTabs() {
+        const exactTabs = await resolveRequiredServerTabs();
         const specs = [
-            { tab: serverTabs.PAAGRIO, server: SERVER_LABELS.PAAGRIO },
-            { tab: serverTabs.HEINE, server: SERVER_LABELS.HEINE }
+            { tab: exactTabs.PAAGRIO, server: SERVER_LABELS.PAAGRIO },
+            { tab: exactTabs.HEINE, server: SERVER_LABELS.HEINE }
         ].filter(item => item.tab);
 
         const rows = [];
@@ -449,6 +509,51 @@ function createPayrollArchiveService({
         return Math.max(rows.length + 1, 2);
     }
 
+    async function getNextPayrollRoundNumber() {
+        const response = await sheets.spreadsheets.values.get({
+            spreadsheetId,
+            range: `'${RAW_DATA_SHEET}'!B2:B5000`,
+            valueRenderOption: 'FORMATTED_VALUE'
+        });
+        const maxRound = (response.data.values || []).reduce((max, row) => {
+            const round = extractPayrollRoundNumber(row?.[0]);
+            return round && round > max ? round : max;
+        }, 0);
+        return maxRound + 1;
+    }
+
+    async function findClosedPeriodArchiveTarget(state, requiredRowCount = 2) {
+        const dayRange = payrollDayRangeLabel(state);
+        if (!dayRange) return null;
+
+        const response = await sheets.spreadsheets.values.get({
+            spreadsheetId,
+            range: `'${RAW_DATA_SHEET}'!A2:J5000`,
+            valueRenderOption: 'FORMATTED_VALUE'
+        });
+        const rows = response.data.values || [];
+        const matches = rows
+            .map((row, index) => ({
+                rowNumber: index + 2,
+                label: String(row?.[1] || '').trim()
+            }))
+            .filter(item => item.label.includes(dayRange));
+        if (!matches.length) return null;
+
+        const latestLabel = matches[matches.length - 1].label;
+        const sameLabel = matches.filter(item => item.label === latestLabel);
+        const lastGroup = sameLabel.slice(-Math.max(1, requiredRowCount));
+        if (lastGroup.length < requiredRowCount) return null;
+        const contiguous = lastGroup.every((item, index) => (
+            index === 0 || item.rowNumber === lastGroup[index - 1].rowNumber + 1
+        ));
+        if (!contiguous) return null;
+        return {
+            row: lastGroup[0].rowNumber,
+            label: latestLabel
+        };
+    }
+
     async function getLastRawDataTimestamp() {
         try {
             const response = await sheets.spreadsheets.values.get({
@@ -479,7 +584,9 @@ function createPayrollArchiveService({
                 now: savedAt,
                 source: 'save-current'
             });
-            if (state && String(state.status || '').toUpperCase() === 'CLOSED') {
+            const closedPeriod = Boolean(state && String(state.status || '').toUpperCase() === 'CLOSED');
+            const automaticTrigger = isAutomaticPayrollTrigger(trigger);
+            if (closedPeriod && automaticTrigger) {
                 return {
                     ok: false,
                     code: 'period-already-closed',
@@ -492,9 +599,22 @@ function createPayrollArchiveService({
             if (!current.ok) return current;
 
             await ensureRawDataSheet();
-            const nextRow = await getNextRawDataRow();
+            const correctionTarget = closedPeriod
+                ? await findClosedPeriodArchiveTarget(state, current.rows.length)
+                : null;
+            if (closedPeriod && !correctionTarget) {
+                return {
+                    ok: false,
+                    code: 'closed-period-archive-not-found',
+                    periodLabel: periodLabel || `${state.periodStart}~${state.periodEnd}`,
+                    periodState: state
+                };
+            }
+            const nextRow = correctionTarget?.row || await getNextRawDataRow();
+            const nextRound = correctionTarget ? null : await getNextPayrollRoundNumber();
             const timestamp = savedAt.toISOString().replace('T', ' ').slice(0, 19);
-            const label = periodLabel || `${Math.max(1, nextRow - 1)}\uD68C\uCC28`;
+            const label = correctionTarget?.label || formatPayrollPeriodLabel(nextRound, state, periodLabel);
+            const sheetSavedBy = payrollSavedByLabel(trigger);
             const values = current.rows.map(row => [
                 timestamp,
                 label,
@@ -505,7 +625,7 @@ function createPayrollArchiveService({
                 row.playerShare,
                 row.ownerShare,
                 row.totalPeso,
-                savedBy || ''
+                sheetSavedBy
             ]);
 
             await sheets.spreadsheets.values.update({
@@ -523,12 +643,14 @@ function createPayrollArchiveService({
                 saved: current.rows,
                 source: current.source,
                 sheet: RAW_DATA_SHEET,
-                savedAt: timestamp
+                savedAt: timestamp,
+                savedBy: sheetSavedBy,
+                corrected: Boolean(correctionTarget)
             };
             if (operationLog && typeof operationLog.record === 'function') {
                 await operationLog.record({
                     kind: 'payroll-archive',
-                    action: 'save',
+                    action: correctionTarget ? 'replace' : 'save',
                     payload: {
                         periodLabel: label,
                         savedBy: savedBy || '',
@@ -583,6 +705,11 @@ module.exports = {
     findLatestWorklistDateFromDayRows,
     createPeriodStateFromEndDate,
     normalizeDateCell,
+    payrollSavedByLabel,
+    isAutomaticPayrollTrigger,
+    extractPayrollRoundNumber,
+    payrollDayRangeLabel,
+    formatPayrollPeriodLabel,
     RAW_DATA_SHEET,
     PAYROLL_PERIOD_STATE_SHEET,
     RECENT_SUMMARY_SHEET,

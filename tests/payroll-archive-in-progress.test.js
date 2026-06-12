@@ -4,6 +4,10 @@ const {
     createPeriodStateFromEndDate,
     findLatestWorklistDateFromDayRows,
     normalizeDateCell,
+    payrollSavedByLabel,
+    isAutomaticPayrollTrigger,
+    extractPayrollRoundNumber,
+    formatPayrollPeriodLabel,
     PAYROLL_PERIOD_STATE_SHEET,
     parseWorklistDayNumber
 } = require('../src/services/payrollArchiveService');
@@ -16,6 +20,12 @@ const {
         assert.strictEqual(parseWorklistDayNumber('OT'), null);
         assert.strictEqual(findLatestWorklistDateFromDayRows([[3], [4], [5]], base).toISOString().slice(0, 10), '2026-06-05');
         assert.strictEqual(normalizeDateCell(46178), '2026-06-05', 'Google serial dates are normalized before payroll close scheduling');
+        assert.strictEqual(payrollSavedByLabel('three-day-night-close'), '시스템자동저장');
+        assert.strictEqual(payrollSavedByLabel('discord-급여기록'), 'GREAT 수동저장');
+        assert.strictEqual(isAutomaticPayrollTrigger('three-day-night-close'), true);
+        assert.strictEqual(isAutomaticPayrollTrigger('discord-급여기록'), false);
+        assert.strictEqual(extractPayrollRoundNumber('2회차 3~5일'), 2);
+        assert.strictEqual(formatPayrollPeriodLabel(3, { periodStart: '2026-06-06', periodEnd: '2026-06-08' }), '3회차 6~8일');
     }
 
     let saveCalls = 0;
@@ -34,6 +44,12 @@ const {
                             }
                             if (text.includes('A8:A10') || text.includes('A34:A36')) {
                                 return { data: { values: [[3], [4], [5]] } };
+                            }
+                            if (text.includes('Raw_Data') && text.includes('A2:J5000')) {
+                                return { data: { values: [
+                                    ['2026-01-01 12:00:00', '1회차 3~5일', 'PAAGRIO'],
+                                    ['2026-01-01 12:00:00', '1회차 3~5일', 'HEINE']
+                                ] } };
                             }
                             if (text.includes('Raw_Data')) {
                                 return { data: { values: [['2026-01-01 12:00:00']] } };
@@ -95,6 +111,22 @@ const {
         });
         closedState.rowNumber = 2;
         const result = await service.saveCurrent({ savedBy: 'c', periodState: closedState });
+        assert.strictEqual(result.ok, true);
+        assert.strictEqual(result.corrected, true);
+        assert.strictEqual(result.row, 2);
+    }
+
+    {
+        const closedState = createPeriodStateFromEndDate(new Date('2026-06-05T00:00:00Z'), {
+            now: new Date('2026-06-04T00:00:00Z'),
+            status: 'CLOSED'
+        });
+        closedState.rowNumber = 2;
+        const result = await service.saveCurrent({
+            savedBy: 'auto',
+            trigger: 'three-day-night-close',
+            periodState: closedState
+        });
         assert.strictEqual(result.ok, false);
         assert.strictEqual(result.code, 'period-already-closed');
     }

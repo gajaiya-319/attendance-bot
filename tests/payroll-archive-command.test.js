@@ -54,9 +54,29 @@ function createInteraction(userId = 'owner', period = null) {
         assert.strictEqual(interaction.deferPayload.flags, 64);
         assert(interaction.editPayload.content.includes('급여 기록 완료: 1회차'));
         assert.strictEqual(calls[0].periodLabel, '1회차');
-        assert.strictEqual(calls[0].savedBy, 'owner#0001');
+        assert.strictEqual(calls[0].savedBy, 'GREAT 수동저장');
         assert.strictEqual(calls[0].trigger, 'discord-급여기록');
         assert.strictEqual(calls[1], 'autoDel');
+    }
+
+    {
+        const command = createPayrollArchiveCommand({
+            MessageFlags: { Ephemeral: 64 },
+            isOwner: id => id === 'owner',
+            payrollArchiveService: {
+                saveCurrent: async () => ({
+                    ok: true,
+                    corrected: true,
+                    row: 8,
+                    periodLabel: '4회차 9~11일',
+                    saved: [],
+                    source: 'great-tabs'
+                })
+            }
+        });
+        const interaction = createInteraction('owner');
+        await command.execute(interaction);
+        assert(interaction.editPayload.content.includes('급여 기록 정정 완료'));
     }
 
     {

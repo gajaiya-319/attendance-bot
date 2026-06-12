@@ -31,7 +31,7 @@ function createPayrollArchiveCommand({
         const savedBy = interaction.user?.tag || interaction.user?.username || interaction.member?.displayName || interaction.user?.id;
         const result = await payrollArchiveService.saveCurrent({
             periodLabel,
-            savedBy,
+            savedBy: 'GREAT 수동저장',
             trigger: 'discord-급여기록'
         });
 
@@ -54,6 +54,8 @@ function createPayrollArchiveCommand({
         if (!result.ok) {
             const message = result.code === 'archive-in-progress'
                 ? '다른 급여기록 저장이 진행 중입니다. 잠시 후 다시 시도해주세요.'
+                : result.code === 'closed-period-archive-not-found'
+                    ? '이미 마감된 회차이지만 기존 Raw_Data 기록 행을 찾지 못해 정정 저장하지 않았습니다.'
                 : result.code === 'summary-not-ready' || String(result.code || '').includes('not-ready')
                     ? '현재 정산표 값이 아직 준비되지 않았습니다. Paagrio/Heine Great 탭 합계 행을 확인하거나 createPerfectPayrollSheets를 실행했는지 확인해주세요.'
                     : `급여 기록 실패: ${result.code}`;
@@ -61,7 +63,7 @@ function createPayrollArchiveCommand({
         }
 
         const lines = [
-            `급여 기록 완료: ${result.periodLabel}`,
+            `${result.corrected ? '급여 기록 정정 완료' : '급여 기록 완료'}: ${result.periodLabel}`,
             `저장 위치: ${result.sheet || 'Raw_Data'} ${result.row}행 (${result.source || 'great-tabs'})`,
             '최근_3일_요약=Great 실시간 · 월간_누적_요약=Raw_Data 합계. Great 탭 초기화 전에 /급여기록 실행하세요.',
             ...result.saved.map(row => `${row.server}: 아데나 ${formatNumber(row.totalAdena)} / 급여 ${formatNumber(row.grossSalary)} / 직원 ${formatNumber(row.playerShare)} / 오너 ${formatNumber(row.ownerShare)} / 페소 ${formatNumber(row.totalPeso)}`)
