@@ -186,10 +186,10 @@ function getExternalDependencySmokeStatus({
 } = {}) {
     const state = readJsonFile(filePath);
     if (!state) {
-        return { available: false, ok: true, status: 'monitoring', checkedAt: null, checkCount: 0, failureCount: 0 };
+        return { available: false, ok: true, status: 'monitoring', checkedAt: null, checkCount: 0, failureCount: 0, recoveredCount: 0 };
     }
     if (state.parseError) {
-        return { available: true, ok: false, status: 'invalid', checkedAt: null, checkCount: 0, failureCount: 1, error: state.parseError };
+        return { available: true, ok: false, status: 'invalid', checkedAt: null, checkCount: 0, failureCount: 1, recoveredCount: 0, error: state.parseError };
     }
     const checkedAtMs = new Date(state.checkedAt || 0).getTime();
     const ageHours = Number.isFinite(checkedAtMs) && checkedAtMs > 0
@@ -206,6 +206,7 @@ function getExternalDependencySmokeStatus({
         ageHours,
         checkCount: Number(state.checkCount || 0),
         failureCount,
+        recoveredCount: Number(state.recoveredCount || 0),
         failures: Array.isArray(state.failures) ? state.failures.slice(0, 10) : []
     };
 }
@@ -586,7 +587,7 @@ function formatHealthSummary(result) {
         `Embeds: ${result.checks.embeds.findingCount} finding(s)`,
         `Commands: ${result.checks.commandRegistration.registeredCount ?? 'missing'} / ${result.checks.commandRegistration.expectedCount} (${result.checks.commandRegistration.source})`,
         `Consistency: attendance pending=${result.checks.consistency?.rawAttendancePending || 0}, payroll issues=${result.checks.consistency?.payrollAuditIssues || 0}, background pending=${result.checks.consistency?.queuePending || 0}, max lag=${result.checks.consistency?.maxEventLoopLagMs || 0}ms`,
-        `External: ${result.checks.externalDependencies?.status || 'missing'}, checks=${result.checks.externalDependencies?.checkCount || 0}, failures=${result.checks.externalDependencies?.failureCount || 0}`,
+        `External: ${result.checks.externalDependencies?.status || 'missing'}, checks=${result.checks.externalDependencies?.checkCount || 0}, failures=${result.checks.externalDependencies?.failureCount || 0}, recovered=${result.checks.externalDependencies?.recoveredCount || 0}`,
         `Recovery drill: ${result.checks.recoveryDrill?.status || 'missing'}, scenarios=${result.checks.recoveryDrill?.scenarioCount || 0}, failures=${result.checks.recoveryDrill?.failureCount || 0}`,
         `Security: ${result.checks.securityPosture?.status || 'missing'}, checks=${result.checks.securityPosture?.checkCount || 0}, critical=${result.checks.securityPosture?.criticalCount || 0}, advisory=${result.checks.securityPosture?.advisoryCount || 0}`,
         `End Adena: ${result.checks.endAdenaFreshness?.status || 'missing'}, score=${result.checks.endAdenaFreshness?.score ?? 'monitoring'}, cycles=${result.checks.endAdenaFreshness?.certifiedCycles || 0}/${result.checks.endAdenaFreshness?.completedCycles || 0}, missing=${result.checks.endAdenaFreshness?.missingCount || 0}, review=${result.checks.endAdenaFreshness?.reviewRequiredCount || 0}`,

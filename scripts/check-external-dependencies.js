@@ -11,7 +11,9 @@ async function main() {
     const outputPath = process.env.EXTERNAL_SMOKE_FILE || 'logs/external-dependency-smoke.json';
     const result = await runExternalDependencySmoke({
         CONFIG,
-        token: process.env.TOKEN || process.env.DISCORD_TOKEN
+        token: process.env.TOKEN || process.env.DISCORD_TOKEN,
+        maxAttempts: process.env.EXTERNAL_SMOKE_MAX_ATTEMPTS,
+        retryBaseDelayMs: process.env.EXTERNAL_SMOKE_RETRY_BASE_DELAY_MS
     });
     fs.mkdirSync(path.dirname(outputPath), { recursive: true });
     const temporary = `${outputPath}.${process.pid}.tmp`;
@@ -22,6 +24,8 @@ async function main() {
         checkedAt: result.checkedAt,
         checkCount: result.checkCount,
         failureCount: result.failureCount,
+        recoveredCount: result.recoveredCount,
+        recovered: result.recovered.map(item => ({ name: item.name, attempts: item.attempts })),
         failures: result.failures.map(item => ({ name: item.name, error: item.error, status: item.status }))
     }, null, 2));
     if (!result.ok) process.exitCode = 1;

@@ -210,6 +210,7 @@ try {
         checkedAt: '2026-05-29T12:55:00.000Z',
         checkCount: 12,
         failureCount: 0,
+        recoveredCount: 1,
         failures: []
     }));
     const externalHealthy = getExternalDependencySmokeStatus({
@@ -219,6 +220,7 @@ try {
     assert.strictEqual(externalHealthy.ok, true);
     assert.strictEqual(externalHealthy.status, 'ok');
     assert.strictEqual(externalHealthy.checkCount, 12);
+    assert.strictEqual(externalHealthy.recoveredCount, 1);
 
     fs.writeFileSync(externalSmokePath, JSON.stringify({
         ok: false,
@@ -313,7 +315,7 @@ const summary = formatHealthSummary({
         backups: { checked: 5, fatalIssueCount: 0, warningCount: 1, reviewedIssueCount: 2 },
         embeds: { findingCount: 0 },
         commandRegistration: { expectedCount: 38, registeredCount: 38, source: 'runtime-health' },
-        externalDependencies: { status: 'ok', checkCount: 12, failureCount: 0 },
+        externalDependencies: { status: 'ok', checkCount: 12, failureCount: 0, recoveredCount: 1 },
         recoveryDrill: { status: 'ok', scenarioCount: 4, failureCount: 0 },
         securityPosture: { status: 'advisory', checkCount: 12, criticalCount: 0, advisoryCount: 2 },
         endAdenaFreshness: { status: 'certified', score: 100, certifiedCycles: 1, completedCycles: 1, issueCount: 0 },
@@ -324,6 +326,7 @@ assert(summary.includes('Ops health: WARN'));
 assert(summary.includes('Backups: 5 checked'));
 assert(summary.includes('2 reviewed'));
 assert(summary.includes('Commands: 38 / 38'));
+assert(summary.includes('External: ok, checks=12, failures=0, recovered=1'));
 assert(summary.includes('Recovery drill: ok, scenarios=4, failures=0'));
 assert(summary.includes('Security: advisory, checks=12, critical=0, advisory=2'));
 assert(summary.includes('End Adena: certified, score=100'));

@@ -1,5 +1,16 @@
 'use strict';
 
+const TRANSIENT_HTTP_STATUSES = new Set([408, 425, 429]);
+const TRANSIENT_ERROR_CODES = new Set([
+    'ECONNRESET',
+    'ECONNREFUSED',
+    'EAI_AGAIN',
+    'ETIMEDOUT',
+    'UND_ERR_CONNECT_TIMEOUT',
+    'UND_ERR_HEADERS_TIMEOUT',
+    'UND_ERR_SOCKET'
+]);
+
 function unique(values = []) {
     return [...new Set(values.filter(Boolean).map(String))];
 }
@@ -37,6 +48,69 @@ async function fetchJson(fetchFn, url, options = {}) {
     return body;
 }
 
+function isTransientExternalError(error) {
+    const status = Number(error?.status ?? error?.response?.status ?? error?.code);
+    if (TRANSIENT_HTTP_STATUSES.has(status) || (status >= 500 && status <= 599)) return true;
+
+    const code = String(error?.code || error?.cause?.code || '').toUpperCase();
+    if (TRANSIENT_ERROR_CODES.has(code)) return true;
+
+    const message = String(error?.message || error || '').toLowerCase();
+    return /\b(timeout|timed out|aborted|network error|socket hang up|temporarily unavailable|fetch failed)\b/.test(message);
+}
+
+function sleep(delayMs) {
+    return new Promise(resolve => setTimeout(resolve, delayMs));
+}
+
+function positiveInteger(value, fallback, maximum) {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+    return Math.min(maximum, Math.floor(parsed));
+}
+
+function nonNegativeNumber(value, fallback, maximum) {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed < 0) return fallback;
+    return Math.min(maximum, parsed);
+}
+
+function withAttemptCount(error, attempts) {
+    const failure = error instanceof Error ? error : new Error(String(error));
+    try {
+        failure.attempts = attempts;
+        return failure;
+    } catch {
+        return Object.assign(new Error(failure.message), {
+            attempts,
+            status: failure.status,
+            code: failure.code
+        });
+    }
+}
+
+async function runWithTransientRetry(operation, {
+    maxAttempts = 3,
+    retryBaseDelayMs = 500,
+    sleepFn = sleep
+} = {}) {
+    const attemptsLimit = positiveInteger(maxAttempts, 3, 5);
+    const baseDelayMs = nonNegativeNumber(retryBaseDelayMs, 500, 10000);
+
+    for (let attempt = 1; attempt <= attemptsLimit; attempt += 1) {
+        try {
+            return { detail: await operation(), attempts: attempt };
+        } catch (error) {
+            if (attempt >= attemptsLimit || !isTransientExternalError(error)) {
+                throw withAttemptCount(error, attempt);
+            }
+            await sleepFn(baseDelayMs * (2 ** (attempt - 1)));
+        }
+    }
+
+    throw new Error('External dependency retry loop ended unexpectedly');
+}
+
 async function createDefaultSheetsClient(CONFIG) {
     const { google } = require('googleapis');
     const auth = new google.auth.GoogleAuth({
@@ -51,7 +125,10 @@ async function runExternalDependencySmoke({
     token,
     fetchFn = globalThis.fetch,
     createSheetsClient = createDefaultSheetsClient,
-    now = new Date()
+    now = new Date(),
+    maxAttempts = 3,
+    retryBaseDelayMs = 500,
+    sleepFn = sleep
 } = {}) {
     if (!CONFIG) throw new TypeError('CONFIG must be provided');
     if (!token) throw new Error('Discord bot token is missing');
@@ -61,13 +138,26 @@ async function runExternalDependencySmoke({
     async function check(name, operation) {
         const startedAt = Date.now();
         try {
-            const detail = await operation();
-            checks.push({ name, ok: true, durationMs: Date.now() - startedAt, detail });
+            const result = await runWithTransientRetry(operation, {
+                maxAttempts,
+                retryBaseDelayMs,
+                sleepFn
+            });
+            checks.push({
+                name,
+                ok: true,
+                durationMs: Date.now() - startedAt,
+                attempts: result.attempts,
+                recovered: result.attempts > 1,
+                detail: result.detail
+            });
         } catch (error) {
             checks.push({
                 name,
                 ok: false,
                 durationMs: Date.now() - startedAt,
+                attempts: Number(error?.attempts || 1),
+                recovered: false,
                 error: error?.message || String(error),
                 status: error?.status || error?.code || null
             });
@@ -140,17 +230,21 @@ async function runExternalDependencySmoke({
     }
 
     const failures = checks.filter(item => !item.ok);
+    const recovered = checks.filter(item => item.recovered);
     return {
         ok: failures.length === 0,
         checkedAt: new Date(now).toISOString(),
         checkCount: checks.length,
         failureCount: failures.length,
+        recoveredCount: recovered.length,
         checks,
-        failures
+        failures,
+        recovered
     };
 }
 
 module.exports = {
     criticalDiscordChannelIds,
+    isTransientExternalError,
     runExternalDependencySmoke
 };
