@@ -252,6 +252,7 @@ async function startPostShiftOvertime(member, user, now, source = 'voice_snapsho
         startedAt: overtimeStart,
         voiceStatus: 'LIVE_ON',
         sessionSource: 'post-shift-auto-ot',
+        sourceSession: detachedLateReturn ? undefined : (options.sourceSession || getOpenSession(user)),
         otEvidence: options.otEvidence || null,
         resetClockInForOvertime: detachedLateReturn,
         sessionScheduledStartAt: detachedLateReturn ? overtimeStart : undefined,

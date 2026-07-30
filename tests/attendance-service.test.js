@@ -1310,4 +1310,30 @@ function assertUserStateClean(user, message) {
     assert.strictEqual(state.overtimeUsers.some(ot => ot.id === user.id && ot.shiftSessionKey === 'night:2026-06-30 21:00'), true, 'overtime entry keeps source shift session key');
 }
 
+{
+    const user = service.ensureUserData(createMember({
+        id: 'continuous-live-heartbeat',
+        displayName: 'Continuous Live Heartbeat'
+    }), 'day');
+    user.checkedIn = true;
+    user.voiceStatus = 'LIVE_ON';
+    user.lastLiveOnAt = at('2026-07-30 09:00').toISOString();
+    service.startAttendanceSession(user, 'day', at('2026-07-30 09:00'), 'unit-test');
+
+    service.applyLiveOnCore(user, at('2026-07-30 20:55'), 'heartbeat', 'live-on-confirmed');
+    assert.strictEqual(
+        user.lastLiveOnAt,
+        at('2026-07-30 09:00').toISOString(),
+        'continuous LIVE heartbeat preserves the uninterrupted LIVE start time'
+    );
+
+    service.markLiveOffState(user, at('2026-07-30 20:56'));
+    service.applyLiveOnCore(user, at('2026-07-30 20:58'), 'voice-state', 'live-on-recovered');
+    assert.strictEqual(
+        user.lastLiveOnAt,
+        at('2026-07-30 20:58').toISOString(),
+        'LIVE recovery records a new uninterrupted LIVE start time'
+    );
+}
+
 console.log('attendance-service tests passed');

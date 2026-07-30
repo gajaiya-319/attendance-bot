@@ -220,6 +220,97 @@ const { createWorkflowRuntime } = require('../src/runtime/workflowRuntime');
     assert.ok(runtime.membership);
     assert.ok(runtime.scheduled);
 
+    {
+        const realMoment = require('moment-timezone');
+        const fixedNow = realMoment.tz('2026-07-30 21:25', 'Asia/Manila');
+        const fixedMoment = value => value == null ? fixedNow.clone() : realMoment(value);
+        fixedMoment.tz = (...args) => realMoment.tz(...args);
+        const scheduledEnd = realMoment.tz('2026-07-30 21:00', 'Asia/Manila');
+        const openSession = {
+            id: 'day-session',
+            clockInAt: realMoment.tz('2026-07-30 09:00', 'Asia/Manila').toISOString(),
+            scheduledEndAt: scheduledEnd.toISOString(),
+            clockOutAt: null,
+            liveOffPeriods: [],
+            dcPeriods: []
+        };
+        const user = {
+            id: 'erzie',
+            name: 'Erzie',
+            shift: 'day',
+            checkedIn: true,
+            dayOff: false,
+            isFinished: false,
+            pendingManualOT: false,
+            disconnected: false,
+            disconnectedAt: null,
+            liveOffStartedAt: null,
+            lastLiveOnAt: realMoment.tz('2026-07-30 21:24', 'Asia/Manila').toISOString(),
+            lastLiveOffAt: realMoment.tz('2026-07-29 22:00', 'Asia/Manila').toISOString(),
+            sessions: [openSession]
+        };
+        const member = {
+            id: user.id,
+            displayName: user.name,
+            user: { bot: false },
+            voice: { channelId: 'voice1', streaming: true }
+        };
+        let autoStarts = 0;
+        let confirmationRequests = 0;
+        let receivedOptions = null;
+        const scheduledAutoOt = createScheduledJobsWorkflow({
+            client: {
+                guilds: { cache: { get: () => ({
+                    members: { cache: { get: id => id === user.id ? member : null } },
+                    voiceStates: { cache: { get: () => ({ streaming: true }) } }
+                }) } }
+            },
+            CONFIG: {
+                GUILD_ID: 'g1',
+                TIMEZONE: 'Asia/Manila',
+                AUTO_OT_AFTER_MINS: 5,
+                POST_SHIFT_CONTINUOUS_OT_WINDOW_MINS: 30,
+                MAX_AUTO_OT_MINS: 14 * 60,
+                PURGE_MANUAL_OT: 40,
+                EXCEPTIONS: {},
+                POINTS: { OT: 5 }
+            },
+            moment: fixedMoment,
+            getAttendanceData: () => ({ [user.id]: user }),
+            getOvertimeUsers: () => [],
+            setOvertimeUsers: () => {},
+            getLiveExceptions: () => ({}),
+            getAnnounceData: () => ({}),
+            saveSystemAsync: async () => {},
+            recordLog: async () => {},
+            transitionRecordedStatus: () => false,
+            updateWorkingRole: async () => {},
+            getShiftBounds: () => ({ start: scheduledEnd.clone().subtract(12, 'hours'), end: scheduledEnd.clone() }),
+            renderDashboardCore: async () => {},
+            getActiveLiveException: () => null,
+            isMaintenanceWindow: () => false,
+            isCurrentShiftRegularWorker: () => false,
+            getOvertimeStartMoment: () => scheduledEnd.clone(),
+            getOpenSession: () => openSession,
+            startPostShiftOvertime: async (receivedMember, receivedUser, receivedNow, source, options) => {
+                autoStarts += 1;
+                receivedOptions = options;
+                return true;
+            },
+            requestPostShiftOvertimeConfirmation: async () => {
+                confirmationRequests += 1;
+                return { handled: true, changed: true };
+            },
+            formatDuration: value => String(value)
+        });
+
+        await scheduledAutoOt.autoOvertimeCheck();
+        assert.strictEqual(autoStarts, 1, 'continuous checked-in LIVE automatically starts overtime');
+        assert.strictEqual(confirmationRequests, 0, 'continuous checked-in LIVE does not wait for confirmation');
+        assert.strictEqual(receivedOptions.sourceSession, openSession, 'automatic overtime keeps the open regular session');
+        assert.strictEqual(receivedOptions.otEvidence.continuityRecoveredFromSession, true, 'legacy heartbeat timestamp is recovered from clean session history');
+    }
+
     console.log('workflow-phase2 tests passed');
 })().catch(error => {
     console.error(error);

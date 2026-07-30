@@ -1809,6 +1809,17 @@ function createAttendanceService(deps) {
         const at = moment(now).tz(CONFIG.TIMEZONE);
         let changed = false;
         const session = getOpenSession(user);
+        const hadOpenPresenceInterruption = Boolean(
+            session?.liveOffPeriods?.some(period => !period.endedAt) ||
+            session?.dcPeriods?.some(period => !period.endedAt)
+        );
+        const wasContinuouslyLive = Boolean(
+            user.voiceStatus === 'LIVE_ON' &&
+            !user.disconnected &&
+            !user.disconnectedAt &&
+            !user.liveOffStartedAt &&
+            !hadOpenPresenceInterruption
+        );
         if (session) {
             closeOpenSessionPeriod(session.liveOffPeriods, at);
             closeOpenSessionPeriod(session.dcPeriods, at);
@@ -1826,7 +1837,10 @@ function createAttendanceService(deps) {
         user.liveOffStartedAt = null;
         user.liveOffWarnedFor = null;
         user.liveOffWarningMarks = [];
-        user.lastLiveOnAt = at.toISOString();
+        if (!wasContinuouslyLive || !user.lastLiveOnAt) {
+            user.lastLiveOnAt = at.toISOString();
+            changed = true;
+        }
         if (transitionRecordedStatus(user, {
             voiceStatus: 'LIVE_ON'
         }, at, source, reason)) changed = true;

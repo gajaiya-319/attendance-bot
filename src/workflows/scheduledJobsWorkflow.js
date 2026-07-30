@@ -45,6 +45,7 @@ function createScheduledJobsWorkflow(deps) {
         ensureUserData,
         getOpenSession,
         startAttendanceSession,
+        startPostShiftOvertime = async () => false,
         requestPostShiftOvertimeConfirmation = async () => ({ handled: false, changed: false }),
         rawAttendanceSheetService = null,
         RAW_ATTENDANCE_STATUS = { ABSENT: '\uACB0\uC11D' },
@@ -64,11 +65,44 @@ function hasContinuousPostShiftLiveEvidence(user, targetEnd, now, isStreamingNow
     if (!user || !targetEnd?.isValid?.()) return false;
     if (!isStreamingNow && !hasLiveException) return false;
     if (user.disconnected || user.disconnectedAt || user.liveOffStartedAt) return false;
-    if (moment(now).tz(CONFIG.TIMEZONE).isBefore(targetEnd)) return false;
+    const at = moment(now).tz(CONFIG.TIMEZONE);
+    const end = moment(targetEnd).tz(CONFIG.TIMEZONE);
+    if (at.isBefore(end)) return false;
     if (hasLiveException) return true;
+    const interruptedAt = user.postShiftOtInterruptedAt
+        ? moment(user.postShiftOtInterruptedAt).tz(CONFIG.TIMEZONE)
+        : null;
+    if (
+        interruptedAt?.isValid?.() &&
+        interruptedAt.isSameOrAfter(end) &&
+        interruptedAt.isSameOrBefore(at)
+    ) return false;
     const lastLiveOnAt = user.lastLiveOnAt ? moment(user.lastLiveOnAt).tz(CONFIG.TIMEZONE) : null;
     if (!lastLiveOnAt?.isValid?.()) return false;
-    return lastLiveOnAt.isSameOrBefore(targetEnd.clone().add(1, 'minute'));
+    if (lastLiveOnAt.isSameOrBefore(end.clone().add(1, 'minute'))) return true;
+
+    // Older heartbeats overwrote lastLiveOnAt every minute. Recover only when the
+    // still-open regular session proves there was no LIVE OFF/DC after shift end.
+    if (!user.checkedIn) return false;
+    const session = getOpenSession?.(user);
+    const clockInAt = session?.clockInAt ? moment(session.clockInAt).tz(CONFIG.TIMEZONE) : null;
+    if (!clockInAt?.isValid?.() || clockInAt.isAfter(end)) return false;
+    const lastLiveOffAt = user.lastLiveOffAt ? moment(user.lastLiveOffAt).tz(CONFIG.TIMEZONE) : null;
+    if (lastLiveOffAt?.isValid?.() && lastLiveOffAt.isAfter(end)) return false;
+    const hadPostShiftInterruption = [
+        ...(Array.isArray(session.liveOffPeriods) ? session.liveOffPeriods : []),
+        ...(Array.isArray(session.dcPeriods) ? session.dcPeriods : [])
+    ].some(period => {
+        const startedAt = period?.startedAt ? moment(period.startedAt).tz(CONFIG.TIMEZONE) : null;
+        const endedAt = period?.endedAt ? moment(period.endedAt).tz(CONFIG.TIMEZONE) : at;
+        return Boolean(
+            startedAt?.isValid?.() &&
+            endedAt?.isValid?.() &&
+            startedAt.isSameOrBefore(at) &&
+            endedAt.isAfter(end)
+        );
+    });
+    return !hadPostShiftInterruption;
 }
 
 function normalizeAbsentWarningMarks(user) {
@@ -655,21 +689,30 @@ async function autoOvertimeCheck() {
             targetEndElapsedMins <= maxAutoOtMins &&
             !hasStaleAutoOvertimeRepairForTargetEnd(u, targetEnd)
         ) {
-            const canRequestCheckedInAutoOt = Boolean(
+            const canStartCheckedInAutoOt = Boolean(
                 u.checkedIn &&
                 (isStreamingNow || hasLiveException) &&
                 hasContinuousPostShiftLive
             );
-            if (canRequestCheckedInAutoOt) {
-                const confirmResult = await requestPostShiftOvertimeConfirmation(member, u, now, 'auto-overtime-check', {
-                    scheduledEnd: targetEnd
+            if (canStartCheckedInAutoOt) {
+                const lastLiveOnAt = u.lastLiveOnAt ? moment(u.lastLiveOnAt).tz(CONFIG.TIMEZONE) : null;
+                const started = await startPostShiftOvertime(member, u, now, 'auto-overtime-check', {
+                    scheduledEnd: targetEnd,
+                    allowLateReturn: false,
+                    sourceSession: getOpenSession?.(u) || null,
+                    otEvidence: {
+                        kind: 'continuous-post-shift-live',
+                        scheduledEndAt: targetEnd.toISOString(),
+                        detectedAt: now.toISOString(),
+                        lastLiveOnAt: u.lastLiveOnAt || null,
+                        continuityRecoveredFromSession: Boolean(
+                            lastLiveOnAt?.isValid?.() &&
+                            lastLiveOnAt.isAfter(targetEnd.clone().add(1, 'minute'))
+                        )
+                    }
                 });
-                if (confirmResult.changed) changed = true;
+                if (started) changed = true;
                 continue;
-            }
-            if (false) {
-                await recordLog(u, 'ot', `자동 OT 감지 (정시 이후 ${formatDuration(now.diff(targetEnd, 'minutes'))} 라이브 유지)`);
-                changed = true;
             }
         }
     }
