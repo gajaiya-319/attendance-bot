@@ -81,6 +81,9 @@ const CONFIG = {
     OWNER_IDS: (process.env.OWNER_IDS || '280301228716589058').split(',').map(id => id.trim()).filter(Boolean),
     LIVE_EXCEPTION_MANAGER_ROLE_IDS: (process.env.LIVE_EXCEPTION_MANAGER_ROLE_IDS || '1502599381105246388,1502715137667235870').split(',').map(id => id.trim()).filter(Boolean),
     ANNOUNCEMENT_MANAGER_ROLE_IDS: (process.env.ANNOUNCEMENT_MANAGER_ROLE_IDS || process.env.LIVE_EXCEPTION_MANAGER_ROLE_IDS || '1502599381105246388,1502715137667235870').split(',').map(id => id.trim()).filter(Boolean),
+    OPS_MANAGER_ROLE_IDS: (process.env.OPS_MANAGER_ROLE_IDS || process.env.LIVE_EXCEPTION_MANAGER_ROLE_IDS || '1502599381105246388,1502715137667235870').split(',').map(id => id.trim()).filter(Boolean),
+    DAYOFF_MANAGER_ROLE_IDS: (process.env.DAYOFF_MANAGER_ROLE_IDS || process.env.LIVE_EXCEPTION_MANAGER_ROLE_IDS || '1502599381105246388,1502715137667235870').split(',').map(id => id.trim()).filter(Boolean),
+    ALLOW_DISCORD_ADMIN_COMMANDS: /^(1|true|yes)$/i.test(process.env.ALLOW_DISCORD_ADMIN_COMMANDS || ''),
     DAY_CHAN: '1503405274935853126',
     NIGHT_CHAN: '1503405331118821426',
     ROLES: {

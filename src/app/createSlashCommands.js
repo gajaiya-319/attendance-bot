@@ -24,7 +24,6 @@ function createSlashCommands(ctx) {
         services,
         CONFIG,
         MessageFlags,
-        PermissionFlagsBits,
         EmbedBuilder,
         ActionRowBuilder,
         ButtonBuilder,
@@ -55,6 +54,9 @@ function createSlashCommands(ctx) {
         dayOffService,
         isOwnerId,
         canManageAnnouncements,
+        canRunOperationalCommand,
+        canManageDayOff,
+        canReviewEndAdena,
         payrollOperationLogService,
         purchaseSheetService
     } = services;
@@ -69,13 +71,13 @@ function createSlashCommands(ctx) {
     const diagnosticsCommand = createDiagnosticsCommand({
         MessageFlags,
         buildDiagnosticsEmbed: (...args) => workflowApi.buildDiagnosticsEmbed(...args),
-        canRun: member => Boolean(member?.permissions?.has(PermissionFlagsBits.Administrator))
+        canRun: member => canRunOperationalCommand(member)
     });
 
     const opsCheckCommand = createOpsCheckCommand({
         MessageFlags,
         buildOpsCheckEmbed: (...args) => workflowApi.buildOpsCheckEmbed(...args),
-        canRun: member => Boolean(member?.permissions?.has(PermissionFlagsBits.Administrator))
+        canRun: member => canRunOperationalCommand(member)
     });
 
     const payrollArchiveService = services.payrollArchiveService;
@@ -89,7 +91,7 @@ function createSlashCommands(ctx) {
 
     const backupCommands = createBackupCommands({
         MessageFlags,
-        canRun: member => Boolean(member?.permissions?.has(PermissionFlagsBits.Administrator)),
+        canRun: member => canRunOperationalCommand(member),
         isOwner: id => isOwnerId(id),
         ownerOnlyReply,
         saveSystem: saveSystemAsync,
@@ -101,7 +103,7 @@ function createSlashCommands(ctx) {
 
     const auditCommands = createAuditCommands({
         MessageFlags,
-        canRun: member => Boolean(member?.permissions?.has(PermissionFlagsBits.Administrator)),
+        canRun: member => canRunOperationalCommand(member),
         buildPermissionCheckEmbed: (...args) => workflowApi.buildPermissionCheckEmbed(...args),
         buildDataAuditEmbed: (...args) => workflowApi.buildDataAuditEmbed(...args),
         buildStatusAuditEmbed: (...args) => workflowApi.buildStatusAuditEmbed(...args),
@@ -119,19 +121,15 @@ function createSlashCommands(ctx) {
 
     const dayOffReadCommands = createDayOffReadCommands({
         MessageFlags,
-        canRun: member => Boolean(member?.permissions?.has(PermissionFlagsBits.Administrator)),
+        canRun: member => canRunOperationalCommand(member),
         buildDayOffLogEmbed: (...args) => workflowApi.buildDayOffLogEmbed(...args),
         buildDayOffListEmbed: status => dayOffService.buildDayOffListEmbed(status)
     });
 
     const dayOffMutationCommands = createDayOffMutationCommands({
         MessageFlags,
-        canAdmin: interaction => Boolean(interaction.member?.permissions?.has(PermissionFlagsBits.Administrator)),
-        canManageDayOff: interaction => Boolean(
-            interaction.member?.permissions?.has(PermissionFlagsBits.Administrator) ||
-            interaction.user?.id === CONFIG.DAYOFF_REVIEWER_ID ||
-            isOwnerId(interaction.user?.id)
-        ),
+        canAdmin: interaction => canRunOperationalCommand(interaction.member),
+        canManageDayOff: interaction => canManageDayOff(interaction.member, interaction.user?.id),
         parseDayOffCommandDate: value => dayOffService.parseDayOffCommandDate(value),
         approveDayOffReservation: (target, leaveDate, moderator) => workflowApi.approveDayOffReservationByCommand(target, leaveDate, moderator),
         cancelDayOffReservation: (target, leaveDate, moderator) => workflowApi.cancelDayOffReservationByCommand(target, leaveDate, moderator),
@@ -142,7 +140,7 @@ function createSlashCommands(ctx) {
 
     const forceAttendanceCommands = createForceAttendanceCommands({
         MessageFlags,
-        canRun: member => Boolean(member?.permissions?.has(PermissionFlagsBits.Administrator)),
+        canRun: member => canRunOperationalCommand(member),
         determineShift,
         ensureUserData,
         getShiftBounds: ctx.getShiftBounds,
@@ -162,7 +160,7 @@ function createSlashCommands(ctx) {
 
     const userAdminCommands = createUserAdminCommands({
         MessageFlags,
-        canAdmin: member => Boolean(member?.permissions?.has(PermissionFlagsBits.Administrator)),
+        canAdmin: member => canRunOperationalCommand(member),
         canManageRoles: member => canManageAnnouncements(member),
         isOwner: id => isOwnerId(id),
         ownerOnlyReply,
@@ -199,7 +197,7 @@ function createSlashCommands(ctx) {
         CONFIG,
         opsQueueService,
         purchaseSheetService,
-        canRun: member => Boolean(member?.permissions?.has(PermissionFlagsBits.Administrator) || isOwnerId(member?.id || member?.user?.id))
+        canRun: member => canRunOperationalCommand(member)
     });
 
     const opsSafetyCommands = createOpsSafetyCommands({
@@ -207,20 +205,20 @@ function createSlashCommands(ctx) {
         CONFIG,
         moment: ctx.moment,
         readRows: () => services.rawAttendanceSheetService.readRows?.(),
-        canRun: member => Boolean(member?.permissions?.has(PermissionFlagsBits.Administrator) || isOwnerId(member?.id || member?.user?.id))
+        canRun: member => canRunOperationalCommand(member)
     });
 
     const payrollAuditCommand = createPayrollAuditCommand({
         MessageFlags,
         opsQueueService,
         payrollOperationLogService,
-        canRun: member => Boolean(member?.permissions?.has(PermissionFlagsBits.Administrator) || isOwnerId(member?.id || member?.user?.id))
+        canRun: member => canRunOperationalCommand(member)
     });
 
     const maintenanceCommands = createMaintenanceCommands({
         MessageFlags,
         maintenanceOverrideService,
-        canRun: member => Boolean(member?.permissions?.has(PermissionFlagsBits.Administrator) || isOwnerId(member?.id || member?.user?.id)),
+        canRun: member => canRunOperationalCommand(member),
         renderDashboard: options => workflowApi.queueDashboardRender(options),
         syncVoiceStates: (...args) => workflowApi.syncVoiceStates(...args)
     });
@@ -236,7 +234,7 @@ function createSlashCommands(ctx) {
         getShiftBounds: ctx.getShiftBounds,
         payrollOperationLogService,
         endAdenaReconciliationService: services.endAdenaReconciliationService,
-        canRun: member => Boolean(member?.permissions?.has(PermissionFlagsBits.Administrator) || isOwnerId(member?.id || member?.user?.id)),
+        canRun: member => canReviewEndAdena(member),
         writeAdminActionLog: (...args) => workflowApi.writeAdminActionLog(...args)
     });
 

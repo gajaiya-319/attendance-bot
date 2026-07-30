@@ -169,8 +169,30 @@ async function runSecurityPostureAudit({
         if (!token || String(token).length < 30) throw new Error('Discord token is missing or malformed');
         const owners = unique(CONFIG.OWNER_IDS || []);
         if (!owners.length || owners.some(id => !/^\d{15,22}$/.test(id))) throw new Error('OWNER_IDS is missing or malformed');
-        return { tokenPresent: true, ownerCount: owners.length };
+        const privilegedUsers = unique([
+            ...owners,
+            CONFIG.DAYOFF_REVIEWER_ID,
+            ...(CONFIG.END_ADENA_SUMMARY_USER_IDS || [])
+        ]);
+        if (privilegedUsers.some(id => !/^\d{15,22}$/.test(id))) {
+            throw new Error('A privileged Discord user ID is malformed');
+        }
+        return { tokenPresent: true, ownerCount: owners.length, privilegedUserCount: privilegedUsers.length };
     });
+
+    await check('command-authorization-policy', async () => {
+        if (CONFIG.ALLOW_DISCORD_ADMIN_COMMANDS === true) {
+            throw new Error('Discord Administrator fallback is enabled for sensitive commands');
+        }
+        return {
+            discordAdminFallback: false,
+            operationsManagerRoleCount: unique(CONFIG.OPS_MANAGER_ROLE_IDS || []).length,
+            endAdenaReviewerRoleCount: unique([
+                ...(CONFIG.END_ADENA_REVIEWER_ROLE_IDS || []),
+                ...(CONFIG.END_ADENA_SUMMARY_OWNER_ROLE_IDS || [])
+            ]).length
+        };
+    }, 'advisory');
 
     const envPath = path.resolve(cwd, '.env');
     await check('secret-file:.env', async () => {
@@ -271,6 +293,28 @@ async function runSecurityPostureAudit({
         if (missingRoleIds.length) throw new Error(`Configured Discord role(s) missing: ${missingRoleIds.join(', ')}`);
         if (blockedRoles.length) throw new Error(`Bot role is not above managed role(s): ${blockedRoles.join(', ')}`);
         return { botRolePosition: botPosition, managedRoleCount: managedRoles.length, blockedRoles: [] };
+    });
+    await check('discord-privileged-role-config', async () => {
+        if (!roles.length) throw new Error('Discord role data is unavailable');
+        const groups = {
+            operations: CONFIG.OPS_MANAGER_ROLE_IDS || [],
+            liveExceptions: CONFIG.LIVE_EXCEPTION_MANAGER_ROLE_IDS || [],
+            announcements: CONFIG.ANNOUNCEMENT_MANAGER_ROLE_IDS || [],
+            dayOff: CONFIG.DAYOFF_MANAGER_ROLE_IDS || [],
+            endAdenaReview: CONFIG.END_ADENA_REVIEWER_ROLE_IDS || [],
+            endAdenaSummary: CONFIG.END_ADENA_SUMMARY_OWNER_ROLE_IDS || []
+        };
+        const configuredRoleIds = unique(Object.values(groups).flat());
+        const existingRoleIds = new Set(roles.map(role => String(role.id)));
+        const missingRoleIds = configuredRoleIds.filter(id => !existingRoleIds.has(id));
+        if (missingRoleIds.length) {
+            throw new Error(`Configured privileged role(s) missing: ${missingRoleIds.join(', ')}`);
+        }
+        return {
+            configuredRoleCount: configuredRoleIds.length,
+            groups: Object.fromEntries(Object.entries(groups).map(([name, ids]) => [name, unique(ids).length])),
+            missingRoleIds: []
+        };
     });
 
     const reviewChannelIds = new Set(unique([

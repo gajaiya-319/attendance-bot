@@ -5,6 +5,29 @@ function createPermissionUtils({ CONFIG, PermissionFlagsBits }) {
         return CONFIG.OWNER_IDS.includes(String(id));
     }
 
+    function memberId(member, fallbackId = null) {
+        return String(member?.id || member?.user?.id || fallbackId || '');
+    }
+
+    function hasAnyRole(member, roleIds = []) {
+        if (!member?.roles?.cache) return false;
+        return roleIds.filter(Boolean).some(roleId => member.roles.cache.has(String(roleId)));
+    }
+
+    function hasAllowedDiscordAdmin(member) {
+        return CONFIG.ALLOW_DISCORD_ADMIN_COMMANDS === true &&
+            Boolean(member?.permissions?.has(PermissionFlagsBits.Administrator));
+    }
+
+    function canUseExplicitPolicy(member, roleIds = [], fallbackId = null) {
+        const id = memberId(member, fallbackId);
+        return Boolean(id && (
+            isOwnerId(id) ||
+            hasAnyRole(member, roleIds) ||
+            hasAllowedDiscordAdmin(member)
+        ));
+    }
+
     function hasWorkerServerRole(member) {
         if (!member?.roles?.cache) return false;
         return member.roles.cache.has(CONFIG.ROLES.HEINE) || member.roles.cache.has(CONFIG.ROLES.PAAGRIO);
@@ -31,19 +54,30 @@ function createPermissionUtils({ CONFIG, PermissionFlagsBits }) {
     }
 
     function canManageLiveException(member) {
-        if (!member) return false;
-        if (isOwnerId(member.id)) return true;
-        if (member.permissions?.has(PermissionFlagsBits.Administrator)) return true;
-        if (member.permissions?.has(PermissionFlagsBits.ManageMessages)) return true;
-        return CONFIG.LIVE_EXCEPTION_MANAGER_ROLE_IDS.some(roleId => member.roles?.cache?.has(roleId));
+        return canUseExplicitPolicy(member, CONFIG.LIVE_EXCEPTION_MANAGER_ROLE_IDS);
     }
 
     function canManageAnnouncements(member) {
-        if (!member) return false;
-        if (isOwnerId(member.id)) return true;
-        if (member.permissions?.has(PermissionFlagsBits.Administrator)) return true;
-        if (member.permissions?.has(PermissionFlagsBits.ManageMessages)) return true;
-        return CONFIG.ANNOUNCEMENT_MANAGER_ROLE_IDS.some(roleId => member.roles?.cache?.has(roleId));
+        return canUseExplicitPolicy(member, CONFIG.ANNOUNCEMENT_MANAGER_ROLE_IDS);
+    }
+
+    function canRunOperationalCommand(member) {
+        return canUseExplicitPolicy(member, CONFIG.OPS_MANAGER_ROLE_IDS);
+    }
+
+    function canManageDayOff(member, fallbackId = null) {
+        const id = memberId(member, fallbackId);
+        if (id && String(CONFIG.DAYOFF_REVIEWER_ID || '') === id) return true;
+        return canUseExplicitPolicy(member, CONFIG.DAYOFF_MANAGER_ROLE_IDS, fallbackId);
+    }
+
+    function canReviewEndAdena(member, fallbackId = null) {
+        const id = memberId(member, fallbackId);
+        if (!id) return false;
+        return canUseExplicitPolicy(member, [
+            ...(CONFIG.END_ADENA_REVIEWER_ROLE_IDS || []),
+            ...(CONFIG.END_ADENA_SUMMARY_OWNER_ROLE_IDS || [])
+        ], fallbackId);
     }
 
     return {
@@ -52,7 +86,10 @@ function createPermissionUtils({ CONFIG, PermissionFlagsBits }) {
         isAssignedWorker,
         hasManagedAttendanceRole,
         canManageLiveException,
-        canManageAnnouncements
+        canManageAnnouncements,
+        canRunOperationalCommand,
+        canManageDayOff,
+        canReviewEndAdena
     };
 }
 

@@ -429,13 +429,7 @@ assert.strictEqual(
             message
         }, { id: 'manager', bot: false });
 
-        assert.deepStrictEqual(calls, [
-            'fetch:manager',
-            `react:${CONFIG.PURCHASE_PROCESSING_EMOJI}`,
-            'sheet:PAAGRIO:DAY:BitShelby:140000:1',
-            `react:${CONFIG.PURCHASE_APPROVAL_EMOJI}`,
-            `react:${CONFIG.PURCHASE_SUCCESS_EMOJI}`
-        ]);
+        assert.deepStrictEqual(calls, ['fetch:manager']);
     }
 
     {

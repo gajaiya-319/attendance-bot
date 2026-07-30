@@ -8,8 +8,15 @@ const PermissionFlagsBits = {
 
 const CONFIG = {
     OWNER_IDS: ['owner'],
+    ALLOW_DISCORD_ADMIN_COMMANDS: false,
     LIVE_EXCEPTION_MANAGER_ROLE_IDS: ['live-manager'],
     ANNOUNCEMENT_MANAGER_ROLE_IDS: ['announce-manager'],
+    OPS_MANAGER_ROLE_IDS: ['ops-manager'],
+    DAYOFF_MANAGER_ROLE_IDS: ['dayoff-manager'],
+    DAYOFF_REVIEWER_ID: 'dayoff-reviewer',
+    END_ADENA_REVIEWER_ROLE_IDS: ['adena-reviewer'],
+    END_ADENA_SUMMARY_OWNER_ROLE_IDS: ['adena-owner'],
+    END_ADENA_SUMMARY_USER_IDS: ['adena-user'],
     ROLES: {
         DAY: 'day',
         NIGHT: 'night',
@@ -46,8 +53,24 @@ assert.strictEqual(permissions.isAssignedWorker(member('owner', ['night'])), tru
 assert.strictEqual(permissions.isAssignedWorker(member('shared-seat', [])), true);
 assert.strictEqual(permissions.hasManagedAttendanceRole(member('1', ['guest'])), true);
 assert.strictEqual(permissions.canManageLiveException(member('1', ['live-manager'])), true);
-assert.strictEqual(permissions.canManageLiveException(member('1', [], [PermissionFlagsBits.ManageMessages])), true);
+assert.strictEqual(permissions.canManageLiveException(member('1', [], [PermissionFlagsBits.ManageMessages])), false);
+assert.strictEqual(permissions.canManageLiveException(member('1', [], [PermissionFlagsBits.Administrator])), false);
 assert.strictEqual(permissions.canManageAnnouncements(member('1', ['announce-manager'])), true);
 assert.strictEqual(permissions.canManageAnnouncements(member('1', [])), false);
+assert.strictEqual(permissions.canRunOperationalCommand(member('1', ['ops-manager'])), true);
+assert.strictEqual(permissions.canRunOperationalCommand(member('owner')), true);
+assert.strictEqual(permissions.canRunOperationalCommand(member('1', [], [PermissionFlagsBits.Administrator])), false);
+assert.strictEqual(permissions.canManageDayOff(member('dayoff-reviewer')), true);
+assert.strictEqual(permissions.canManageDayOff(member('1', ['dayoff-manager'])), true);
+assert.strictEqual(permissions.canReviewEndAdena(member('adena-user')), false);
+assert.strictEqual(permissions.canReviewEndAdena(member('1', ['adena-reviewer'])), true);
+assert.strictEqual(permissions.canReviewEndAdena(member('1', ['adena-owner'])), true);
+assert.strictEqual(permissions.canReviewEndAdena(member('1')), false);
+
+const permissive = createPermissionUtils({
+    CONFIG: { ...CONFIG, ALLOW_DISCORD_ADMIN_COMMANDS: true },
+    PermissionFlagsBits
+});
+assert.strictEqual(permissive.canRunOperationalCommand(member('1', [], [PermissionFlagsBits.Administrator])), true);
 
 console.log('permissions tests passed');

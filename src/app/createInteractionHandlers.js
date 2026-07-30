@@ -22,7 +22,6 @@ function createInteractionHandlers(ctx) {
         CONFIG,
         moment,
         MessageFlags,
-        PermissionFlagsBits,
         failText
     } = ctx;
 
@@ -42,6 +41,7 @@ function createInteractionHandlers(ctx) {
 
     const {
         canManageLiveException,
+        canRunOperationalCommand,
         dayOffRequestInteractions,
         syncCurrentWorkerProfile,
         removeCurrentWorkerProfile
@@ -125,7 +125,7 @@ function createInteractionHandlers(ctx) {
         markMemberActivity,
         saveSystem: () => saveSystemAsync(),
         getNow: () => moment().tz(CONFIG.TIMEZONE),
-        canAdmin: member => Boolean(member?.permissions?.has(PermissionFlagsBits.Administrator))
+        canAdmin: member => canRunOperationalCommand(member)
     });
 
     const chatInputCommandHandler = createChatInputCommandHandler({

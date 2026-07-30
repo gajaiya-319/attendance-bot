@@ -182,7 +182,10 @@ function createServiceLayer(ctx) {
         isAssignedWorker,
         hasManagedAttendanceRole,
         canManageLiveException,
-        canManageAnnouncements
+        canManageAnnouncements,
+        canRunOperationalCommand,
+        canManageDayOff,
+        canReviewEndAdena
     } = createPermissionUtils({ CONFIG, PermissionFlagsBits });
 
     const dayOffRequestInteractions = createDayOffRequestInteractionHandler({
@@ -197,11 +200,7 @@ function createServiceLayer(ctx) {
         CONFIG,
         dayOffService,
         submitDayOffRequest: (...args) => workflowApi.submitDayOffRequestFromInteraction(...args),
-        canPostPanel: (member, user) => Boolean(
-            member?.permissions?.has(PermissionFlagsBits.Administrator) ||
-            user?.id === CONFIG.DAYOFF_REVIEWER_ID ||
-            isOwnerId(user?.id)
-        )
+        canPostPanel: (member, user) => canManageDayOff(member, user?.id)
     });
 
     const payrollOperationLogService = createPayrollOperationLogService({ logger: console });
@@ -291,6 +290,9 @@ function createServiceLayer(ctx) {
         hasManagedAttendanceRole,
         canManageLiveException,
         canManageAnnouncements,
+        canRunOperationalCommand,
+        canManageDayOff,
+        canReviewEndAdena,
         payrollOperationLogService,
         payrollArchiveService,
         payrollLiveSummarySyncService,

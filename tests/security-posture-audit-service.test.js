@@ -53,6 +53,10 @@ function response(body, status = 200) {
         const CONFIG = {
             GUILD_ID: guildId,
             OWNER_IDS: ['100000000000000006'],
+            ALLOW_DISCORD_ADMIN_COMMANDS: false,
+            OPS_MANAGER_ROLE_IDS: [managedRoleId],
+            END_ADENA_REVIEWER_ROLE_IDS: [],
+            END_ADENA_SUMMARY_OWNER_ROLE_IDS: [],
             PURCHASE_GOOGLE_KEY_FILE: './sheet-bot-key.json',
             LOG_CHANNEL: channelId,
             DAYOFF_CHANNEL: channelId,
@@ -100,6 +104,13 @@ function response(body, status = 200) {
         assert(leastPrivilegeProfile.permissions.includes('EmbedLinks'));
         assert(!leastPrivilegeProfile.permissions.includes('Administrator'));
         assert.strictEqual(healthy.leastPrivilegeProfile.permissionBits, leastPrivilegeProfile.permissionBits);
+
+        const permissiveCommands = await runSecurityPostureAudit({
+            ...baseOptions,
+            CONFIG: { ...CONFIG, ALLOW_DISCORD_ADMIN_COMMANDS: true }
+        });
+        assert.strictEqual(permissiveCommands.ok, true);
+        assert(permissiveCommands.advisories.some(item => item.name === 'command-authorization-policy'));
 
         publicBot = true;
         const advisory = await runSecurityPostureAudit(baseOptions);

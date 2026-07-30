@@ -2,6 +2,19 @@
 
 This runbook removes the two remaining Discord security advisories without changing the manual End Adena approval policy.
 
+## Sensitive Command Authorization
+
+Sensitive commands and approval reactions use explicit principals only:
+
+- `OWNER_IDS`
+- `OPS_MANAGER_ROLE_IDS`
+- `LIVE_EXCEPTION_MANAGER_ROLE_IDS`
+- `ANNOUNCEMENT_MANAGER_ROLE_IDS`
+- `DAYOFF_MANAGER_ROLE_IDS` and `DAYOFF_REVIEWER_ID`
+- `END_ADENA_REVIEWER_ROLE_IDS` and `END_ADENA_SUMMARY_OWNER_ROLE_IDS`
+
+Keep `ALLOW_DISCORD_ADMIN_COMMANDS=false`. Discord `Administrator` and `Manage Messages` are not command authorization substitutes. The security audit verifies this policy and confirms that every configured privileged role exists in the guild.
+
 ## Required Role Permissions
 
 Generate the authoritative permission profile from the running source:

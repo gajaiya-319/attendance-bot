@@ -90,8 +90,8 @@ function createDeathPenaltyReactionHandler({
         return Boolean(
             ownerIds.includes(user.id) ||
             roleIds.some(roleId => member?.roles?.cache?.has?.(roleId)) ||
-            member?.permissions?.has?.(MessagePermissionFlags.Administrator || 'Administrator') ||
-            member?.permissions?.has?.(MessagePermissionFlags.ManageMessages || 'ManageMessages')
+            (CONFIG.ALLOW_DISCORD_ADMIN_COMMANDS === true &&
+                member?.permissions?.has?.(MessagePermissionFlags.Administrator || 'Administrator'))
         );
     }
 
