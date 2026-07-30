@@ -310,18 +310,29 @@ function createPurchaseSheetService({
     const aliases = normalizeAliasMap(sheetNameAliases);
     const tabTitleCache = new Map();
     const summaryWriteQueues = new Map();
+    const mutationWriteQueues = new Map();
 
-    function runWithSummaryWriteLock({ shift } = {}, task) {
-        const key = String(shift || 'UNKNOWN').trim().toUpperCase();
-        const previous = summaryWriteQueues.get(key) || Promise.resolve();
+    function runWithQueue(queues, key, task) {
+        const previous = queues.get(key) || Promise.resolve();
         const current = previous.then(task);
         const settled = current.then(() => undefined, () => undefined);
 
-        summaryWriteQueues.set(key, settled);
+        queues.set(key, settled);
         settled.then(() => {
-            if (summaryWriteQueues.get(key) === settled) summaryWriteQueues.delete(key);
+            if (queues.get(key) === settled) queues.delete(key);
         });
         return current;
+    }
+
+    function runWithSummaryWriteLock({ shift } = {}, task) {
+        const key = String(shift || 'UNKNOWN').trim().toUpperCase();
+        return runWithQueue(summaryWriteQueues, key, task);
+    }
+
+    function runWithMutationWriteLock(payload = {}, task) {
+        const server = normalizePayrollServer(payload.server) || 'UNKNOWN';
+        const shift = String(payload.shift || 'UNKNOWN').trim().toUpperCase();
+        return runWithQueue(mutationWriteQueues, `${server}:${shift}`, task);
     }
 
     async function resolveServerTabTitle(server) {
@@ -539,7 +550,7 @@ function createPurchaseSheetService({
         }
     }
 
-    async function addPurchase(payload, extra = {}) {
+    async function addPurchaseUnlocked(payload, extra = {}) {
         const normalizedPayload = { ...payload, server: normalizePayrollServer(payload.server) };
         const kind = normalizedPayload.payrollKind || 'purchase';
         if (await hasSuccessfulMessageOperation(kind, normalizedPayload, extra)) {
@@ -564,7 +575,11 @@ function createPurchaseSheetService({
         return result;
     }
 
-    async function addAdena(payload, extra = {}) {
+    function addPurchase(payload, extra = {}) {
+        return runWithMutationWriteLock(payload, () => addPurchaseUnlocked(payload, extra));
+    }
+
+    async function addAdenaUnlocked(payload, extra = {}) {
         const normalizedPayload = { ...payload, server: normalizePayrollServer(payload.server) };
         if (await hasSuccessfulMessageOperation('end-adena', normalizedPayload, extra)) {
             logger.warn?.('[ADENA SHEET DEDUPE SKIP]', {
@@ -585,6 +600,10 @@ function createPurchaseSheetService({
             });
         }
         return result;
+    }
+
+    function addAdena(payload, extra = {}) {
+        return runWithMutationWriteLock(payload, () => addAdenaUnlocked(payload, extra));
     }
 
     async function addAdenaWithSummaryUnlocked({ server, shift, userName, amount, rawAmount, dayOfMonth, messageId = null, channelId = null, audit = null }, extra = {}) {
@@ -719,7 +738,9 @@ function createPurchaseSheetService({
     }
 
     function addAdenaWithSummary(payload, extra = {}) {
-        return runWithSummaryWriteLock(payload, () => addAdenaWithSummaryUnlocked(payload, extra));
+        return runWithSummaryWriteLock(payload, () => (
+            runWithMutationWriteLock(payload, () => addAdenaWithSummaryUnlocked(payload, extra))
+        ));
     }
 
     async function resetAdenaSummaryUnlocked({ shift, bounds = null, scheduledAt = null } = {}) {

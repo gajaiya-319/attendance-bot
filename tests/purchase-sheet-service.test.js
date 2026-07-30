@@ -347,7 +347,10 @@ assert.deepStrictEqual(collectAdenaSummaryResetCells(rows, 'UNKNOWN'), []);
             sectionLabels: { DAY: 'Day', NIGHT: 'Night' },
             operationLog: {
                 listRecent: async () => concurrentOperations,
-                record: async entry => concurrentOperations.push(entry)
+                record: async entry => concurrentOperations.push({
+                    ...entry,
+                    messageId: entry.messageId || entry.payload?.messageId || null
+                })
             },
             logger: { warn: () => {}, error: () => {} }
         });
@@ -459,6 +462,70 @@ assert.deepStrictEqual(collectAdenaSummaryResetCells(rows, 'UNKNOWN'), []);
         assert.strictEqual(approvalResult.summaryNextValue, 50000);
         assert.strictEqual(resetRaceRows[4][5], 50000);
         assert.strictEqual(resetRaceRows[13][11], 50000);
+    }
+
+    {
+        const concurrentRows = rows.map(row => [...row]);
+        const concurrentOperations = [];
+        let updateCount = 0;
+        const concurrentDuplicateService = createPurchaseSheetService({
+            google: {
+                auth: {
+                    GoogleAuth: class {}
+                },
+                sheets: () => ({
+                    spreadsheets: {
+                        values: {
+                            get: async request => {
+                                if (request.range.endsWith('!A1:ZZ120')) {
+                                    return { data: { values: concurrentRows.map(row => [...row]) } };
+                                }
+                                if (request.range.endsWith('!H5')) {
+                                    return { data: { values: [[concurrentRows[4][7]]] } };
+                                }
+                                throw new Error(`Unexpected range: ${request.range}`);
+                            },
+                            update: async request => {
+                                updateCount += 1;
+                                await new Promise(resolve => setTimeout(resolve, 15));
+                                concurrentRows[4][7] = request.requestBody.values[0][0];
+                                return {};
+                            }
+                        }
+                    }
+                })
+            },
+            keyFile: 'key.json',
+            spreadsheetId: 'sheet-id',
+            serverTabs: { PAAGRIO: 'Paagrio Great' },
+            sectionLabels: { DAY: 'Day', NIGHT: 'Night' },
+            operationLog: {
+                listRecent: async () => concurrentOperations,
+                record: async entry => concurrentOperations.push({
+                    ...entry,
+                    messageId: entry.messageId || entry.payload?.messageId || null
+                })
+            },
+            logger: { warn: () => {}, error: () => {} }
+        });
+        const payload = {
+            payrollKind: 'death-penalty',
+            messageId: 'msg-concurrent-duplicate',
+            server: 'PAAGRIO',
+            shift: 'DAY',
+            userName: 'Gab',
+            amount: 1000,
+            dayOfMonth: 1
+        };
+        const results = await Promise.all([
+            concurrentDuplicateService.addPurchase(payload),
+            concurrentDuplicateService.addPurchase(payload)
+        ]);
+
+        assert.strictEqual(results.filter(result => result.duplicate).length, 1);
+        assert.strictEqual(updateCount, 1, 'concurrent duplicate approval writes to the sheet once');
+        assert.strictEqual(concurrentOperations.length, 1, 'concurrent duplicate approval records one successful operation');
+        assert.strictEqual(concurrentRows[4][7], 3000);
     }
 
     {
