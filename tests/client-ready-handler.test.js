@@ -6,7 +6,8 @@ const {
     collectDueEndAdenaSummaryResets,
     collectDueEndAdenaApprovalReminders,
     collectDueEndAdenaApprovalDeadlineWarnings,
-    collectDueEndAdenaReconciliations
+    collectDueEndAdenaReconciliations,
+    END_ADENA_SCHEDULER_CRON
 } = require('../src/events/clientReadyHandler');
 
 function at(value) {
@@ -197,7 +198,7 @@ function createDeps(overrides = {}) {
         'cron:30 9 * * 0,1,2,4,5,6:Asia/Seoul',
         'cron:30 4 * * 3:Asia/Seoul'
     ]);
-    assert.strictEqual(cronSchedules[4].rule, '5 * * * * *');
+    assert.strictEqual(cronSchedules[4].rule, END_ADENA_SCHEDULER_CRON);
     await cronSchedules[4].fn();
     await cronSchedules[4].fn();
     assert.strictEqual(calls.includes('adenaReset:DAY'), true);
@@ -260,7 +261,9 @@ function createDeps(overrides = {}) {
     const staggered = createDeps();
     staggered.deps.syncLiveThreeDayPayrollSummary = async () => staggered.calls.push('payrollLiveSummary');
     await createClientReadyHandler(staggered.deps)();
-    assert(staggered.cronSchedules.some(entry => entry.rule === '5 * * * * *'));
+    assert.strictEqual(END_ADENA_SCHEDULER_CRON, '25 * * * * *');
+    assert(staggered.cronSchedules.some(entry => entry.rule === END_ADENA_SCHEDULER_CRON));
+    assert.strictEqual(staggered.cronSchedules.some(entry => entry.rule === '5 * * * * *'), false);
     assert(staggered.cronSchedules.some(entry => entry.rule === '35 * * * * *'));
 
     assert.throws(() => createClientReadyHandler({}), /CONFIG/);

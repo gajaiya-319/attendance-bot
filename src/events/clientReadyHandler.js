@@ -2,6 +2,7 @@
 
 const HEARTBEAT_ATTENDANCE_MS = Number(process.env.HEARTBEAT_ATTENDANCE_MS || 60_000);
 const HEARTBEAT_MAINTENANCE_MS = Number(process.env.HEARTBEAT_MAINTENANCE_MS || 300_000);
+const END_ADENA_SCHEDULER_CRON = process.env.END_ADENA_SCHEDULER_CRON || '25 * * * * *';
 
 function collectDueEndAdenaCloseReadiness(now, getShiftBounds, completedKeys = new Set()) {
     if (!now?.clone || typeof getShiftBounds !== 'function') return [];
@@ -432,7 +433,7 @@ function createClientReadyHandler({
             typeof getNow === 'function' &&
             typeof getShiftBounds === 'function'
         ) {
-            cron.schedule('5 * * * * *', async () => {
+            cron.schedule(END_ADENA_SCHEDULER_CRON, async () => {
                 const now = getNow();
                 const jobs = [];
                 const dueReadinessReports = typeof reportEndAdenaCloseReadiness === 'function'
@@ -686,5 +687,6 @@ module.exports = {
     collectDueEndAdenaApprovalDeadlineWarnings,
     collectDueEndAdenaReconciliations,
     HEARTBEAT_ATTENDANCE_MS,
-    HEARTBEAT_MAINTENANCE_MS
+    HEARTBEAT_MAINTENANCE_MS,
+    END_ADENA_SCHEDULER_CRON
 };
