@@ -390,6 +390,28 @@ assert.deepStrictEqual(collectAdenaSummaryResetCells(rows, 'UNKNOWN'), []);
         resetRaceRows[4][5] = 0;
         resetRaceRows[12][11] = 0;
         resetRaceRows[13][11] = 100000;
+        const resetRaceOperations = [{
+            kind: 'end-adena',
+            action: 'approve',
+            status: 'success',
+            createdAt: '2026-07-29T12:40:00.000Z',
+            server: 'PAAGRIO',
+            shift: 'DAY',
+            userName: 'Gab',
+            messageId: 'summary-before-reset',
+            payload: {
+                server: 'PAAGRIO',
+                shift: 'DAY',
+                userName: 'Gab',
+                messageId: 'summary-before-reset',
+                rawAmount: 70000,
+                audit: {
+                    shiftStartAt: resetBounds.start.toISOString(),
+                    shiftEndAt: resetBounds.end.toISOString()
+                }
+            },
+            result: { summaryNextValue: 100000 }
+        }];
         const resetRaceService = createPurchaseSheetService({
             google: {
                 auth: {
@@ -412,7 +434,7 @@ assert.deepStrictEqual(collectAdenaSummaryResetCells(rows, 'UNKNOWN'), []);
                             },
                             batchUpdate: async request => {
                                 const isReset = request.requestBody.data.some(item => (
-                                    item.range.endsWith('!L14') && item.values[0][0] === 0
+                                    item.range.endsWith('!L14')
                                 ));
                                 if (isReset) await new Promise(resolve => setTimeout(resolve, 30));
                                 for (const item of request.requestBody.data) {
@@ -438,13 +460,17 @@ assert.deepStrictEqual(collectAdenaSummaryResetCells(rows, 'UNKNOWN'), []);
             serverTabs: { PAAGRIO: 'Paagrio Great' },
             sectionLabels: { DAY: 'Day', NIGHT: 'Night' },
             operationLog: {
-                listRecent: async () => [],
-                record: async () => {}
+                listRecent: async () => resetRaceOperations,
+                record: async entry => resetRaceOperations.push(entry)
             },
             logger: { warn: () => {}, error: () => {} }
         });
 
-        const resetPromise = resetRaceService.resetAdenaSummary({ shift: 'DAY' });
+        const resetPromise = resetRaceService.resetAdenaSummary({
+            shift: 'DAY',
+            bounds: resetBounds,
+            scheduledAt: '2026-07-29T12:50:00.000Z'
+        });
         const approvalPromise = resetRaceService.addAdenaWithSummary({
             server: 'PAAGRIO',
             shift: 'DAY',
@@ -457,11 +483,13 @@ assert.deepStrictEqual(collectAdenaSummaryResetCells(rows, 'UNKNOWN'), []);
         const [resetResult, approvalResult] = await Promise.all([resetPromise, approvalPromise]);
 
         assert.strictEqual(resetResult.ok, true);
+        assert.strictEqual(resetResult.preserved, 1);
+        assert.strictEqual(resetResult.corrected, 1);
         assert.strictEqual(approvalResult.ok, true);
-        assert.strictEqual(approvalResult.summaryPreviousValue, 0);
-        assert.strictEqual(approvalResult.summaryNextValue, 50000);
+        assert.strictEqual(approvalResult.summaryPreviousValue, 70000);
+        assert.strictEqual(approvalResult.summaryNextValue, 120000);
         assert.strictEqual(resetRaceRows[4][5], 50000);
-        assert.strictEqual(resetRaceRows[13][11], 50000);
+        assert.strictEqual(resetRaceRows[13][11], 120000);
     }
 
     {

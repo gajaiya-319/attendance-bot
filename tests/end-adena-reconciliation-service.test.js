@@ -208,6 +208,17 @@ function member(id, displayName, roleIds) {
     assert.strictEqual(supplementalOvertime.duplicate, false);
     assert.strictEqual(supplementalOvertime.approvedMessageIds.length, 2);
 
+    const preResetApproval = reduceEndAdenaOperations([
+        operation({
+            createdAt: '2026-07-28 18:50',
+            userName: 'Deia',
+            messageId: 'deia-before-reset',
+            summaryNextValue: 440000,
+            rawAmount: 170000
+        })
+    ], { fromZero: true });
+    assert.strictEqual(preResetApproval.expectedValue, 170000, 'scheduled reset removes the stale summary baseline');
+
     const repeatedOvertime = reduceEndAdenaOperations([
         ...selected.filter(item => item.userName === 'ACE'),
         ...['ot-1', 'ot-2'].map((messageId, index) => ({

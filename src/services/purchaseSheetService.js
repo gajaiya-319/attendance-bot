@@ -1,5 +1,10 @@
 'use strict';
 
+const {
+    selectEndAdenaOperations,
+    reduceEndAdenaOperations
+} = require('../utils/endAdenaOperations');
+
 function normalize(value) {
     return String(value || '')
         .replace(/\([^)]*\)/g, ' ')
@@ -67,6 +72,11 @@ function resolveSheetNameCandidates(userName, aliases = {}) {
         if (aliases[variant]) candidates.push(aliases[variant]);
     }
     return [...new Set(candidates.filter(Boolean))];
+}
+
+function namesReferToSameSheetUser(left, right, aliases = {}) {
+    const leftCandidates = new Set(resolveSheetNameCandidates(left, aliases));
+    return resolveSheetNameCandidates(right, aliases).some(candidate => leftCandidates.has(candidate));
 }
 
 function parseNumber(value) {
@@ -749,6 +759,35 @@ function createPurchaseSheetService({
             return { ok: false, code: 'invalid-shift', shift: normalizedShift || null };
         }
 
+        let approvedOperations = [];
+        if (bounds?.start?.toISOString && bounds?.end?.toISOString && typeof operationLog?.listRecent === 'function') {
+            try {
+                const recentOperations = await operationLog.listRecent({ limit: 10_000 });
+                approvedOperations = selectEndAdenaOperations(recentOperations, {
+                    shift: normalizedShift,
+                    from: bounds.start.toISOString(),
+                    to: new Date().toISOString(),
+                    shiftStartAt: bounds.start.toISOString(),
+                    shiftEndAt: bounds.end.toISOString()
+                });
+            } catch (error) {
+                logger.error?.('[ADENA SUMMARY RESET APPROVAL LOG ERROR]', {
+                    shift: normalizedShift,
+                    message: error?.message,
+                    code: error?.code || error?.status
+                });
+                return {
+                    ok: false,
+                    code: 'approval-log-read-failed',
+                    shift: normalizedShift,
+                    inspected: 0,
+                    cleared: 0,
+                    preserved: 0,
+                    results: []
+                };
+            }
+        }
+
         const servers = [...new Set(Object.keys(serverTabs)
             .map(normalizePayrollServer)
             .filter(Boolean))];
@@ -774,17 +813,30 @@ function createPurchaseSheetService({
                     results.push({ ok: false, server, code: 'summary-shift-not-found' });
                     continue;
                 }
+                const serverOperations = approvedOperations.filter(operation => (
+                    normalizePayrollServer(operation.server || operation.payload?.server) === server
+                ));
+                const resetCells = cells.map(cell => {
+                    const cellOperations = serverOperations.filter(operation => namesReferToSameSheetUser(
+                        cell.userName,
+                        operation.userName || operation.payload?.userName,
+                        aliases
+                    ));
+                    const reduced = reduceEndAdenaOperations(cellOperations, { fromZero: true });
+                    return { ...cell, expectedValue: reduced.expectedValue };
+                });
                 snapshots.push({
                     server,
                     tabName,
-                    cells: cells.map(cell => ({
+                    cells: resetCells.map(cell => ({
                         userName: cell.userName,
                         previousValue: cell.previousValue,
+                        expectedValue: cell.expectedValue,
                         range: `${quoteSheetName(tabName)}!${getColumnLetter(cell.colIndex)}${cell.rowIndex + 1}`
                     }))
                 });
 
-                const changedCells = cells.filter(cell => cell.previousValue !== 0);
+                const changedCells = resetCells.filter(cell => cell.previousValue !== cell.expectedValue);
                 ranges = changedCells.map(cell => (
                     `${quoteSheetName(tabName)}!${getColumnLetter(cell.colIndex)}${cell.rowIndex + 1}`
                 ));
@@ -793,7 +845,10 @@ function createPurchaseSheetService({
                         spreadsheetId,
                         requestBody: {
                             valueInputOption: 'USER_ENTERED',
-                            data: ranges.map(range => ({ range, values: [[0]] }))
+                            data: changedCells.map((cell, index) => ({
+                                range: ranges[index],
+                                values: [[cell.expectedValue]]
+                            }))
                         }
                     }), logger, 'ADENA SUMMARY RESET', { server, shift: normalizedShift, ranges });
 
@@ -802,7 +857,7 @@ function createPurchaseSheetService({
                         ranges
                     }), logger, 'ADENA SUMMARY RESET VERIFY', { server, shift: normalizedShift, ranges });
                     const failedRanges = ranges.filter((range, index) => (
-                        parseNumber(verification.data.valueRanges?.[index]?.values?.[0]?.[0]) !== 0
+                        parseNumber(verification.data.valueRanges?.[index]?.values?.[0]?.[0]) !== changedCells[index].expectedValue
                     ));
                     if (failedRanges.length) {
                         results.push({
@@ -819,8 +874,10 @@ function createPurchaseSheetService({
                     ok: true,
                     server,
                     tabName,
-                    inspected: cells.length,
-                    cleared: changedCells.length,
+                    inspected: resetCells.length,
+                    cleared: changedCells.filter(cell => cell.expectedValue === 0).length,
+                    preserved: resetCells.filter(cell => cell.expectedValue > 0).length,
+                    corrected: changedCells.filter(cell => cell.expectedValue > 0).length,
                     ranges
                 });
             } catch (error) {
@@ -846,6 +903,8 @@ function createPurchaseSheetService({
             shift: normalizedShift,
             inspected: results.reduce((sum, result) => sum + (result.inspected || 0), 0),
             cleared: results.reduce((sum, result) => sum + (result.cleared || 0), 0),
+            preserved: results.reduce((sum, result) => sum + (result.preserved || 0), 0),
+            corrected: results.reduce((sum, result) => sum + (result.corrected || 0), 0),
             results
         };
         await operationLog?.record?.({
