@@ -5,6 +5,7 @@ const path = require('path');
 const { runOpsHealthCheck } = require('./ops-health-check');
 const { verifyBundle } = require('./lib/disaster-recovery');
 const { recordOperationalEvidence } = require('./lib/operational-evidence');
+const { CONFIG } = require('../src/config/constants');
 const allowUnhealthy = process.argv.slice(2).includes('--allow-unhealthy');
 
 function pendingAttendanceCount(filePath = 'logs/raw-attendance-pending.json') {
@@ -24,21 +25,25 @@ try {
     const result = recordOperationalEvidence({
         health,
         disasterRecovery,
-        pendingAttendanceCount: pendingAttendanceCount()
+        pendingAttendanceCount: pendingAttendanceCount(),
+        timeZone: CONFIG.TIMEZONE
     });
     console.log(JSON.stringify({
-        healthy: result.current.healthy,
-        operationalScore: result.current.operationalScore,
-        scoreComponents: result.current.scoreComponents,
-        endAdenaFreshnessStatus: result.current.endAdenaFreshnessStatus,
-        endAdenaProvisional: result.current.endAdenaProvisional,
+        healthy: result.latest.healthy,
+        operationalScore: result.latest.operationalScore,
+        scoreComponents: result.latest.scoreComponents,
+        dailyHealthy: result.current.healthy,
+        dailyOperationalScore: result.current.operationalScore,
+        endAdenaFreshnessStatus: result.latest.endAdenaFreshnessStatus,
+        endAdenaProvisional: result.latest.endAdenaProvisional,
         consecutiveHealthyDays: result.consecutiveHealthyDays,
-        certified: result.current.certified,
+        certified: result.latest.certified,
+        dailyCertified: result.current.certified,
         consecutiveCertifiedDays: result.consecutiveCertifiedDays,
         qualified7Days: result.qualified7Days,
         qualified30Days: result.qualified30Days
     }, null, 2));
-    if (!result.current.healthy && !allowUnhealthy) process.exitCode = 1;
+    if (!result.latest.healthy && !allowUnhealthy) process.exitCode = 1;
 } catch (error) {
     console.error('[OPERATIONAL EVIDENCE ERROR]', error?.message || error);
     process.exit(1);

@@ -8,6 +8,7 @@ const {
     calculateOperationalScore,
     countConsecutiveCertifiedDays,
     countConsecutiveHealthyDays,
+    dateKey,
     isDisasterRecoveryFresh,
     recordOperationalEvidence
 } = require('../scripts/lib/operational-evidence');
@@ -16,6 +17,9 @@ const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'operational-evidence-'));
 const filePath = path.join(dir, 'evidence.json');
 
 try {
+    assert.strictEqual(dateKey('2026-07-30T18:35:00.000Z'), '2026-07-30');
+    assert.strictEqual(dateKey('2026-07-30T18:35:00.000Z', 'Asia/Manila'), '2026-07-31');
+
     const health = {
         status: 'ok',
         checks: {
@@ -38,7 +42,8 @@ try {
             health,
             disasterRecovery: { ok: true, createdAt: `2026-07-0${day}T00:00:00.000Z` },
             pendingAttendanceCount: 0,
-            at: new Date(`2026-07-0${day}T01:00:00.000Z`)
+            at: new Date(`2026-07-0${day}T01:00:00.000Z`),
+            timeZone: 'Asia/Manila'
         });
     }
     const saved = JSON.parse(fs.readFileSync(filePath, 'utf8'));
@@ -49,6 +54,7 @@ try {
     assert(saved.records.every(record => record.operationalScore === 100));
     assert(saved.records.every(record => record.certified === true));
     assert(saved.records.every(record => record.endAdenaProvisional === false));
+    assert(saved.records.every(record => record.timeZone === 'Asia/Manila'));
 
     const degradedScore = calculateOperationalScore({
         health: {

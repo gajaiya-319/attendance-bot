@@ -3,8 +3,17 @@
 const fs = require('fs');
 const path = require('path');
 
-function dateKey(value) {
-    return new Date(value).toISOString().slice(0, 10);
+function dateKey(value, timeZone = 'UTC') {
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) throw new RangeError('Invalid operational evidence date');
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    }).formatToParts(date);
+    const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+    return `${values.year}-${values.month}-${values.day}`;
 }
 
 function countConsecutiveHealthyDays(records = []) {
@@ -73,6 +82,7 @@ function mergeDailyEvidenceRecord(previous, current) {
         ...representative,
         date: current.date,
         checkedAt: current.checkedAt,
+        timeZone: current.timeZone || previous.timeZone || 'UTC',
         firstCheckedAt: previous.firstCheckedAt || previous.checkedAt || current.checkedAt,
         lastCheckedAt: current.checkedAt,
         checkCount: Math.max(1, Number(previous.checkCount || 1)) + 1,
@@ -123,10 +133,11 @@ function recordOperationalEvidence({
     disasterRecovery,
     pendingAttendanceCount = 0,
     at = new Date(),
-    retentionDays = 35
+    retentionDays = 35,
+    timeZone = 'UTC'
 } = {}) {
     const checkedAt = new Date(at).toISOString();
-    const date = dateKey(checkedAt);
+    const date = dateKey(checkedAt, timeZone);
     const operationalScore = calculateOperationalScore({ health, disasterRecovery, pendingAttendanceCount, at: checkedAt });
     const healthy = operationalScore.total === 100;
     const freshness = health?.checks?.endAdenaFreshness || null;
@@ -141,6 +152,7 @@ function recordOperationalEvidence({
     const record = {
         date,
         checkedAt,
+        timeZone,
         healthy,
         certified,
         operationalScore: operationalScore.total,

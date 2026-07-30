@@ -87,6 +87,8 @@ const { initPayrollCronSchedulers } = require('../src/scheduler/payrollCron');
                 code: 'attention-required',
                 attentionRequired: true,
                 score: 90,
+                dailyScore: 80,
+                activeAttentionRequired: true,
                 certified: false,
                 consecutiveCertifiedDays: 0,
                 targetDays: 7,
@@ -108,6 +110,7 @@ const { initPayrollCronSchedulers } = require('../src/scheduler/payrollCron');
         assert.strictEqual(duplicate.alreadyNotified, true);
         assert.strictEqual(notifications.length, 1);
         assert(notifications[0].includes('90/100'));
+        assert(notifications[0].includes('80/100'));
     }
 
     {

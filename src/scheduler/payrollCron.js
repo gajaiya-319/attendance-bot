@@ -145,7 +145,7 @@ ${result.errorMessage || ''}`.trim()
     async function runOperationalCertificationMonitor(trigger = 'daily-cron') {
         const status = await readCertificationStatus();
         const notificationKey = status.attentionRequired
-            ? `attention:${status.latestDate || 'missing'}:${status.score ?? 'missing'}:${status.code || 'unknown'}`
+            ? `attention:${status.latestDate || 'missing'}:current-${status.score ?? 'missing'}:daily-${status.dailyScore ?? 'missing'}:${status.code || 'unknown'}`
             : (status.qualified30Days
                 ? 'milestone:30-days'
                 : (status.qualified7Days ? 'milestone:7-days' : null));
@@ -162,7 +162,9 @@ ${result.errorMessage || ''}`.trim()
         let notification = { sent: 0, failed: 0, fallbackSent: 0 };
         if (notificationKey && !alreadyNotified) {
             const headline = status.attentionRequired
-                ? 'Operational certification needs attention'
+                ? (status.recovered
+                    ? 'Operational health recovered; daily certification remains incomplete'
+                    : 'Operational certification needs attention')
                 : `${status.qualified30Days ? '30-day' : '7-day'} operational certification achieved`;
             notification = await notifyOwners({
                 client,
@@ -170,7 +172,8 @@ ${result.errorMessage || ''}`.trim()
                 logger,
                 content: [
                     `**${headline}**`,
-                    `Score: ${status.score ?? 'unavailable'}/100`,
+                    `Current score: ${status.score ?? 'unavailable'}/100`,
+                    `Daily certification floor: ${status.dailyScore ?? status.score ?? 'unavailable'}/100`,
                     `Certified streak: ${status.consecutiveCertifiedDays || 0}/${status.targetDays || 7}`,
                     `Latest check: ${status.checkedAt || 'unavailable'}`,
                     ...(status.reasons || []).map(reason => `- ${reason}`)
@@ -182,7 +185,7 @@ ${result.errorMessage || ''}`.trim()
         await payrollOperationLogService?.record?.({
             kind: 'operational-certification-monitor',
             action: 'inspect',
-            status: status.attentionRequired ? 'failed' : 'success',
+            status: status.activeAttentionRequired ? 'failed' : (status.attentionRequired ? 'warning' : 'success'),
             payload: { trigger, notificationKey },
             result: {
                 ...status,
@@ -194,6 +197,7 @@ ${result.errorMessage || ''}`.trim()
 
         logger.log?.('[CERTIFICATION MONITOR]', {
             score: status.score ?? null,
+            dailyScore: status.dailyScore ?? null,
             certifiedDays: status.consecutiveCertifiedDays || 0,
             qualified7Days: Boolean(status.qualified7Days),
             attentionRequired: Boolean(status.attentionRequired),

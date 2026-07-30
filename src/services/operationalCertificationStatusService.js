@@ -30,23 +30,43 @@ function summarizeOperationalCertification(data, {
         ? Math.max(0, (nowMs - checkedAtMs) / (60 * 60 * 1000))
         : Number.POSITIVE_INFINITY;
     const stale = ageHours > Math.max(1, Number(staleAfterHours || 30));
-    const score = Number.isFinite(Number(latest.operationalScore))
+    const dailyScore = Number.isFinite(Number(latest.operationalScore))
         ? Number(latest.operationalScore)
         : (latest.healthy === true ? 100 : 0);
+    const score = Number.isFinite(Number(latest.latestOperationalScore))
+        ? Number(latest.latestOperationalScore)
+        : dailyScore;
+    const dailyHealthy = typeof latest.healthy === 'boolean'
+        ? latest.healthy
+        : dailyScore === 100;
+    const currentHealthy = typeof latest.latestHealthy === 'boolean'
+        ? latest.latestHealthy
+        : dailyHealthy;
     const certified = latest.certified === true;
+    const currentCertified = typeof latest.latestCertified === 'boolean'
+        ? latest.latestCertified
+        : certified;
     const consecutiveCertifiedDays = Math.max(0, Number(data?.consecutiveCertifiedDays || 0));
     const remainingDays = Math.max(0, targetDays - consecutiveCertifiedDays);
     const reasons = [];
-    if (score < 100) reasons.push(`Operational score is ${score}/100.`);
-    if (!certified) reasons.push('The latest daily record is not certified.');
+    if (score < 100 || !currentHealthy) reasons.push(`Current operational score is ${score}/100.`);
+    if (!certified) reasons.push(`Today's certification floor is ${dailyScore}/100 and is not certified.`);
     if (stale) reasons.push(`The latest evidence is ${Math.floor(ageHours)} hours old.`);
+    const activeAttentionRequired = score < 100 || !currentHealthy || stale;
+    const recovered = !activeAttentionRequired && !certified;
 
     return {
         available: true,
         code: reasons.length ? 'attention-required' : 'ok',
         attentionRequired: reasons.length > 0,
+        activeAttentionRequired,
+        recovered,
         score,
+        dailyScore,
+        currentHealthy,
+        dailyHealthy,
         certified,
+        currentCertified,
         consecutiveCertifiedDays,
         remainingDays,
         targetDays,
@@ -96,12 +116,15 @@ function formatOperationalCertificationStatus(status = {}) {
             `Reason: ${(status.reasons || [status.code || 'unknown']).join(' ')}`
         ].join('\n');
     }
-    const state = status.attentionRequired
+    const state = status.activeAttentionRequired
         ? 'ATTENTION'
-        : (status.qualified7Days ? 'QUALIFIED' : 'BUILDING');
+        : (status.recovered
+            ? 'RECOVERED'
+            : (status.qualified7Days ? 'QUALIFIED' : 'BUILDING'));
     return [
         `Status: ${state}`,
-        `Score: ${status.score}/100`,
+        `Current score: ${status.score}/100`,
+        `Today's certification floor: ${status.dailyScore ?? status.score}/100 (${status.certified ? 'certified' : 'not certified'})`,
         `7-day progress: ${status.consecutiveCertifiedDays}/${status.targetDays} (${status.remainingDays} remaining)`,
         `Latest check: ${status.checkedAt || 'unknown'}`,
         `DR backup: ${status.disasterRecoveryFresh ? 'fresh' : 'stale'}`,
