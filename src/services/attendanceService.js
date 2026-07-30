@@ -5,6 +5,7 @@ const {
     incrementMonthlyAttendanceStat,
     markMonthlyOvertimeAward
 } = require('../utils/monthlyAttendanceStats');
+const { isExcludedUserId } = require('../utils/excludedUsers');
 
 function createAttendanceService(deps) {
     const {
@@ -19,7 +20,7 @@ function createAttendanceService(deps) {
     } = deps;
 
     function ensureUserData(member, shift = null) {
-        if (!member) return null;
+        if (!member || isExcludedUserId(CONFIG, member)) return null;
         const attendanceData = getAttendanceData();
         const s = shift || determineShift(member);
         if (!attendanceData[member.id]) {
@@ -416,7 +417,7 @@ function createAttendanceService(deps) {
     }
 
     function addOvertimeUser(user, type = 'AUTO', startedAt = null) {
-        if (!user) return false;
+        if (!user || isExcludedUserId(CONFIG, user)) return false;
         const overtimeUsers = getOvertimeUsers();
         const otStartedAt = startedAt
             ? moment(startedAt).tz(CONFIG.TIMEZONE)
@@ -569,6 +570,10 @@ function createAttendanceService(deps) {
     }
 
     function applyClockInCore(user, member, shift, now, clockInRule, isAuto = false) {
+        if (!user || !member || !shift) return { ok: false, reason: 'missing-input' };
+        if (isExcludedUserId(CONFIG, user) || isExcludedUserId(CONFIG, member)) {
+            return { ok: false, reason: 'excluded-user' };
+        }
         const source = isAuto ? 'live_on' : 'button_or_command';
 
         if (!clockInRule.ok) {
@@ -867,6 +872,7 @@ function createAttendanceService(deps) {
 
     function applyDayOffCore(user, now, source = 'day-off', reason = 'day-off-applied') {
         if (!user) return { ok: false, reason: 'missing-user' };
+        if (isExcludedUserId(CONFIG, user)) return { ok: false, reason: 'excluded-user' };
         const at = moment(now).tz(CONFIG.TIMEZONE);
         const session = getOpenSession(user)
             ? finishAttendanceSession(user, at, source, reason, at)
@@ -963,6 +969,7 @@ function createAttendanceService(deps) {
 
     function applyLiveExceptionCore(user, shift, now, source = 'live-exception', reason = 'live-exception-applied', options = {}) {
         if (!user || !shift) return { ok: false, reason: 'missing-user-or-shift' };
+        if (isExcludedUserId(CONFIG, user)) return { ok: false, reason: 'excluded-user' };
         const at = moment(now).tz(CONFIG.TIMEZONE);
         const voiceStatus = options.voiceStatus || 'EXCEPTION';
         const wasCheckedIn = Boolean(user.checkedIn);
@@ -1343,6 +1350,7 @@ function createAttendanceService(deps) {
 
     function applyOvertimeCore(user, now, type = 'AUTO', source = 'overtime', reason = 'overtime-started', options = {}) {
         if (!user) return { ok: false, reason: 'missing-user' };
+        if (isExcludedUserId(CONFIG, user)) return { ok: false, reason: 'excluded-user' };
         const at = options.startedAt ? moment(options.startedAt).tz(CONFIG.TIMEZONE) : moment(now).tz(CONFIG.TIMEZONE);
         const voiceStatus = options.voiceStatus || 'LIVE_ON';
         const sessionSource = options.sessionSource || `${String(type).toLowerCase()}-ot`;

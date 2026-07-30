@@ -1,3 +1,5 @@
+require('./excluded-users.test');
+
 const assert = require('assert');
 const { getLiveExceptionsMap } = require('../src/utils/liveExceptionsAccess');
 

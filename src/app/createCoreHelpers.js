@@ -1,5 +1,7 @@
 'use strict';
 
+const { isExcludedUserId } = require('../utils/excludedUsers');
+
 function createCoreHelpers(ctx) {
     const {
         CONFIG,
@@ -48,7 +50,7 @@ function createCoreHelpers(ctx) {
     }
 
     function determineShift(member) {
-        if (!member || !member.roles) return null;
+        if (!member || !member.roles || isExcludedUserId(CONFIG, member)) return null;
         const now = moment().tz(CONFIG.TIMEZONE);
         const displayShift = getOperationalShift(now);
         if (CONFIG.EXCEPTIONS.SHARED_SEAT_USER && member.id === CONFIG.EXCEPTIONS.SHARED_SEAT_USER) return displayShift;
@@ -71,7 +73,7 @@ function createCoreHelpers(ctx) {
     }
 
     function markMemberActivity(member, source = 'unknown', at = moment().tz(CONFIG.TIMEZONE)) {
-        if (!member || member.user?.bot) return false;
+        if (!member || member.user?.bot || isExcludedUserId(CONFIG, member)) return false;
         const u = ensureUserData(
             member,
             botState.attendanceData[member.id]?.shift ||
@@ -102,7 +104,7 @@ function createCoreHelpers(ctx) {
     }
 
     async function updateWorkingRole(member, shouldAdd) {
-        if (!CONFIG.ROLES.WORKING || !member?.roles) return;
+        if (!CONFIG.ROLES.WORKING || !member?.roles || isExcludedUserId(CONFIG, member)) return;
         const roleExists = member.guild?.roles?.cache?.has(CONFIG.ROLES.WORKING);
         if (!roleExists) {
             console.warn('[ROLE WARN] WORKING_ROLE_ID is not a valid role in this guild.');

@@ -26,7 +26,8 @@ const CONFIG = {
         GUEST: 'guest'
     },
     EXCEPTIONS: {
-        SHARED_SEAT_USER: 'shared-seat'
+        SHARED_SEAT_USER: 'shared-seat',
+        EXCLUDED_USER_IDS: ['excluded-user']
     }
 };
 
@@ -51,7 +52,9 @@ assert.strictEqual(permissions.isAssignedWorker(member('1', ['day', 'paagrio']))
 assert.strictEqual(permissions.isAssignedWorker(member('1', ['day'])), false);
 assert.strictEqual(permissions.isAssignedWorker(member('owner', ['night'])), true);
 assert.strictEqual(permissions.isAssignedWorker(member('shared-seat', [])), true);
+assert.strictEqual(permissions.isAssignedWorker(member('excluded-user', ['day', 'paagrio'])), false);
 assert.strictEqual(permissions.hasManagedAttendanceRole(member('1', ['guest'])), true);
+assert.strictEqual(permissions.hasManagedAttendanceRole(member('excluded-user', ['guest'])), false);
 assert.strictEqual(permissions.canManageLiveException(member('1', ['live-manager'])), true);
 assert.strictEqual(permissions.canManageLiveException(member('1', [], [PermissionFlagsBits.ManageMessages])), false);
 assert.strictEqual(permissions.canManageLiveException(member('1', [], [PermissionFlagsBits.Administrator])), false);
@@ -59,6 +62,7 @@ assert.strictEqual(permissions.canManageAnnouncements(member('1', ['announce-man
 assert.strictEqual(permissions.canManageAnnouncements(member('1', [])), false);
 assert.strictEqual(permissions.canRunOperationalCommand(member('1', ['ops-manager'])), true);
 assert.strictEqual(permissions.canRunOperationalCommand(member('owner')), true);
+assert.strictEqual(permissions.canRunOperationalCommand(member('excluded-user', ['ops-manager'])), false);
 assert.strictEqual(permissions.canRunOperationalCommand(member('1', [], [PermissionFlagsBits.Administrator])), false);
 assert.strictEqual(permissions.canManageDayOff(member('dayoff-reviewer')), true);
 assert.strictEqual(permissions.canManageDayOff(member('1', ['dayoff-manager'])), true);

@@ -22,6 +22,7 @@ const {
     getMemberActivityNames,
     parseAutoOtConfirmCustomId
 } = require('../utils/overtimeActivityPolicy');
+const { isExcludedUserId } = require('../utils/excludedUsers');
 
 function createClockWorkflow(deps) {
     const {
@@ -68,7 +69,7 @@ function expireDayOffSessions(now = moment().tz(CONFIG.TIMEZONE)) {
 }
 
 function getMemberShiftRole(member) {
-    if (!member?.roles?.cache) return null;
+    if (!member?.roles?.cache || isExcludedUserId(CONFIG, member)) return null;
     const hasD = member.roles.cache.has(CONFIG.ROLES.DAY);
     const hasN = member.roles.cache.has(CONFIG.ROLES.NIGHT);
     if (!hasD && !hasN) return null;
@@ -233,6 +234,7 @@ function appendCollapsedPresenceSummary(user, text) {
 }
 
 async function startPreShiftOvertime(member, user, shift, now, source = 'button-or-command') {
+    if (isExcludedUserId(CONFIG, member || user)) return false;
     const result = attendanceService.applyPreShiftOvertimeCore(member, user, shift, now, source);
     if (!result.ok) return false;
     await updateWorkingRole(member, true);
@@ -241,6 +243,7 @@ async function startPreShiftOvertime(member, user, shift, now, source = 'button-
 }
 
 async function startPostShiftOvertime(member, user, now, source = 'voice_snapshot', options = {}) {
+    if (isExcludedUserId(CONFIG, member || user)) return false;
     const overtimeStart = getPostShiftOvertimeStartMoment(user, now, options) || now;
     const scheduledEnd = getOvertimeStartMoment(user, now);
     const detachedLateReturn = Boolean(
@@ -720,6 +723,7 @@ function getRestorableOvertimeSession(user, shift, now = moment().tz(CONFIG.TIME
 }
 
 async function restoreOvertimeAfterFinish(member, user, shift, now, source = 'voice_snapshot') {
+    if (isExcludedUserId(CONFIG, member || user)) return false;
     if (isCurrentShiftRegularWorker(member, now)) return false;
     const result = attendanceService.applyRestoreOvertimeAfterFinishCore(user, shift, now, source);
     if (!result.ok) return false;
@@ -729,6 +733,7 @@ async function restoreOvertimeAfterFinish(member, user, shift, now, source = 'vo
 }
 
 async function resumeAutoTimeoutShift(member, user, shift, now, source = 'voice_snapshot') {
+    if (isExcludedUserId(CONFIG, member || user)) return false;
     const result = attendanceService.applyAutoTimeoutResumeCore(user, shift, now, source);
     if (!result.ok) return false;
     await updateWorkingRole(member, true);
@@ -1204,6 +1209,7 @@ async function sendExcessiveLateAuditLog(user, result, shift) {
 }
 
 async function handleClockIn(member, user, shift, now, isAuto = false) {
+    if (isExcludedUserId(CONFIG, member || user)) return false;
     const u = ensureUserData(member, shift) || user;
     const clockInRule = getRecognizedClockInMoment(shift, now);
     const result = attendanceService.applyClockInCore(u, member, shift, now, clockInRule, isAuto);
@@ -1249,6 +1255,7 @@ async function handleClockIn(member, user, shift, now, isAuto = false) {
 }
 
 async function handleClockOut(member, user, now, customLogText = null, earlyOverrideTime = null, options = {}) {
+    if (isExcludedUserId(CONFIG, member || user)) return false;
     const finalAbsentShift = isFinalAbsentAttendance(user) && !user?.absentConvertedToLateThisShift;
     const result = attendanceService.applyClockOutCore(member, user, now, customLogText, earlyOverrideTime, options);
     if (!result.ok) return;
@@ -1275,6 +1282,7 @@ async function handleClockOut(member, user, now, customLogText = null, earlyOver
 }
 
 async function handleClockOutWithoutMember(memberId, user, now, customLogText = null, earlyOverrideTime = null, options = {}) {
+    if (isExcludedUserId(CONFIG, memberId || user)) return false;
     const finalAbsentShift = isFinalAbsentAttendance(user) && !user?.absentConvertedToLateThisShift;
     const result = attendanceService.applyClockOutCore(memberId, user, now, customLogText, earlyOverrideTime, options);
     if (!result.ok) return false;

@@ -13,7 +13,8 @@ const CONFIG = {
     CLOCK_IN_GRACE_MINS: 0,
     PRE_SHIFT_VOICE_LIVE_GRACE_MINS: 10,
     PRE_SHIFT_VOICE_MEMORY_MINS: 7 * 60,
-    PRE_SHIFT_RECONNECT_GRACE_MINS: 10
+    PRE_SHIFT_RECONNECT_GRACE_MINS: 10,
+    EXCEPTIONS: { EXCLUDED_USER_IDS: ['excluded-user'] }
 };
 
 function at(value) {
@@ -66,6 +67,12 @@ function assertUserStateClean(user, message) {
     assert.strictEqual(user.attendanceStatus, 'PRE_SHIFT', 'new user starts PRE_SHIFT');
     assert.strictEqual(Array.isArray(user.sessions), true, 'sessions array is initialized');
     assert.strictEqual(state.attendanceData.user1, user, 'user is stored by reference');
+}
+
+{
+    const excluded = service.ensureUserData(createMember({ id: 'excluded-user' }), 'night');
+    assert.strictEqual(excluded, null, 'excluded Discord user never receives attendance state');
+    assert.strictEqual(state.attendanceData['excluded-user'], undefined, 'excluded Discord user is not persisted');
 }
 
 {

@@ -6,6 +6,7 @@ const {
     createStartupRuntime,
     dataStore
 } = require('./appDependencies');
+const { purgeExcludedUserState } = require('../utils/excludedUsers');
 
 function createBotState(ctx) {
     const {
@@ -117,7 +118,25 @@ function createBotState(ctx) {
         return persistenceRuntime.restoreBackupSnapshot(fileName);
     }
     async function loadSystem() {
-        return persistenceRuntime.loadSystem();
+        await persistenceRuntime.loadSystem();
+        const state = {
+            attendanceData,
+            overtimeUsers,
+            dayOffReservations,
+            liveExceptions,
+            attendanceEventLog
+        };
+        const purge = purgeExcludedUserState(state, CONFIG);
+        attendanceData = state.attendanceData;
+        overtimeUsers = state.overtimeUsers;
+        dayOffReservations = state.dayOffReservations;
+        liveExceptions = state.liveExceptions;
+        attendanceEventLog = state.attendanceEventLog;
+        if (purge.changed) {
+            console.log('[EXCLUDED USER STATE PURGE]', purge.removed);
+            await persistenceRuntime.saveSystemAsync();
+        }
+        return purge;
     }
     async function refreshGuildMembers(guild, options) {
         return persistenceRuntime.refreshGuildMembers(guild, options);

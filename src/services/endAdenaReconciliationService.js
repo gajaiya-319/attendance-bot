@@ -20,6 +20,7 @@ const {
     reduceEndAdenaOperations,
     hasSuccessfulSummaryReset
 } = require('../utils/endAdenaOperations');
+const { isExcludedUserId } = require('../utils/excludedUsers');
 
 function findSummaryCell(cells, server, userName, aliases = {}) {
     const normalizedServer = normalizePayrollServer(server);
@@ -886,7 +887,7 @@ function createEndAdenaReconciliationService({
                 return null;
             });
             for (const message of collectionValues(fetched)) {
-                if (!message?.id || seenMessages.has(message.id) || message.author?.bot) continue;
+                if (!message?.id || seenMessages.has(message.id) || message.author?.bot || isExcludedUserId(CONFIG, message.author)) continue;
                 seenMessages.add(message.id);
                 const createdAtMs = new Date(message.createdAt || message.createdTimestamp || 0).getTime();
                 if (!Number.isFinite(createdAtMs) || createdAtMs < bounds.start.valueOf() || createdAtMs > now.valueOf()) continue;

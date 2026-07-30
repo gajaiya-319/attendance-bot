@@ -172,7 +172,11 @@ const CONFIG = {
     INACTIVE_CANDIDATE_DAYS: 3,
     NICKNAME_ROLE_SYNC: true,
     EXCEPTIONS: {
-        SHARED_SEAT_USER: process.env.SHARED_SEAT_USER_ID || null
+        SHARED_SEAT_USER: process.env.SHARED_SEAT_USER_ID || null,
+        EXCLUDED_USER_IDS: (process.env.EXCLUDED_USER_IDS || '1239447405749993533')
+            .split(',')
+            .map(id => id.trim())
+            .filter(Boolean)
     }
 };
 

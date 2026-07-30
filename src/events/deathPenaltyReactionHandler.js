@@ -1,6 +1,7 @@
 'use strict';
 
 const { getShiftSheetDayOfMonth } = require('../utils/shiftSheetDate');
+const { isExcludedUserId } = require('../utils/excludedUsers');
 
 function parseNameFromContent(content) {
     const match = String(content || '').match(/(?:^|\n)\s*-?\s*name\s*:\s*([^\n\r]+)/i);
@@ -179,7 +180,7 @@ function createDeathPenaltyReactionHandler({
 
     async function handleMessageCreate(message) {
         try {
-            if (!isEnabled() || message.author?.bot) return;
+            if (!isEnabled() || message.author?.bot || isExcludedUserId(CONFIG, message.author)) return;
             const server = normalizePayrollServer(getServerForChannel(message.channelId, CONFIG.DEATH_PENALTY_CHANNEL_IDS));
             if (!server || isSafetyZonePost(message.content)) return;
 
@@ -191,7 +192,7 @@ function createDeathPenaltyReactionHandler({
 
     async function syncMessageStatus(message, { pendingMessageIds = new Set() } = {}) {
         try {
-            if (!isEnabled() || message.author?.bot) return false;
+            if (!isEnabled() || message.author?.bot || isExcludedUserId(CONFIG, message.author)) return false;
             const server = normalizePayrollServer(getServerForChannel(message.channelId, CONFIG.DEATH_PENALTY_CHANNEL_IDS));
             if (!server || isSafetyZonePost(message.content)) return false;
 
@@ -227,7 +228,7 @@ function createDeathPenaltyReactionHandler({
 
     async function handleReactionAdd(reaction, user) {
         try {
-            if (!isEnabled() || user.bot) return;
+            if (!isEnabled() || user.bot || isExcludedUserId(CONFIG, user)) return;
             const resolved = await resolveReaction(reaction);
             let message = resolved?.message;
             if (!message) return;

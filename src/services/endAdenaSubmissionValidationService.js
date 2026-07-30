@@ -6,6 +6,7 @@ const {
     resolveSheetNameCandidates
 } = require('./purchaseSheetService');
 const { parseEndAdenaMessage } = require('../utils/endAdenaMessage');
+const { isExcludedUserId } = require('../utils/excludedUsers');
 
 const VALIDATION_MARKER = '**\uc5d4\ub4dc\uc544\ub370\ub098 \uc0ac\uc804\uac80\uc99d**';
 
@@ -208,7 +209,7 @@ function createEndAdenaSubmissionValidationService({
             : await message.channel?.messages?.fetch?.({ limit: 100 }).catch(() => null);
         if (fetched?.values) {
             for (const candidate of fetched.values()) {
-                if (!candidate?.id || candidate.id === message.id || candidate.author?.bot) continue;
+                if (!candidate?.id || candidate.id === message.id || candidate.author?.bot || isExcludedUserId(CONFIG, candidate.author)) continue;
                 const reactions = candidate.reactions?.cache;
                 const hasSuccess = Boolean(reactions?.find?.(item => item.emoji?.name === CONFIG.PURCHASE_SUCCESS_EMOJI));
                 const hasCancel = Boolean(reactions?.find?.(item => item.emoji?.name === CONFIG.PURCHASE_CANCEL_EMOJI));

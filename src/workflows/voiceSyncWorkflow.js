@@ -1,5 +1,7 @@
 'use strict';
 
+const { isExcludedUserId } = require('../utils/excludedUsers');
+
 const {
     buildManualResumeRequiredDm,
     buildLiveOffWarningDm
@@ -675,7 +677,7 @@ async function syncVoiceStates() {
 
         for (const voiceState of guild.voiceStates.cache.values()) {
             const member = voiceState.member || guild.members.cache.get(voiceState.id);
-            if (!member || member.user?.bot) continue;
+            if (!member || member.user?.bot || isExcludedUserId(CONFIG, member)) continue;
             const shift = determineShift(member);
             if (!shift) continue;
             const u = ensureUserData(member, shift);
@@ -696,7 +698,7 @@ async function syncVoiceStates() {
         }
 
         for (const member of guild.members.cache.values()) {
-            if (member.user.bot) continue;
+            if (member.user.bot || isExcludedUserId(CONFIG, member)) continue;
             const u = getAttendanceData()[member.id];
             if (!u) continue;
             if (getActiveLiveException(member.id, now) && activeVoiceIds.has(member.id)) continue;

@@ -2,6 +2,7 @@
 
 const { getShiftSheetDayOfMonth } = require('../utils/shiftSheetDate');
 const { parseEndAdenaMessage } = require('../utils/endAdenaMessage');
+const { isExcludedUserId } = require('../utils/excludedUsers');
 
 function getSheetName(member, parsedName) {
     const rawName = String(member?.displayName || member?.user?.username || '');
@@ -282,7 +283,7 @@ function createEndAdenaReactionHandler({
 
     async function handleMessageCreate(message) {
         try {
-            if (!isEnabled() || message.author?.bot) return;
+            if (!isEnabled() || message.author?.bot || isExcludedUserId(CONFIG, message.author)) return;
             const server = normalizePayrollServer(getServerForChannel(message.channelId, CONFIG.END_ADENA_CHANNEL_IDS));
             if (!server) return;
             if (hasReaction(message, CONFIG.PURCHASE_SUCCESS_EMOJI)) return;
@@ -305,7 +306,7 @@ function createEndAdenaReactionHandler({
             const resolvedMessage = message?.partial && typeof message.fetch === 'function'
                 ? await message.fetch().catch(() => null)
                 : message;
-            if (!resolvedMessage || resolvedMessage.author?.bot) return;
+            if (!resolvedMessage || resolvedMessage.author?.bot || isExcludedUserId(CONFIG, resolvedMessage.author)) return;
             if (submissionValidationService) {
                 const validation = await prevalidateMessage(resolvedMessage, { notify: true });
                 if (
@@ -355,7 +356,7 @@ function createEndAdenaReactionHandler({
 
     async function syncMessageStatus(message, { pendingMessageIds = new Set() } = {}) {
         try {
-            if (!isEnabled() || message.author?.bot) return false;
+            if (!isEnabled() || message.author?.bot || isExcludedUserId(CONFIG, message.author)) return false;
             const server = normalizePayrollServer(getServerForChannel(message.channelId, CONFIG.END_ADENA_CHANNEL_IDS));
             if (!server || !parseEndAdenaMessage(message.content)) return false;
 
@@ -405,7 +406,7 @@ function createEndAdenaReactionHandler({
 
     async function handleReactionAdd(reaction, user) {
         try {
-            if (!isEnabled() || user.bot) return;
+            if (!isEnabled() || user.bot || isExcludedUserId(CONFIG, user)) return;
             const resolved = await resolveReaction(reaction);
             let message = resolved?.message;
             if (!message) return;

@@ -5,6 +5,7 @@ const {
     formatPurchaseRequestOwnerDm,
     formatPurchaseApprovedDm
 } = require('../utils/purchaseDmMessages');
+const { isExcludedUserId } = require('../utils/excludedUsers');
 
 function getPurchaseSheetDayOfMonth(moment, timezone, dateInput = Date.now(), shift = null) {
     return getShiftSheetDayOfMonth(moment, timezone, shift, dateInput);
@@ -346,7 +347,7 @@ function createPurchaseReactionHandler({
 
     async function handleMessageCreate(message) {
         try {
-            if (!isEnabled() || message.author?.bot || !isPurchaseChannel(message)) return;
+            if (!isEnabled() || message.author?.bot || isExcludedUserId(CONFIG, message.author) || !isPurchaseChannel(message)) return;
             const parsed = parsePurchaseMessage(message.content, CONFIG.PURCHASE_UNIT_PRICE);
             if (!parsed) return;
 
@@ -366,7 +367,7 @@ function createPurchaseReactionHandler({
 
     async function syncMessageStatus(message, { pendingMessageIds = new Set() } = {}) {
         try {
-            if (!isEnabled() || message.author?.bot || !isPurchaseChannel(message)) return false;
+            if (!isEnabled() || message.author?.bot || isExcludedUserId(CONFIG, message.author) || !isPurchaseChannel(message)) return false;
             const parsed = parsePurchaseMessage(message.content, CONFIG.PURCHASE_UNIT_PRICE);
             if (!parsed) return false;
 
@@ -402,7 +403,7 @@ function createPurchaseReactionHandler({
 
     async function handleReactionAdd(reaction, user) {
         try {
-            if (!isEnabled() || user.bot) return;
+            if (!isEnabled() || user.bot || isExcludedUserId(CONFIG, user)) return;
             const resolved = await resolveReaction(reaction);
             let message = resolved?.message;
             if (!message || !isPurchaseChannel(message)) return;

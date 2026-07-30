@@ -31,6 +31,7 @@ const {
     MessageFlags,
     PermissionFlagsBits
 } = require('./appDependencies');
+const { isExcludedUserId } = require('../utils/excludedUsers');
 
 function createServiceLayer(ctx) {
     const {
@@ -111,6 +112,7 @@ function createServiceLayer(ctx) {
 
     async function syncCurrentWorkerProfile(member) {
         if (!member || member.user?.bot) return { ok: false, skipped: true, reason: 'missing-member' };
+        if (isExcludedUserId(CONFIG, member)) return { ok: false, skipped: true, reason: 'excluded-user' };
         const name = roleService.getWorkerNicknameBase(member.displayName || member.user?.username || 'Unknown');
         const profile = getWorkerProfileForRawSync(member);
         if (!profile) {
@@ -126,6 +128,7 @@ function createServiceLayer(ctx) {
 
     async function removeCurrentWorkerProfile(member) {
         if (!member || member.user?.bot) return { ok: false, skipped: true, reason: 'missing-member' };
+        if (isExcludedUserId(CONFIG, member)) return { ok: false, skipped: true, reason: 'excluded-user' };
         const name = roleService.getWorkerNicknameBase(member.displayName || member.user?.username || 'Unknown');
         return rawAttendanceSheetService.removeWorkerProfile({ name });
     }
@@ -135,7 +138,7 @@ function createServiceLayer(ctx) {
         if (typeof rawAttendanceSheetService.syncWorkerProfiles === 'function') {
             const profiles = [];
             for (const member of members) {
-                if (!member || member.user?.bot) continue;
+                if (!member || member.user?.bot || isExcludedUserId(CONFIG, member)) continue;
                 const profile = getWorkerProfileForRawSync(member);
                 if (!profile) continue;
                 profiles.push({
@@ -152,7 +155,7 @@ function createServiceLayer(ctx) {
 
         let synced = 0;
         for (const member of members) {
-            if (!member || member.user?.bot) continue;
+            if (!member || member.user?.bot || isExcludedUserId(CONFIG, member)) continue;
             const profile = getWorkerProfileForRawSync(member);
             if (!profile) continue;
             const result = await syncCurrentWorkerProfile(member);

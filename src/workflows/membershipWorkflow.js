@@ -1,6 +1,7 @@
 'use strict';
 
 const { getLiveExceptionsMap } = require('../utils/liveExceptionsAccess');
+const { isExcludedUserId } = require('../utils/excludedUsers');
 
 function createMembershipWorkflow(deps) {
     const {
@@ -35,7 +36,7 @@ async function syncWorkingRoles({ dryRun = false } = {}) {
     let removed = 0;
 
     for (const member of guild.members.cache.values()) {
-        if (member.user.bot) continue;
+        if (member.user.bot || isExcludedUserId(CONFIG, member)) continue;
         const user = getAttendanceData()[member.id];
         const shouldHave = Boolean(user?.checkedIn && !user?.dayOff && !user?.isFinished);
         const hasRole = member.roles.cache.has(CONFIG.ROLES.WORKING);
@@ -112,7 +113,7 @@ async function autoAssignGuestForUnassignedMembers(guild) {
     let changed = false;
 
     for (const member of guild.members.cache.values()) {
-        if (!member || member.user?.bot) continue;
+        if (!member || member.user?.bot || isExcludedUserId(CONFIG, member)) continue;
         if (isOwnerId(member.id)) continue;
         if (member.permissions?.has(PermissionFlagsBits.Administrator)) continue;
         if (hasManagedAttendanceRole(member)) continue;
@@ -165,7 +166,7 @@ async function autoAssignGuestForUnassignedMembers(guild) {
 }
 
 async function syncManualGuestNickname(oldMember, newMember) {
-    if (!CONFIG.ROLES.GUEST || !oldMember || !newMember || newMember.user?.bot) return false;
+    if (!CONFIG.ROLES.GUEST || !oldMember || !newMember || newMember.user?.bot || isExcludedUserId(CONFIG, newMember)) return false;
     const hadGuest = oldMember.roles?.cache?.has(CONFIG.ROLES.GUEST);
     const hasGuest = newMember.roles?.cache?.has(CONFIG.ROLES.GUEST);
     if (hadGuest || !hasGuest) return false;
@@ -205,6 +206,7 @@ async function canManageMemberNickname(member) {
 }
 
 async function syncNicknameFromAssignedRoles(oldMember, newMember) {
+    if (isExcludedUserId(CONFIG, newMember)) return false;
     const oldProfile = roleService.getWorkerRoleProfileFromMember(oldMember);
     const newProfile = roleService.getWorkerRoleProfileFromMember(newMember);
     if (!newProfile) return false;
@@ -245,6 +247,7 @@ async function syncNicknameFromAssignedRoles(oldMember, newMember) {
 }
 
 async function syncRolesFromStructuredNickname(newMember) {
+    if (isExcludedUserId(CONFIG, newMember)) return false;
     const profile = roleService.getWorkerRoleProfileFromNickname(newMember.displayName);
     if (!profile) return false;
 

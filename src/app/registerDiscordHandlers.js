@@ -2,6 +2,7 @@
 
 const { initPayrollCronSchedulers } = require('../scheduler/payrollCron');
 const { notifyPayrollOwners } = require('../utils/payrollOwnerNotify');
+const { isExcludedUserId } = require('../utils/excludedUsers');
 
 function registerDiscordHandlers(ctx) {
     let payrollCronStop = () => {};
@@ -206,12 +207,20 @@ function registerDiscordHandlers(ctx) {
             return null;
         }), 5000, null);
         if (!messages?.values) return 0;
-        const results = await Promise.all([...messages.values()].map(message => withTimeout(
+        const candidates = [...messages.values()].filter(message => !isExcludedUserId(CONFIG, message?.author));
+        const results = await Promise.all(candidates.map(message => withTimeout(
                 handler.syncMessageStatus(message, { pendingMessageIds }),
                 3000,
                 false
         )));
         return results.filter(Boolean).length;
+    }
+
+    function ignoreExcludedUser(handler, resolveUser) {
+        return (...args) => {
+            if (isExcludedUserId(CONFIG, resolveUser(...args))) return false;
+            return handler(...args);
+        };
     }
 
     async function syncPayrollReactionStatuses() {
@@ -239,20 +248,20 @@ function registerDiscordHandlers(ctx) {
         return { synced, pending: pending.length };
     }
 
-    client.on(Events.VoiceStateUpdate, voiceStateUpdateHandler);
-    client.on(Events.GuildMemberUpdate, guildMemberEventHandlers.update);
-    client.on(Events.GuildMemberRemove, guildMemberEventHandlers.remove);
-    client.on(Events.MessageCreate, dayOffMessageEventHandlers.create);
-    client.on(Events.MessageCreate, purchaseReactionHandler.messageCreate);
-    client.on(Events.MessageCreate, deathPenaltyReactionHandler.messageCreate);
-    client.on(Events.MessageCreate, endAdenaReactionHandler.messageCreate);
-    client.on(Events.MessageUpdate, dayOffMessageEventHandlers.update);
-    client.on(Events.MessageUpdate, endAdenaReactionHandler.messageUpdate);
-    client.on(Events.MessageReactionAdd, dayOffMessageEventHandlers.reactionAdd);
-    client.on(Events.MessageReactionAdd, purchaseReactionHandler.reactionAdd);
-    client.on(Events.MessageReactionAdd, deathPenaltyReactionHandler.reactionAdd);
-    client.on(Events.MessageReactionAdd, endAdenaReactionHandler.reactionAdd);
-    client.on(Events.MessageReactionRemove, dayOffMessageEventHandlers.reactionRemove);
+    client.on(Events.VoiceStateUpdate, ignoreExcludedUser(voiceStateUpdateHandler, (oldState, newState) => newState?.member || oldState?.member));
+    client.on(Events.GuildMemberUpdate, ignoreExcludedUser(guildMemberEventHandlers.update, (oldMember, newMember) => newMember || oldMember));
+    client.on(Events.GuildMemberRemove, ignoreExcludedUser(guildMemberEventHandlers.remove, member => member));
+    client.on(Events.MessageCreate, ignoreExcludedUser(dayOffMessageEventHandlers.create, message => message?.author));
+    client.on(Events.MessageCreate, ignoreExcludedUser(purchaseReactionHandler.messageCreate, message => message?.author));
+    client.on(Events.MessageCreate, ignoreExcludedUser(deathPenaltyReactionHandler.messageCreate, message => message?.author));
+    client.on(Events.MessageCreate, ignoreExcludedUser(endAdenaReactionHandler.messageCreate, message => message?.author));
+    client.on(Events.MessageUpdate, ignoreExcludedUser(dayOffMessageEventHandlers.update, (oldMessage, newMessage) => newMessage?.author || oldMessage?.author));
+    client.on(Events.MessageUpdate, ignoreExcludedUser(endAdenaReactionHandler.messageUpdate, (oldMessage, newMessage) => newMessage?.author || oldMessage?.author));
+    client.on(Events.MessageReactionAdd, ignoreExcludedUser(dayOffMessageEventHandlers.reactionAdd, (reaction, user) => user));
+    client.on(Events.MessageReactionAdd, ignoreExcludedUser(purchaseReactionHandler.reactionAdd, (reaction, user) => user));
+    client.on(Events.MessageReactionAdd, ignoreExcludedUser(deathPenaltyReactionHandler.reactionAdd, (reaction, user) => user));
+    client.on(Events.MessageReactionAdd, ignoreExcludedUser(endAdenaReactionHandler.reactionAdd, (reaction, user) => user));
+    client.on(Events.MessageReactionRemove, ignoreExcludedUser(dayOffMessageEventHandlers.reactionRemove, (reaction, user) => user));
 
     const interactionRouter = createInteractionRouter({
         handleChatInputCommand: chatInputCommandHandler,
@@ -265,7 +274,7 @@ function registerDiscordHandlers(ctx) {
         handleError: interactionErrorHandler
     });
 
-    client.on(Events.InteractionCreate, interactionRouter);
+    client.on(Events.InteractionCreate, ignoreExcludedUser(interactionRouter, interaction => interaction?.user || interaction?.member));
 
     const clientReadyHandler = createClientReadyHandler({
         CONFIG,

@@ -6,6 +6,7 @@ const {
     buildFinishedLiveOffReminderDm
 } = require('../utils/attendanceDmMessages');
 const { appendJsonLineWithRotation } = require('../utils/rotatingJsonl');
+const { isExcludedUserId } = require('../utils/excludedUsers');
 
 function createDayOffWorkflow(deps) {
     const {
@@ -430,7 +431,7 @@ async function submitDayOffRequestFromInteraction({
 }
 
 async function processDayOffMessage(message, { silent = false } = {}) {
-    if (!dayOffService.isDayOffChannel(message) || message.author?.bot) return;
+    if (!dayOffService.isDayOffChannel(message) || message.author?.bot || isExcludedUserId(CONFIG, message.author)) return;
     const parsed = dayOffService.parseDayOffRequest(message);
 
     if (!parsed.ok) {
@@ -511,6 +512,7 @@ async function approveDayOffMessage(message, approverMember = null, parsed = nul
         return;
     }
     const requestUserId = getDayOffReservationUserId(message, freshParsed);
+    if (isExcludedUserId(CONFIG, requestUserId)) return;
     const currentApprovalKey = getDayOffApprovalKey({
         ...existingReservation,
         messageId: message.id,
@@ -699,6 +701,7 @@ async function reconcileRecentDayOffMessages(limit = null) {
     for (const message of messages.values()) {
         if (isDayOffRequestPanelMessage(message)) continue;
         let reservation = getDayOffReservations()[message.id] || null;
+        if (isExcludedUserId(CONFIG, message.author) || isExcludedUserId(CONFIG, reservation?.userId)) continue;
         const reservationWasMissing = !reservation;
 
         if (!reservation) {
@@ -706,6 +709,7 @@ async function reconcileRecentDayOffMessages(limit = null) {
                 ? dayOffService.parsePostedDayOffRequestMessage(message)
                 : dayOffService.parseDayOffRequest(message);
             if (!parsed?.ok) continue;
+            if (isExcludedUserId(CONFIG, parsed.userId || parsed.requestUserId)) continue;
             const isPastRequest = parsed.leaveDate < recoveryCutoff;
             if (isPastRequest) continue;
             const recoverableApproval = await hasRecoverableDayOffApproval(message, true);

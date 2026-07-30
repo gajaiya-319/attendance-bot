@@ -13,6 +13,7 @@ const {
     incrementMonthlyAttendanceStat,
     markMonthlyOvertimeAward
 } = require('../utils/monthlyAttendanceStats');
+const { isExcludedUserId } = require('../utils/excludedUsers');
 
 function createScheduledJobsWorkflow(deps) {
     const {
@@ -723,6 +724,7 @@ async function autoOvertimeCheck() {
 }
 
 async function grantLiveException(targetMember, hours = null, reason, approverMember) {
+    if (isExcludedUserId(CONFIG, targetMember)) return { ok: false, message: 'Excluded user.' };
     const now = moment().tz(CONFIG.TIMEZONE);
     const shift = determineShift(targetMember);
     if (!shift) return { ok: false, message: '대상에게 DAY/NIGHT 역할이 없습니다.' };

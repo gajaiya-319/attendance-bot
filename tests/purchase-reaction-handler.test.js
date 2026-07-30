@@ -25,6 +25,7 @@ const CONFIG = {
     TIMEZONE: 'Asia/Manila',
     PURCHASE_OWNER_DM_IDS: ['owner'],
     OWNER_IDS: ['owner'],
+    EXCEPTIONS: { EXCLUDED_USER_IDS: ['excluded-user'] },
     ROLES: {
         HEINE: 'heine',
         PAAGRIO: 'paagrio',
@@ -568,6 +569,30 @@ assert(formatPurchaseApprovedDm({ quantity: 2 }).includes('Please check your pot
             'removeAllReactions',
             `react:${CONFIG.PURCHASE_FAILURE_EMOJI}`
         ]);
+    }
+
+    {
+        const calls = [];
+        const message = createMessage({ calls });
+        message.author.id = 'excluded-user';
+        const handler = createHandler({
+            message,
+            calls,
+            purchaseSheetService: {
+                addPurchase: async () => {
+                    throw new Error('excluded user must not reach purchase writes');
+                }
+            }
+        });
+
+        await handler.messageCreate(message);
+        await handler.reactionAdd({
+            partial: false,
+            emoji: { name: CONFIG.PURCHASE_APPROVAL_EMOJI },
+            message
+        }, { id: 'excluded-user', bot: false });
+
+        assert.deepStrictEqual(calls, [], 'excluded user messages and reactions are ignored');
     }
 
     console.log('purchase-reaction-handler tests passed');
