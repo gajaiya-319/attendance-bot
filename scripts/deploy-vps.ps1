@@ -89,7 +89,7 @@ try {
     Invoke-Checked "scp" @("-i", $KeyPath, $archive, "${HostName}:$remoteArchive")
 
     $installCommand = if ($SkipInstall) { "node -v" } else { "npm ci --omit=dev" }
-    $cronLine = "35 18 * * * cd $RemotePath && { npm run ops:external-smoke && npm run ops:security-audit && npm run ops:recovery-drill && npm run dr:backup && npm run dr:verify; npm run ops:evidence; } >> logs/disaster-recovery-cron.log 2>&1 # attendance-bot-dr`n"
+    $cronLine = "35 18 * * * cd $RemotePath && { npm run staging:replay:runtime && npm run ops:external-smoke && npm run ops:security-audit && npm run ops:recovery-drill && npm run dr:backup && npm run dr:verify; npm run ops:evidence; } >> logs/disaster-recovery-cron.log 2>&1 # attendance-bot-dr`n"
     $cronBase64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($cronLine))
     $remoteCommand = @"
 set -eE
@@ -127,6 +127,7 @@ sleep 10
 npm run ops:external-smoke
 npm run ops:security-audit
 npm run ops:recovery-drill
+npm run staging:replay:runtime
 npm run ops:health -- --allow-end-adena-degraded
 npm run dr:backup
 npm run dr:verify

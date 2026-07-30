@@ -162,6 +162,14 @@ function runGoogleConfigCheck() {
     run('node', ['scripts/check-google-config.js']);
 }
 
+function runStagingReplayGate() {
+    run('node', [
+        'scripts/run-staging-replay.js',
+        '--report',
+        'outputs/staging-replay-predeploy-report.json'
+    ]);
+}
+
 function isRuntimeDataPath(path) {
     return [
         'attendanceData.json',
@@ -220,6 +228,7 @@ function main() {
     runMojibakeAudit();
     runRawAttendanceDashboardAudit();
     runGoogleConfigCheck();
+    runStagingReplayGate();
     printGitStatusSummary();
     console.log('\nPredeploy check passed.');
 }

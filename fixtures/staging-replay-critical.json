@@ -1,0 +1,138 @@
+{
+  "version": 1,
+  "timezone": "Asia/Manila",
+  "attendanceScenarios": [
+    {
+      "id": "day-overtime-55-minutes",
+      "events": [
+        { "at": "2026-07-27T09:00:00+08:00", "type": "clock_in_confirmed", "source": "button", "userId": "worker-day", "userName": "Worker Day", "shift": "day" },
+        { "at": "2026-07-27T21:05:00+08:00", "type": "overtime_started", "source": "auto", "userId": "worker-day", "userName": "Worker Day", "shift": "day" },
+        { "at": "2026-07-27T21:55:00+08:00", "type": "clock_out_confirmed", "source": "button", "userId": "worker-day", "userName": "Worker Day", "shift": "day" }
+      ],
+      "expectedRecords": [
+        {
+          "userId": "worker-day",
+          "workDate": "2026-07-27",
+          "fields": { "finalStatus": "FINISHED", "overtimeMinutes": 55 },
+          "flagsInclude": ["ON_TIME", "OVERTIME"],
+          "flagsExclude": ["EARLY_OUT"]
+        }
+      ]
+    },
+    {
+      "id": "night-overtime-crosses-midnight",
+      "events": [
+        { "at": "2026-07-27T21:00:00+08:00", "type": "clock_in_confirmed", "source": "button", "userId": "worker-night", "userName": "Worker Night", "shift": "night" },
+        { "at": "2026-07-28T09:05:00+08:00", "type": "overtime_started", "source": "auto", "userId": "worker-night", "userName": "Worker Night", "shift": "night" },
+        { "at": "2026-07-28T10:00:00+08:00", "type": "clock_out_confirmed", "source": "button", "userId": "worker-night", "userName": "Worker Night", "shift": "night" }
+      ],
+      "expectedRecords": [
+        {
+          "userId": "worker-night",
+          "workDate": "2026-07-27",
+          "fields": { "finalStatus": "FINISHED", "overtimeMinutes": 60 },
+          "flagsInclude": ["ON_TIME", "OVERTIME"],
+          "flagsExclude": ["EARLY_OUT"]
+        }
+      ]
+    },
+    {
+      "id": "absent-converted-to-late",
+      "events": [
+        {
+          "at": "2026-07-27T09:10:00+08:00",
+          "type": "recorded_status_changed",
+          "source": "final-absent",
+          "userId": "worker-late",
+          "userName": "Worker Late",
+          "shift": "day",
+          "meta": { "attendanceStatus": { "to": "ABSENT" } }
+        },
+        { "at": "2026-07-27T09:30:00+08:00", "type": "clock_in_confirmed", "source": "button", "userId": "worker-late", "userName": "Worker Late", "shift": "day" },
+        { "at": "2026-07-27T21:00:00+08:00", "type": "clock_out_confirmed", "source": "button", "userId": "worker-late", "userName": "Worker Late", "shift": "day" }
+      ],
+      "expectedRecords": [
+        {
+          "userId": "worker-late",
+          "workDate": "2026-07-27",
+          "fields": { "finalStatus": "FINISHED", "lateMinutes": 30 },
+          "flagsInclude": ["LATE", "ABSENT_CONVERTED_TO_LATE"]
+        }
+      ]
+    }
+  ],
+  "payrollScenarios": [
+    {
+      "id": "concurrent-duplicate-death-penalty",
+      "events": [
+        {
+          "batch": 1,
+          "type": "payroll-mutation",
+          "kind": "death-penalty",
+          "payload": { "messageId": "staging-duplicate-message", "server": "PAAGRIO", "shift": "DAY", "userName": "Gab", "amount": 1000, "dayOfMonth": 1 }
+        },
+        {
+          "batch": 1,
+          "type": "payroll-mutation",
+          "kind": "death-penalty",
+          "payload": { "messageId": "staging-duplicate-message", "server": "PAAGRIO", "shift": "DAY", "userName": "Gab", "amount": 1000, "dayOfMonth": 1 }
+        }
+      ],
+      "expected": {
+        "cells": { "H5": 3000 },
+        "successfulOperations": 1,
+        "duplicateResults": 1,
+        "updateRequests": 1,
+        "batchUpdateRequests": 0
+      }
+    },
+    {
+      "id": "end-adena-regular-plus-overtime",
+      "events": [
+        {
+          "batch": 1,
+          "type": "payroll-mutation",
+          "kind": "end-adena",
+          "payload": { "messageId": "staging-end-adena-regular", "server": "PAAGRIO", "shift": "DAY", "userName": "Gab", "amount": 210000, "rawAmount": 210000, "dayOfMonth": 1 }
+        },
+        {
+          "batch": 1,
+          "type": "payroll-mutation",
+          "kind": "end-adena",
+          "payload": { "messageId": "staging-end-adena-overtime", "server": "PAAGRIO", "shift": "DAY", "userName": "Gab (OT)", "amount": 60000, "rawAmount": 60000, "dayOfMonth": 1 }
+        }
+      ],
+      "expected": {
+        "cells": { "F5": 270000, "L14": 270000 },
+        "successfulOperations": 2,
+        "duplicateResults": 0,
+        "updateRequests": 0,
+        "batchUpdateRequests": 2
+      }
+    },
+    {
+      "id": "approve-then-cancel-restores-value",
+      "events": [
+        {
+          "batch": 1,
+          "type": "payroll-mutation",
+          "kind": "death-penalty",
+          "payload": { "messageId": "staging-cancel-message", "server": "PAAGRIO", "shift": "DAY", "userName": "Gab", "amount": 1000, "dayOfMonth": 1 }
+        },
+        {
+          "batch": 2,
+          "type": "payroll-mutation",
+          "kind": "death-penalty",
+          "payload": { "messageId": "staging-cancel-message", "server": "PAAGRIO", "shift": "DAY", "userName": "Gab", "amount": -1000, "dayOfMonth": 1 }
+        }
+      ],
+      "expected": {
+        "cells": { "H5": 2000 },
+        "successfulOperations": 2,
+        "duplicateResults": 0,
+        "updateRequests": 2,
+        "batchUpdateRequests": 0
+      }
+    }
+  ]
+}
