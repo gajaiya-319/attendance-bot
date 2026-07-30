@@ -491,8 +491,8 @@ function createPayrollArchiveService({
                     '\uCD1D \uD68D\uB4DD \uC544\uB370\uB098',
                     '\uCD1D \uAE09\uC5EC',
                     '\uC218\uC218\uB8CC 5%',
-                    '\uC9C1\uC6D0 65%',
-                    '\uC624\uB108 35%',
+                    '\uC9C1\uC6D0 70%',
+                    '\uC624\uB108 30%',
                     '\uCD1D \uD398\uC18C',
                     '\uC800\uC7A5\uC790'
                 ]]

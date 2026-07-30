@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 
 require('dotenv').config();
 const { google } = require('googleapis');
@@ -28,16 +28,16 @@ async function dumpTab(sheets, tab) {
 async function checkRecentOnWorklist(sheets) {
     const meta = await sheets.spreadsheets.get({ spreadsheetId: id, fields: 'sheets.properties.title' });
     const titles = (meta.data.sheets || []).map(s => s.properties?.title);
-    if (!titles.includes('최근_3일_요약')) {
-        console.log('\nWork list: no 최근_3일_요약 tab');
+    if (!titles.includes('理쒓렐_3???붿빟')) {
+        console.log('\nWork list: no 理쒓렐_3???붿빟 tab');
         return;
     }
     const res = await sheets.spreadsheets.values.get({
         spreadsheetId: id,
-        range: "'최근_3일_요약'!B3:H8",
+        range: "'理쒓렐_3???붿빟'!B3:H8",
         valueRenderOption: 'UNFORMATTED_VALUE'
     });
-    console.log('\nWork list 최근_3일_요약 B3:H8:', JSON.stringify(res.data.values, null, 2));
+    console.log('\nWork list 理쒓렐_3???붿빟 B3:H8:', JSON.stringify(res.data.values, null, 2));
 }
 
 async function main() {
@@ -47,7 +47,7 @@ async function main() {
     });
     const sheets = google.sheets({ version: 'v4', auth });
     await dumpTab(sheets, process.env.PURCHASE_PAAGRIO_TAB_NAME || 'Paagrio Great');
-    await dumpTab(sheets, process.env.PURCHASE_HEINE_TAB_NAME || 'Heine Great');
+    await dumpTab(sheets, process.env.PURCHASE_VALACAS_TAB_NAME || process.env.PURCHASE_HEINE_TAB_NAME || 'Valakas Great');
     await checkRecentOnWorklist(sheets);
 }
 

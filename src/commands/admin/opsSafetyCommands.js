@@ -19,8 +19,8 @@ const KO = {
 
 function canonicalName(value) {
     const name = String(value || '')
-        .replace(/\s*[-\u2013\u2014]\s*(?:(?:Great\s*)?(?:Manager|Trainee|Traine)\s+)?(?:[PH]\s*)?(?:Day|Night)\s*Time(?:\s*\([^)]*\))?(?:\s+.*)?$/i, ' ')
-        .replace(/\s*[-\u2013\u2014]\s*(?:(?:Great\s*)?(?:Manager|Trainee|Traine)\s+)?(?:Heine|Paagrio)\s*(?:Day|Night)\s*Time(?:\s*\([^)]*\))?(?:\s+.*)?$/i, ' ')
+        .replace(/\s*[-\u2013\u2014]\s*(?:(?:Great\s*)?(?:Manager|Trainee|Traine)\s+)?(?:[PVH]\s*)?(?:Day|Night)\s*Time.*$/i, ' ')
+        .replace(/\s*[-\u2013\u2014]\s*(?:(?:Great\s*)?(?:Manager|Trainee|Traine)\s+)?(?:Valacas|Heine|Paagrio)\s*(?:Day|Night)\s*Time.*$/i, ' ')
         .replace(/\s*[-\u2013\u2014]\s*(?:Great\s*)?(?:Manager|Trainee|Guest)(?:\s+.*)?$/i, ' ')
         .replace(/\b(?:over\s*time|overtime|ot)\b/gi, ' ')
         .replace(/ding\s*[-\u2013\u2014]\s*dong/gi, 'Ding dong')

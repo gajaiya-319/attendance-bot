@@ -55,7 +55,7 @@ function createPayrollArchiveCommand({
             const message = result.code === 'archive-in-progress'
                 ? '다른 급여기록 저장이 진행 중입니다. 잠시 후 다시 시도해주세요.'
                 : result.code === 'summary-not-ready' || String(result.code || '').includes('not-ready')
-                    ? '현재 정산표 값이 아직 준비되지 않았습니다. Paagrio/Heine Great 탭 합계 행을 확인하거나 createPerfectPayrollSheets를 실행했는지 확인해주세요.'
+                    ? '현재 정산표 값이 아직 준비되지 않았습니다. Paagrio/Valacas Great 탭 합계 행을 확인하거나 createPerfectPayrollSheets를 실행했는지 확인해주세요.'
                     : `급여 기록 실패: ${result.code}`;
             return interaction.editReply({ content: message }).then(() => autoDel());
         }

@@ -21,7 +21,10 @@ const helpers = createDashboardRenderHelpers({
     })[id],
     getAttendanceUser: id => ({
         z: { name: 'Zurin - Great manager', otStartedAt: moment.tz('2026-05-29T21:01:15', 'Asia/Manila').toISOString() }
-    })[id]
+    })[id],
+    getLiveOffSummary: user => ({
+        liveoff: { trackedMinutes: 17, clockOutInMinutes: 13 }
+    })[user?.id] || null
 });
 
 assert.strictEqual(helpers.getDashboardName({ dashboardName: 'Robin - Night', name: 'Ignored' }), 'Robin');
@@ -40,7 +43,7 @@ assert.strictEqual(
 
 assert.strictEqual(
     helpers.renderSummaryBox([['TOTAL', 13], ['ACTIVE', 8]]),
-    "```text\nTOTAL      13\nACTIVE      8\n             \n             \n```"
+    "```text\nTOTAL      13\nACTIVE      8\n             \n             \n             \n```"
 );
 
 assert.strictEqual(
@@ -64,20 +67,102 @@ assert.strictEqual(
 );
 assert.strictEqual(
     helpers.renderStatusList([
-        { name: 'Waiting Off', voiceJoinedAt: moment.tz('2026-05-29T22:50:15', 'Asia/Manila').toISOString() },
-        { name: 'Waiting Live', preShiftLiveAt: moment.tz('2026-05-29T22:55:15', 'Asia/Manila').toISOString() }
+        { name: 'Waiting Off', shift: 'night', voiceJoinedAt: moment.tz('2026-05-29T22:50:15', 'Asia/Manila').toISOString() },
+        { name: 'Waiting Live', shift: 'night', preShiftLiveAt: moment.tz('2026-05-29T22:55:15', 'Asia/Manila').toISOString() }
     ], 'S', now, 'standby'),
-    "```\nS Waiting Live      LIVE 10:55 PM [pre-shift live]\nS Waiting Off       OFF  10:50 PM [not checked in]\n```"
+    "```\nS Waiting Live      LIVE     10:55 PM | ABS 30m\nS Waiting Off       WAIT NO LIVE 10:50 PM | ABS 30m\n```"
+);
+assert.strictEqual(
+    helpers.renderStatusList([
+        {
+            name: 'Offline Waiting',
+            voiceJoinedAt: moment.tz('2026-05-29T08:46:15', 'Asia/Manila').toISOString(),
+            shift: 'night',
+            dashboardVoiceConnected: false
+        }
+    ], 'S', now, 'standby'),
+    "```\nS Offline Waiting   NO VOICE CH --:-- | ABS 30m\n```"
 );
 assert.strictEqual(
     helpers.renderStatusList([{ id: 'robin', name: 'ROBIN - Night' }], 'EX', now, 'exception'),
     "```\nEX ROBIN             0시간 30분 남음\n```"
 );
 assert.strictEqual(
+    helpers.renderStatusList([{
+        id: 'liveoff',
+        name: 'Live Off Worker',
+        liveOffStartedAt: moment.tz('2026-05-29T22:49:15', 'Asia/Manila').toISOString(),
+        liveOffWarningMarks: [10]
+    }], 'LO', now, 'liveoff'),
+    "```\nLO Live Off Worker   NOW 12m | TOT 17m | W10 | OUT 13m\n```"
+);
+assert.strictEqual(helpers.renderAttentionSummary({}, now), 'NONE');
+assert.strictEqual(
+    helpers.renderAttentionSummary({
+        liveOff: [{
+            id: 'liveoff',
+            name: 'Live Off Worker',
+            liveOffWarningMarks: [10]
+        }],
+        disconnected: [{
+            name: 'Disconnected Worker',
+            disconnectedAt: moment.tz('2026-05-29T22:41:15', 'Asia/Manila').toISOString()
+        }],
+        absent: [{
+            name: 'Absent Worker',
+            shift: 'night'
+        }],
+        earlyFinished: [{
+            name: 'Early Worker',
+            dashboardEarlyOutMins: 83
+        }],
+        excessiveLate: [{
+            name: 'Over Late Worker',
+            shift: 'night'
+        }],
+        standby: [{
+            name: 'Standby Worker',
+            shift: 'night',
+            voiceJoinedAt: moment.tz('2026-05-29T22:50:15', 'Asia/Manila').toISOString()
+        }]
+    }, now),
+    "```\n📴LIVEOFF  Live Off Work  OFF 17m -> LIVE ON\n⚡DC       Disconnected   DC 20m -> REJOIN\n❌ABSENT   Absent Worker  NO SHOW 1h30 -> ABSENT\n⚠️EARLYOUT Early Worker   EARLY 1h23 -> Mgr chk\n⚠️2H LATE Over Late Wor  LATE 1h30 -> Mgr chk\n⏳WAIT     Standby Worke  WAIT NO LIVE | ABS 30m\n```"
+);
+assert.strictEqual(
     helpers.renderOvertimeList(now, [{ id: 'z', type: 'AUTO' }]),
     "```\nA-OT  Zurin             2시간 0분\n```"
 );
 assert.strictEqual(helpers.renderOvertimeList(now, []), 'NONE');
+
+const overtimeFallbackNow = moment.tz('2026-05-29T20:45:00', 'Asia/Manila');
+const overtimeFallbackHelpers = createDashboardRenderHelpers({
+    moment,
+    timezone: 'Asia/Manila',
+    padWidth,
+    truncateWidth,
+    formatDuration,
+    getShiftBounds: () => ({
+        start: overtimeFallbackNow.clone().subtract(11, 'hours'),
+        end: overtimeFallbackNow.clone().subtract(45, 'minutes')
+    }),
+    getAttendanceUser: id => ({
+        g: {
+            name: 'Giru Kun - P Day Time',
+            shift: 'day',
+            checkInRaw: overtimeFallbackNow.clone().subtract(11, 'hours').toISOString()
+        }
+    })[id]
+});
+assert.strictEqual(
+    overtimeFallbackHelpers.renderOvertimeList(overtimeFallbackNow, [{ id: 'g', type: 'AUTO' }]),
+    "```\nA-OT  Giru Kun          0시간 45분\n```",
+    'AUTO OT without startedAt uses scheduled shift end instead of check-in time'
+);
+assert.strictEqual(
+    overtimeFallbackHelpers.renderAttentionSummary({ overtime: [{ id: 'g', type: 'AUTO' }] }, overtimeFallbackNow),
+    "```\n🔥OT       Giru Kun       OT 45m -> WORKING\n```",
+    'admin attention shows active overtime elapsed time'
+);
 
 assert.match(helpers.renderDashboardHeader(now), /PH TIME: \*\*11:01:15 PM\*\*/);
 assert.match(helpers.renderDashboardHeader(now), /\[\s*FRI, MAY 29, 2026\s*\]/);

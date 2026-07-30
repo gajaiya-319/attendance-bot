@@ -31,9 +31,9 @@ function createPayrollLiveSummarySyncService({
             CONFIG,
             logger,
             content: [
-                `⚠️ **최근_3일_요약 동기화** 연속 ${consecutiveFailures}회 실패`,
+                `⚠️ **최근 3일 요약 동기화 연속 ${consecutiveFailures}회 실패**`,
                 `원인: \`${detail}\``,
-                `조치: Great 탭 확인 → \`npm run ops:sync-live-3day\` 또는 \`npm run ops:google-check\``
+                '조치: Great 탭 확인 후 `npm run ops:sync-live-3day` 또는 `npm run ops:google-check`를 실행하세요.'
             ].join('\n')
         });
     }
@@ -49,7 +49,7 @@ function createPayrollLiveSummarySyncService({
 
     async function sync() {
         if (running) {
-            logger.warn?.('[PAYROLL LIVE SYNC] Skip — previous run still active.');
+            logger.warn?.('[PAYROLL LIVE SYNC] Skip - previous run still active.');
             return { ok: false, code: 'busy' };
         }
         running = true;

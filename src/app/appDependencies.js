@@ -44,7 +44,16 @@ const { createPayrollLiveSummarySyncService } = require('../services/payrollLive
 const { createOpsQueueService } = require('../services/opsQueueService');
 const { createPayrollOperationLogService } = require('../services/payrollOperationLogService');
 const { createPayrollArchiveService } = require('../services/payrollArchiveService');
+const { createPayrollIntegrityAuditService } = require('../services/payrollIntegrityAuditService');
+const { createEndAdenaReconciliationService } = require('../services/endAdenaReconciliationService');
+const { createEndAdenaFreshnessService } = require('../services/endAdenaFreshnessService');
+const { createEndAdenaSubmissionValidationService } = require('../services/endAdenaSubmissionValidationService');
 const { createRawAttendanceSheetService } = require('../services/rawAttendanceSheetService');
+const { createAttendanceEventLedger } = require('../services/attendanceEventLedger');
+const { createAttendanceAutoRepairService } = require('../services/attendanceAutoRepairService');
+const { createBackgroundJobQueueService } = require('../services/backgroundJobQueueService');
+const { createSelfHealingSupervisorService } = require('../services/selfHealingSupervisorService');
+const { projectAttendanceFromEventLog } = require('../services/attendanceProjectionService');
 const { createMaintenanceOverrideService } = require('../services/maintenanceOverrideService');
 const { collectStatusTransitionWarnings } = require('../services/stateTransitionPolicy');
 const { buildCommandDefinitions, hiddenCommandAliases } = require('../commands/definitions');
@@ -61,6 +70,7 @@ const { createOpsSafetyCommands } = require('../commands/admin/opsSafetyCommands
 const { createPayrollAuditCommand } = require('../commands/admin/payrollAuditCommand');
 const { createPayrollArchiveCommand } = require('../commands/admin/payrollArchiveCommand');
 const { createMaintenanceCommands } = require('../commands/admin/maintenanceCommands');
+const { createEndAdenaReviewCommand } = require('../commands/admin/endAdenaReviewCommand');
 const { createUserAdminCommands } = require('../commands/admin/userAdminCommands');
 const { createMyInfoCommand } = require('../commands/user/myInfoCommand');
 const {
@@ -158,7 +168,16 @@ module.exports = {
     createOpsQueueService,
     createPayrollOperationLogService,
     createPayrollArchiveService,
+    createPayrollIntegrityAuditService,
+    createEndAdenaReconciliationService,
+    createEndAdenaFreshnessService,
+    createEndAdenaSubmissionValidationService,
     createRawAttendanceSheetService,
+    createAttendanceEventLedger,
+    createAttendanceAutoRepairService,
+    createBackgroundJobQueueService,
+    createSelfHealingSupervisorService,
+    projectAttendanceFromEventLog,
     createMaintenanceOverrideService,
     collectStatusTransitionWarnings,
     buildCommandDefinitions,
@@ -177,6 +196,7 @@ module.exports = {
     createPayrollAuditCommand,
     createPayrollArchiveCommand,
     createMaintenanceCommands,
+    createEndAdenaReviewCommand,
     createUserAdminCommands,
     createMyInfoCommand,
     createAutoDelete,

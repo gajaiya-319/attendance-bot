@@ -19,6 +19,7 @@ function createReportRenderer({
             safeNumber(user.totalNormal),
             safeNumber(user.totalAbsent),
             safeNumber(user.totalLate),
+            safeNumber(user.totalExcessiveLate),
             safeNumber(user.totalEarly),
             safeNumber(user.totalOT),
             safeNumber(user.offCount)
@@ -30,6 +31,7 @@ function createReportRenderer({
             safeNumber(user.totalNormal),
             safeNumber(user.totalAbsent),
             safeNumber(user.totalLate),
+            safeNumber(user.totalExcessiveLate),
             safeNumber(user.totalEarly),
             safeNumber(user.totalOT),
             safeNumber(user.offCount)
@@ -45,7 +47,7 @@ function createReportRenderer({
     }
 
     function renderReportMetricHeader() {
-        return '점수|이름       |정 결 지 조 연 휴|DC';
+        return '점수|이름       |정 결 지 2H 조 연 휴|DC';
     }
 
     function renderReportTopRow(user, index) {
@@ -56,7 +58,7 @@ function createReportRenderer({
     }
 
     function renderReportStatsLegend() {
-        return '순위|이름      |점수|정 결 지 조 연 휴';
+        return '순위|이름      |점수|정 결 지 2H 조 연 휴';
     }
 
     function formatDurationClock(minutes) {

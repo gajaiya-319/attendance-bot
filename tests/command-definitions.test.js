@@ -84,6 +84,7 @@ const pendingKo = '\uc791\uc5c5\ub300\uae30';
 const retryKo = '\uc791\uc5c5\uc7ac\uc2dc\ub3c4';
 const payrollRecordKo = '\uae09\uc5ec\uae30\ub85d';
 const forceEarlyOutKo = '\uac15\uc81c\uc870\uae30\ud1f4\uadfc';
+const endAdenaReviewKo = '\uc5d4\ub4dc\uc544\ub370\ub098\ud655\uc778';
 
 assert(commandNames.includes(opsCheckKo));
 assert(commandNames.includes('ops-check'));
@@ -109,6 +110,11 @@ assert(visibleNames.includes(payrollRecordKo));
 assert(!commandNames.includes('ranking'));
 
 assert(commandNames.includes(forceEarlyOutKo));
+assert(commandNames.includes(endAdenaReviewKo));
+assert(commandNames.includes('end-adena-review'));
+assert(hiddenCommandAliases.has('end-adena-review'));
+assert(visibleNames.includes(endAdenaReviewKo));
+assert(!visibleNames.includes('end-adena-review'));
 assert(visibleNames.includes(forceEarlyOutKo));
 assert(commandNames.includes('dayoff-panel'));
 assert(visibleNames.includes('dayoff-panel'));

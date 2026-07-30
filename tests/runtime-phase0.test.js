@@ -2,6 +2,7 @@
 
 const assert = require('assert');
 const path = require('path');
+const os = require('os');
 const fsSync = require('fs');
 const moment = require('moment-timezone');
 const { createSystemStateBridge } = require('../src/runtime/systemStateBridge');
@@ -35,6 +36,9 @@ function createLiveState() {
 }
 
 (async () => {
+    const tmpDir = fsSync.mkdtempSync(path.join(os.tmpdir(), 'attendance-runtime-phase0-'));
+    const dataPath = path.join(tmpDir, 'attendanceData.json');
+    const backupPath = path.join(tmpDir, 'attendanceData.bak');
     const { getLiveState, setLiveState, state } = createLiveState();
     const dataStore = createDataStore({
         config: {
@@ -42,9 +46,9 @@ function createLiveState() {
             DAY_CHAN: 'day',
             NIGHT_CHAN: 'night',
             FILES: {
-                DATA: path.join(__dirname, 'tmp-runtime-phase0-data.json'),
-                BACKUP: path.join(__dirname, 'tmp-runtime-phase0-data.bak'),
-                BACKUP_DIR: path.join(__dirname, 'tmp-runtime-phase0-backups'),
+                DATA: dataPath,
+                BACKUP: backupPath,
+                BACKUP_DIR: path.join(tmpDir, 'backups'),
                 MAX_BACKUPS: 2
             }
         },
@@ -91,7 +95,7 @@ function createLiveState() {
     });
 
     await persistence.saveSystemAsync();
-    assert.ok(fsSync.existsSync(path.join(__dirname, 'tmp-runtime-phase0-data.json')));
+    assert.ok(fsSync.existsSync(dataPath));
 
     const startup = createStartupRuntime({
         CONFIG: {
@@ -123,12 +127,7 @@ function createLiveState() {
     assert.ok(buildInfo.fileCount > 0);
     assert.match(buildInfo.hash, /^[a-f0-9]{8}$/);
 
-    try {
-        fsSync.unlinkSync(path.join(__dirname, 'tmp-runtime-phase0-data.json'));
-    } catch (_) {}
-    try {
-        fsSync.unlinkSync(path.join(__dirname, 'tmp-runtime-phase0-data.bak'));
-    } catch (_) {}
+    fsSync.rmSync(tmpDir, { recursive: true, force: true });
 
     console.log('runtime-phase0 tests passed');
 })().catch(error => {

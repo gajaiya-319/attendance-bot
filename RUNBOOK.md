@@ -1,77 +1,71 @@
-# 출퇴근·급여 봇 운영 RUNBOOK
+﻿# 異쒗눜洹셋룰툒??遊??댁쁺 RUNBOOK
 
-로컬 PM2 프로세스 `attendance-bot` (`index.js`). 상태는 `attendanceData.json` + `logs/` + Google Sheets.
+濡쒖뺄 PM2 ?꾨줈?몄뒪 `attendance-bot` (`index.js`). ?곹깭??`attendanceData.json` + `logs/` + Google Sheets.
 
-## 1. 스프레드시트 2개 (역할 분리)
+## 1. ?ㅽ봽?덈뱶?쒗듃 2媛?(??븷 遺꾨━)
 
-| 통합문서 | env | 용도 |
+| ?듯빀臾몄꽌 | env | ?⑸룄 |
 |----------|-----|------|
-| **Work list** | `PURCHASE_SPREADSHEET_ID` | `Paagrio Great` / `Heine Great` — **3일 급여 원본** |
-| **급여토탈관리** | `PAYROLL_ARCHIVE_SPREADSHEET_ID` (보통 `PAYROLL_SUMMARY_SPREADSHEET_ID`와 동일) | `Raw_Data`, `최근_3일_요약`, `월간_누적_요약` |
+| **Work list** | `PURCHASE_SPREADSHEET_ID` | `Paagrio Great` / `Valakas Great` ??**3??湲됱뿬 ?먮낯** |
+| **湲됱뿬?좏깉愿由?* | `PAYROLL_ARCHIVE_SPREADSHEET_ID` (蹂댄넻 `PAYROLL_SUMMARY_SPREADSHEET_ID`? ?숈씪) | `Raw_Data`, `理쒓렐_3???붿빟`, `?붽컙_?꾩쟻_?붿빟` |
 
-- **3일 실시간:** Work list Great 탭 → 봇이 **1분마다** `최근_3일_요약`에 API 반영 (급여토탈 + Work list에 `최근_3일_요약` 탭이 있으면 둘 다).
-- **월간 누적:** 급여토탈 `월간_누적_요약` **5~7행** = `Raw_Data` SUMIF만 (봇 월마감·이력 블록 **없음**).
-- **마감 기록:** Discord `/급여기록` → 급여토탈 `Raw_Data`에 행 추가 (Great 탭 스냅샷).
+- **3???ㅼ떆媛?** Work list Great ????遊뉗씠 **1遺꾨쭏??* `理쒓렐_3???붿빟`??API 諛섏쁺 (湲됱뿬?좏깉 + Work list??`理쒓렐_3???붿빟` ??씠 ?덉쑝硫?????.
+- **?붽컙 ?꾩쟻:** 湲됱뿬?좏깉 `?붽컙_?꾩쟻_?붿빟` **5~7??* = `Raw_Data` SUMIF留?(遊??붾쭏媛먃룹씠??釉붾줉 **?놁쓬**).
+- **留덇컧 湲곕줉:** Discord `/湲됱뿬湲곕줉` ??湲됱뿬?좏깉 `Raw_Data`????異붽? (Great ???ㅻ깄??.
 
-## 2. 운영 3단계 (팀 규칙)
+## 2. ?댁쁺 3?④퀎 (? 洹쒖튃)
 
-1. **매일·실시간** — `최근_3일_요약`만 본다 (Great와 맞는지 가끔 확인).
-2. **약 75시간마다** — `/급여기록` 또는 봇 **자동** 저장 → `Raw_Data` (Great 삭제 전 필수).
-3. **월말** — `월간_누적_요약` 5~7행 + `Raw_Data`로 정산 (**시트에서 수동**; 봇이 월 초기화·박제 안 함).
+1. **留ㅼ씪쨌?ㅼ떆媛?* ??`理쒓렐_3???붿빟`留?蹂몃떎 (Great? 留욌뒗吏 媛???뺤씤).
+2. **??75?쒓컙留덈떎** ??`/湲됱뿬湲곕줉` ?먮뒗 遊?**?먮룞** ?????`Raw_Data` (Great ??젣 ???꾩닔).
+3. **?붾쭚** ??`?붽컙_?꾩쟻_?붿빟` 5~7??+ `Raw_Data`濡??뺤궛 (**?쒗듃?먯꽌 ?섎룞**; 遊뉗씠 ??珥덇린?붋룸컯??????.
 
-## 3. Discord / 자동화
-
-| 기능 | 설명 |
+## 3. Discord / ?먮룞??
+| 湲곕뒫 | ?ㅻ챸 |
 |------|------|
-| `/급여기록` | 서버주인만. Raw_Data append. 동시 저장 시 `archive-in-progress` |
-| 자동 급여기록 | `PAYROLL_AUTO_ARCHIVE_ENABLED=true`, `PAYROLL_AUTO_ARCHIVE_HOURS=75`, **6시간마다** 체크 |
-| 자동 알림 DM | 성공/실패 → `OWNER_IDS` + `PURCHASE_OWNER_DM_IDS` |
-| 3일 sync 실패 | 연속 N회 실패 시 DM (`PAYROLL_LIVE_SYNC_ALERT_THRESHOLD`, 기본 3) |
+| `/湲됱뿬湲곕줉` | ?쒕쾭二쇱씤留? Raw_Data append. ?숈떆 ?????`archive-in-progress` |
+| ?먮룞 湲됱뿬湲곕줉 | `PAYROLL_AUTO_ARCHIVE_ENABLED=true`, `PAYROLL_AUTO_ARCHIVE_HOURS=75`, **6?쒓컙留덈떎** 泥댄겕 |
+| ?먮룞 ?뚮┝ DM | ?깃났/?ㅽ뙣 ??`OWNER_IDS` + `PURCHASE_OWNER_DM_IDS` |
+| 3??sync ?ㅽ뙣 | ?곗냽 N???ㅽ뙣 ??DM (`PAYROLL_LIVE_SYNC_ALERT_THRESHOLD`, 湲곕낯 3) |
 
-## 4. 자주 쓰는 명령
+## 4. ?먯＜ ?곕뒗 紐낅졊
 
 ```bash
-npm run deploy              # 테스트 → PM2 restart → health 대기
-npm run ops:health          # PM2·runtime·에러 로그
-npm run ops:google-check    # 시트·키 (API 읽기)
-node scripts/restore-monthly-summary-simple.js   # 월간 탭 5~7행 레이아웃 복구
-npm run ops:sync-live-3day  # 3일 요약 수동 1회 동기화
-```
+npm run deploy              # ?뚯뒪????PM2 restart ??health ?湲?npm run ops:health          # PM2쨌runtime쨌?먮윭 濡쒓렇
+npm run ops:google-check    # ?쒗듃쨌??(API ?쎄린)
+node scripts/restore-monthly-summary-simple.js   # ?붽컙 ??5~7???덉씠?꾩썐 蹂듦뎄
+npm run ops:sync-live-3day  # 3???붿빟 ?섎룞 1???숆린??```
 
-## 5. `.env` 필수·권장
+## 5. `.env` ?꾩닔쨌沅뚯옣
 
-- `TOKEN` — Discord 봇
-- `PURCHASE_GOOGLE_KEY_FILE` / `GOOGLE_APPLICATION_CREDENTIALS` — 서비스 계정 JSON 경로
+- `TOKEN` ??Discord 遊?- `PURCHASE_GOOGLE_KEY_FILE` / `GOOGLE_APPLICATION_CREDENTIALS` ???쒕퉬??怨꾩젙 JSON 寃쎈줈
 - `PURCHASE_SPREADSHEET_ID`, `PAYROLL_ARCHIVE_SPREADSHEET_ID`
-- `OWNER_IDS`, `PURCHASE_OWNER_DM_IDS` — 급여 DM 알림
+- `OWNER_IDS`, `PURCHASE_OWNER_DM_IDS` ??湲됱뿬 DM ?뚮┝
 
-선택: `PAYROLL_AUTO_ARCHIVE_*`, `PAYROLL_SYNC_WORKLIST_SUMMARY`, `PAYROLL_LIVE_SYNC_ALERT_THRESHOLD`
+?좏깮: `PAYROLL_AUTO_ARCHIVE_*`, `PAYROLL_SYNC_WORKLIST_SUMMARY`, `PAYROLL_LIVE_SYNC_ALERT_THRESHOLD`
 
-## 6. Heartbeat (부하 분리)
+## 6. Heartbeat (遺??遺꾨━)
 
-| 루프 | 주기 (기본) | env | 내용 |
+| 猷⑦봽 | 二쇨린 (湲곕낯) | env | ?댁슜 |
 |------|-------------|-----|------|
-| **attendance** | 60초 | `HEARTBEAT_ATTENDANCE_MS` | 음성·출퇴근·라이브예외·휴무예약·역할·대시보드 |
-| **maintenance** | 5분 | `HEARTBEAT_MAINTENANCE_MS` | 백업·패널·ops 큐·운영점검·휴무 정리 |
-| **급여 3일** | 1분 cron | — | `최근_3일_요약` API sync (heartbeat와 별도) |
+| **attendance** | 60珥?| `HEARTBEAT_ATTENDANCE_MS` | ?뚯꽦쨌異쒗눜洹셋룸씪?대툕?덉쇅쨌?대Т?덉빟쨌??븷쨌??쒕낫??|
+| **maintenance** | 5遺?| `HEARTBEAT_MAINTENANCE_MS` | 諛깆뾽쨌?⑤꼸쨌ops ?먃룹슫?곸젏寃쨌?대Т ?뺣━ |
+| **湲됱뿬 3??* | 1遺?cron | ??| `理쒓렐_3???붿빟` API sync (heartbeat? 蹂꾨룄) |
 
-한 틱이 길면 `[HEARTBEAT WARN] … skipping` — attendance/maintenance는 **각각** 스킵.
+???깆씠 湲몃㈃ `[HEARTBEAT WARN] ??skipping` ??attendance/maintenance??**媛곴컖** ?ㅽ궢.
 
-## 7. 장애 대응
-
-| 증상 | 조치 |
+## 7. ?μ븷 ???
+| 利앹긽 | 議곗튂 |
 |------|------|
-| 3일 숫자 0 / #REF | Great 탭·플레이어 열 확인 → `npm run ops:sync-live-3day` |
-| `/급여기록` not-ready | Great 탭 파싱 실패; 탭 이름·Total Gain Adena 행 확인 |
-| 월간 이상 레이아웃 | `node scripts/restore-monthly-summary-simple.js` 후 시트 새로고침 |
-| heartbeat WARN | `npm run ops:health` → PM2 error 로그; `npm run deploy` |
-| ops 큐 쌓임 | `/ops` 재시도 또는 `logs/ops-pending.json` 확인 |
+| 3???レ옄 0 / #REF | Great ??룻뵆?덉씠?????뺤씤 ??`npm run ops:sync-live-3day` |
+| `/湲됱뿬湲곕줉` not-ready | Great ???뚯떛 ?ㅽ뙣; ???대쫫쨌Total Gain Adena ???뺤씤 |
+| ?붽컙 ?댁긽 ?덉씠?꾩썐 | `node scripts/restore-monthly-summary-simple.js` ???쒗듃 ?덈줈怨좎묠 |
+| heartbeat WARN | `npm run ops:health` ??PM2 error 濡쒓렇; `npm run deploy` |
+| ops ???볦엫 | `/ops` ?ъ떆???먮뒗 `logs/ops-pending.json` ?뺤씤 |
 
-## 8. 데이터 위치 (로컬)
+## 8. ?곗씠???꾩튂 (濡쒖뺄)
 
-- `attendanceData.json` — 출퇴근·휴무·라이브 예외
-- `logs/payroll-operation-log.jsonl` — 급여기록 로그
-- `logs/runtime-health.json` — 기동·명령 등록
-- `backups/` — attendance JSON 스냅샷
-
-비밀·키는 `.env`와 JSON 키 파일만 — git에 올리지 않음.
+- `attendanceData.json` ??異쒗눜洹셋룻쑕臾는룸씪?대툕 ?덉쇅
+- `logs/payroll-operation-log.jsonl` ??湲됱뿬湲곕줉 濡쒓렇
+- `logs/runtime-health.json` ??湲곕룞쨌紐낅졊 ?깅줉
+- `backups/` ??attendance JSON ?ㅻ깄??
+鍮꾨?쨌?ㅻ뒗 `.env`? JSON ???뚯씪留???git???щ━吏 ?딆쓬.

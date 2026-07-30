@@ -1,5 +1,9 @@
 const assert = require('assert');
-const { createOpsQueueCommands, retryQueuedItem } = require('../src/commands/admin/opsQueueCommands');
+const {
+    createOpsQueueCommands,
+    isPermanentQueueFailure,
+    retryQueuedItem
+} = require('../src/commands/admin/opsQueueCommands');
 
 const CONFIG = {
     PURCHASE_APPROVAL_EMOJI: '✅',
@@ -102,6 +106,13 @@ function createInteraction() {
     }
 
     {
+        assert.strictEqual(isPermanentQueueFailure({ code: 'user-not-found' }), false);
+        assert.strictEqual(isPermanentQueueFailure({ code: 'day-not-found' }), false);
+        assert.strictEqual(isPermanentQueueFailure({ code: 'missing-config' }), true);
+        assert.strictEqual(isPermanentQueueFailure({ code: 'sheet-api-error' }), false);
+    }
+
+    {
         const calls = [];
         const reactionCache = [
             {
@@ -151,6 +162,23 @@ function createInteraction() {
         assert(calls.includes('remove:bot1'));
         assert(calls.includes(`react:${CONFIG.PURCHASE_APPROVAL_EMOJI}`));
         assert(calls.includes(`react:${CONFIG.PURCHASE_SUCCESS_EMOJI}`));
+    }
+
+    {
+        const result = await retryQueuedItem({
+            item: {
+                kind: 'end-adena',
+                action: 'approve',
+                method: 'addAdena',
+                payload: { userName: 'Missing' }
+            },
+            client: { channels: { fetch: async () => null } },
+            CONFIG,
+            purchaseSheetService: {
+                addAdena: async () => ({ ok: false, code: 'user-not-found' })
+            }
+        });
+        assert.strictEqual(result.drop, undefined, 'user-not-found remains retryable for auto recovery');
     }
 
     console.log('ops-queue-commands tests passed');

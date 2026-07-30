@@ -42,7 +42,22 @@ function formatPendingItem(item, index) {
         formatAmount(item.payload?.amount ?? item.payload?.rawAmount ?? 0)
     ];
     const reason = item.lastCode || item.code || item.lastError || KO.waiting;
-    return `${parts.join(' / ')}\n   ${KO.reason}: ${reason}\n   ID: ${item.id}`;
+    const status = item.status || item.autoRepairAction || 'pending';
+    const nextAttempt = item.nextAttemptAt ? `\n   다음시도: ${item.nextAttemptAt}` : '';
+    const autoMessage = item.autoRepairMessage ? `\n   자동복구: ${item.autoRepairMessage}` : '';
+    return `${parts.join(' / ')}\n   상태: ${status}\n   ${KO.reason}: ${reason}${nextAttempt}${autoMessage}\n   ID: ${item.id}`;
+}
+
+const PERMANENT_QUEUE_FAILURE_CODES = new Set([
+    'unknown-kind',
+    'missing-profile',
+    'invalid-payload',
+    'missing-config'
+]);
+
+function isPermanentQueueFailure(result) {
+    const code = String(result?.code || result?.lastCode || result?.errorCode || '').trim();
+    return PERMANENT_QUEUE_FAILURE_CODES.has(code);
 }
 
 async function fetchQueuedMessage(client, item) {
@@ -120,6 +135,13 @@ async function retryQueuedItem({ item, client, CONFIG, purchaseSheetService }) {
     }
 
     await markMessageResult(client, CONFIG, item, Boolean(result?.ok));
+    if (!result?.ok && isPermanentQueueFailure(result)) {
+        return {
+            ...result,
+            drop: true,
+            dropReason: result.code || 'permanent-failure'
+        };
+    }
     return result;
 }
 
@@ -210,5 +232,6 @@ function createOpsQueueCommands({
 module.exports = {
     createOpsQueueCommands,
     formatPendingItem,
+    isPermanentQueueFailure,
     retryQueuedItem
 };

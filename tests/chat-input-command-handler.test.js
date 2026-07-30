@@ -162,7 +162,7 @@ function createHandler(overrides = {}) {
         }
     });
     await assignHandler(assignInteraction);
-    assert.strictEqual(assignInteraction.replyPayload.content, 'Assigned HEINE / DAY to Robin.');
+    assert.strictEqual(assignInteraction.replyPayload.content, 'Assigned 발라카스 / DAY to Robin.');
     assert.strictEqual(assignInteraction.replyPayload.flags, 64);
     assert.deepStrictEqual(assignCalls, [
         'role:add:heine',

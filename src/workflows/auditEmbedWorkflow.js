@@ -1,5 +1,10 @@
 'use strict';
 
+const {
+    formatOperationalCertificationStatus,
+    readOperationalCertificationStatus
+} = require('../services/operationalCertificationStatusService');
+
 function createAuditEmbedWorkflow(deps) {
     const {
         client,
@@ -229,6 +234,7 @@ async function buildOpsCheckEmbed(guild) {
     const adminAuditRows = await readAdminAudit(5);
     const health = getRuntimeHealthSnapshot(now);
     const runtimeFileHealth = await readRuntimeHealthFile(visibleCommandPayloads.length);
+    const certificationStatus = await readOperationalCertificationStatus({ now: now.toDate() });
     const activeAnnouncements = Object.values(getAnnounceData()).filter(Boolean).filter(d => d.active).length;
     const checkedIn = users.filter(u => u.checkedIn).length;
     const disconnected = users.filter(u => u.disconnected).length;
@@ -239,6 +245,7 @@ async function buildOpsCheckEmbed(guild) {
         transitionWarnings.length ||
         commandIssues.length ||
         !runtimeFileHealth.ok ||
+        certificationStatus.attentionRequired ||
         health.memberFetch.backoffSeconds ||
         health.commandRegister.error !== 'none'
         ? 'WARN'
@@ -304,6 +311,11 @@ async function buildOpsCheckEmbed(guild) {
                         ? `Maintenance: ${activeMaintenance.sourceDate || activeMaintenance.day} ${activeMaintenance.start}-${activeMaintenance.end} ${activeMaintenance.override ? '(override)' : '(default)'}`
                         : 'Maintenance: none now'
                 ].join('\n'),
+                inline: false
+            },
+            {
+                name: '100-Point Certification',
+                value: formatOperationalCertificationStatus(certificationStatus),
                 inline: false
             },
             {

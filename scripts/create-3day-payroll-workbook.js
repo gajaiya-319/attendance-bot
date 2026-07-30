@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 
 require('dotenv').config();
 
@@ -41,8 +41,8 @@ function periodFormula(rawTab, periodIndex, source) {
         `=${sumPlayerColumns(rawTab, dayRows[0], dayRows[1])}+${sumPlayerColumns(rawTab, nightRows[0], nightRows[1])}`,
         `=${sumPlayerColumns(rawTab, daySalaryRows[0], daySalaryRows[1])}+${sumPlayerColumns(rawTab, nightSalaryRows[0], nightSalaryRows[1])}`,
         `=D${row}*0.05`,
-        `=D${row}*0.65`,
-        `=D${row}*0.35`,
+        `=D${row}*0.70`,
+        `=D${row}*0.30`,
         `=F${row}*0.04`
     ];
 }
@@ -51,7 +51,7 @@ function serverSummaryValues(title, rawTab) {
     return [
         [`${title} 3-Day Payroll`],
         ['Source workbook', SOURCE_SPREADSHEET_ID],
-        ['Period', 'Server', 'Total Gained Adena', 'Gross Salary', 'TX Fee 5%', 'Player 65%', 'Owner 35%', 'Total Peso'],
+        ['Period', 'Server', 'Total Gained Adena', 'Gross Salary', 'TX Fee 5%', 'Player 70%', 'Owner 30%', 'Total Peso'],
         periodFormula(rawTab, 1, title),
         periodFormula(rawTab, 2, title),
         ['TOTAL', title, '=SUM(C4:C5)', '=SUM(D4:D5)', '=SUM(E4:E5)', '=SUM(F4:F5)', '=SUM(G4:G5)', '=SUM(H4:H5)']
@@ -81,9 +81,9 @@ async function main() {
                 sheets: [
                     { properties: { title: 'Total Summary', gridProperties: { rowCount: 30, columnCount: 10 } } },
                     { properties: { title: 'Paagrio 3-Day', gridProperties: { rowCount: 30, columnCount: 10 } } },
-                    { properties: { title: 'Heine 3-Day', gridProperties: { rowCount: 30, columnCount: 10 } } },
+                    { properties: { title: 'Valacas 3-Day', gridProperties: { rowCount: 30, columnCount: 10 } } },
                     { properties: { title: 'Paagrio Raw', hidden: true, gridProperties: { rowCount: 80, columnCount: 32 } } },
-                    { properties: { title: 'Heine Raw', hidden: true, gridProperties: { rowCount: 80, columnCount: 32 } } }
+                    { properties: { title: 'Valacas Raw', hidden: true, gridProperties: { rowCount: 80, columnCount: 32 } } }
                 ]
             }
         });
@@ -96,7 +96,7 @@ async function main() {
             fields: 'sheets(properties(sheetId,title))'
         });
         const existingTitles = new Set((metadata.data.sheets || []).map(sheet => sheet.properties?.title));
-        const wanted = ['Total Summary', 'Paagrio 3-Day', 'Heine 3-Day', 'Paagrio Raw', 'Heine Raw'];
+        const wanted = ['Total Summary', 'Paagrio 3-Day', 'Valacas 3-Day', 'Paagrio Raw', 'Valacas Raw'];
         const requests = wanted
             .filter(title => !existingTitles.has(title))
             .map(title => ({
@@ -126,25 +126,25 @@ async function main() {
                     values: [[`=IMPORTRANGE("${SOURCE_SPREADSHEET_ID}","'Paagrio Great'!A1:AF80")`]]
                 },
                 {
-                    range: "'Heine Raw'!A1",
-                    values: [[`=IMPORTRANGE("${SOURCE_SPREADSHEET_ID}","'Heine Great'!A1:AF80")`]]
+                    range: "'Valacas Raw'!A1",
+                    values: [[`=IMPORTRANGE("${SOURCE_SPREADSHEET_ID}","'Valacas Great'!A1:AF80")`]]
                 },
                 {
                     range: "'Paagrio 3-Day'!A1:H6",
                     values: serverSummaryValues('Paagrio', 'Paagrio Raw')
                 },
                 {
-                    range: "'Heine 3-Day'!A1:H6",
-                    values: serverSummaryValues('Heine', 'Heine Raw')
+                    range: "'Valacas 3-Day'!A1:H6",
+                    values: serverSummaryValues('Valacas', 'Valacas Raw')
                 },
                 {
                     range: "'Total Summary'!A1:H7",
                     values: [
                         ['3-Day Payroll Total Summary'],
                         ['Source workbook', SOURCE_SPREADSHEET_ID],
-                        ['Server', 'Total Gained Adena', 'Gross Salary', 'TX Fee 5%', 'Player 65%', 'Owner 35%', 'Total Peso', 'Note'],
+                        ['Server', 'Total Gained Adena', 'Gross Salary', 'TX Fee 5%', 'Player 70%', 'Owner 30%', 'Total Peso', 'Note'],
                         ['Paagrio', "='Paagrio 3-Day'!C6", "='Paagrio 3-Day'!D6", "='Paagrio 3-Day'!E6", "='Paagrio 3-Day'!F6", "='Paagrio 3-Day'!G6", "='Paagrio 3-Day'!H6", ''],
-                        ['Heine', "='Heine 3-Day'!C6", "='Heine 3-Day'!D6", "='Heine 3-Day'!E6", "='Heine 3-Day'!F6", "='Heine 3-Day'!G6", "='Heine 3-Day'!H6", ''],
+                        ['Valacas', "='Valacas 3-Day'!C6", "='Valacas 3-Day'!D6", "='Valacas 3-Day'!E6", "='Valacas 3-Day'!F6", "='Valacas 3-Day'!G6", "='Valacas 3-Day'!H6", ''],
                         ['TOTAL', '=SUM(B4:B5)', '=SUM(C4:C5)', '=SUM(D4:D5)', '=SUM(E4:E5)', '=SUM(F4:F5)', '=SUM(G4:G5)', ''],
                         ['Notice', '', '', '', '', '', '', 'If values show #REF!, open hidden Raw tabs and allow IMPORTRANGE access once.']
                     ]
@@ -162,7 +162,7 @@ async function main() {
     );
 
     const formatRequests = [];
-    for (const title of ['Total Summary', 'Paagrio 3-Day', 'Heine 3-Day']) {
+    for (const title of ['Total Summary', 'Paagrio 3-Day', 'Valacas 3-Day']) {
         const sheetId = sheetIds[title];
         formatRequests.push(
             {

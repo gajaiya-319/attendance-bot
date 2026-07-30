@@ -49,7 +49,14 @@ function hasReaction(message, emojiName) {
 }
 
 function getServerForChannel(channelId, channelIds) {
-    return Object.entries(channelIds || {}).find(([, id]) => id === channelId)?.[0] || null;
+    const matched = Object.entries(channelIds || {}).find(([, id]) => id === channelId)?.[0] || null;
+    return matched === 'HEINE' ? 'VALAKAS' : matched;
+}
+
+function normalizePayrollServer(server) {
+    const upper = String(server || '').trim().toUpperCase();
+    if (upper === 'HEINE' || upper === 'VALACAS' || upper === 'VALAKAS') return 'VALAKAS';
+    return upper || null;
 }
 
 function isSafetyZonePost(content) {
@@ -100,8 +107,36 @@ function createDeathPenaltyReactionHandler({
     }
 
     async function safeReact(message, emoji) {
-        if (!emoji) return;
-        await message.react(emoji).catch(error => logger.error?.('[DEATH PENALTY REACT ERROR]', error));
+        if (!emoji) return true;
+        return message.react(emoji).then(() => true).catch(error => {
+            if (error?.code === 10008 || error?.status === 404) return;
+            logger.error?.('[DEATH PENALTY REACT ERROR]', {
+                messageId: message?.id || null,
+                channelId: message?.channelId || null,
+                authorId: message?.author?.id || null,
+                authorName: message?.author?.username || null,
+                emoji,
+                code: error?.code || error?.status || error?.rawError?.code,
+                message: error?.rawError?.message || error?.message
+            });
+            return false;
+        });
+    }
+
+    async function sendStatusFallback(message, text) {
+        if (!text) return false;
+        const content = `${text}\n(Discord가 이 게시물의 봇 반응을 차단해서 체크 이모지 대신 메시지로 남깁니다.)`;
+        const send = typeof message.reply === 'function'
+            ? () => message.reply({ content, allowedMentions: { repliedUser: false } })
+            : () => message.channel?.send?.({ content });
+        return send()?.then(() => true).catch(error => {
+            logger.warn?.('[DEATH PENALTY STATUS FALLBACK WARN]', {
+                messageId: message?.id || null,
+                channelId: message?.channelId || null,
+                message: error?.message
+            });
+            return false;
+        }) || false;
     }
 
     async function removeEmojiReaction(message, emoji) {
@@ -122,10 +157,30 @@ function createDeathPenaltyReactionHandler({
         await removeEmojiReaction(message, CONFIG.PURCHASE_PROCESSING_EMOJI);
     }
 
+    async function syncStatusReactions(message, desiredEmojis) {
+        const desired = new Set(desiredEmojis.filter(Boolean));
+        const statusEmojis = [
+            CONFIG.PURCHASE_APPROVAL_EMOJI,
+            CONFIG.PURCHASE_CANCEL_EMOJI,
+            CONFIG.PURCHASE_SUCCESS_EMOJI,
+            CONFIG.PURCHASE_FAILURE_EMOJI,
+            CONFIG.PURCHASE_PROCESSING_EMOJI
+        ].filter(Boolean);
+
+        for (const emoji of statusEmojis) {
+            if (!desired.has(emoji) && hasReaction(message, emoji)) {
+                await removeEmojiReaction(message, emoji);
+            }
+        }
+        for (const emoji of desired) {
+            if (!hasReaction(message, emoji)) await safeReact(message, emoji);
+        }
+    }
+
     async function handleMessageCreate(message) {
         try {
             if (!isEnabled() || message.author?.bot) return;
-            const server = getServerForChannel(message.channelId, CONFIG.DEATH_PENALTY_CHANNEL_IDS);
+            const server = normalizePayrollServer(getServerForChannel(message.channelId, CONFIG.DEATH_PENALTY_CHANNEL_IDS));
             if (!server || isSafetyZonePost(message.content)) return;
 
             await safeReact(message, CONFIG.PURCHASE_PROCESSING_EMOJI);
@@ -137,7 +192,7 @@ function createDeathPenaltyReactionHandler({
     async function syncMessageStatus(message, { pendingMessageIds = new Set() } = {}) {
         try {
             if (!isEnabled() || message.author?.bot) return false;
-            const server = getServerForChannel(message.channelId, CONFIG.DEATH_PENALTY_CHANNEL_IDS);
+            const server = normalizePayrollServer(getServerForChannel(message.channelId, CONFIG.DEATH_PENALTY_CHANNEL_IDS));
             if (!server || isSafetyZonePost(message.content)) return false;
 
             const isQueued = pendingMessageIds.has(message.id);
@@ -145,26 +200,24 @@ function createDeathPenaltyReactionHandler({
             const isCancelled = hasReaction(message, CONFIG.PURCHASE_CANCEL_EMOJI) && !isApproved;
 
             if (isApproved) {
-                await clearStatusReactions(message);
-                await safeReact(message, CONFIG.PURCHASE_APPROVAL_EMOJI);
-                await safeReact(message, CONFIG.PURCHASE_SUCCESS_EMOJI);
+                await syncStatusReactions(message, [
+                    CONFIG.PURCHASE_APPROVAL_EMOJI,
+                    CONFIG.PURCHASE_SUCCESS_EMOJI
+                ]);
                 return true;
             }
 
             if (isCancelled && !isQueued) {
-                await clearStatusReactions(message);
-                await safeReact(message, CONFIG.PURCHASE_CANCEL_EMOJI);
+                await syncStatusReactions(message, [CONFIG.PURCHASE_CANCEL_EMOJI]);
                 return true;
             }
 
             if (isQueued) {
-                await clearStatusReactions(message);
-                await safeReact(message, CONFIG.PURCHASE_FAILURE_EMOJI);
+                await syncStatusReactions(message, [CONFIG.PURCHASE_FAILURE_EMOJI]);
                 return true;
             }
 
-            await removeEmojiReaction(message, CONFIG.PURCHASE_FAILURE_EMOJI);
-            await safeReact(message, CONFIG.PURCHASE_PROCESSING_EMOJI);
+            await syncStatusReactions(message, [CONFIG.PURCHASE_PROCESSING_EMOJI]);
             return true;
         } catch (error) {
             logger.error?.('[DEATH PENALTY STATUS SYNC ERROR]', error);
@@ -182,7 +235,7 @@ function createDeathPenaltyReactionHandler({
                 ? await message.fetch().catch(() => message)
                 : message;
 
-            const server = getServerForChannel(message.channelId, CONFIG.DEATH_PENALTY_CHANNEL_IDS);
+            const server = normalizePayrollServer(getServerForChannel(message.channelId, CONFIG.DEATH_PENALTY_CHANNEL_IDS));
             if (!server) return;
             if (isSafetyZonePost(message.content)) return;
             const reviewerMember = await message.guild?.members?.fetch?.(user.id).catch(() => null);
@@ -216,51 +269,66 @@ function createDeathPenaltyReactionHandler({
                 const amount = isCancel ? -CONFIG.DEATH_PENALTY_AMOUNT : CONFIG.DEATH_PENALTY_AMOUNT;
                 const payload = {
                     payrollKind: 'death-penalty',
+                    messageId: message.id,
+                    channelId: message.channelId,
                     server,
                     shift,
                     userName,
                     amount,
                     dayOfMonth: getShiftSheetDayOfMonth(moment, CONFIG.TIMEZONE, shift, message.createdAt || Date.now())
                 };
-                const result = await purchaseSheetService.addPurchase(payload);
+                const result = await purchaseSheetService.addPurchase(payload, {
+                    messageId: message.id,
+                    channelId: message.channelId
+                });
 
                 if (result.ok) {
+                    const finalServer = result.server || server;
                     await clearStatusReactions(message);
                     if (isCancel) {
-                        await safeReact(message, CONFIG.PURCHASE_CANCEL_EMOJI);
+                        const reacted = await safeReact(message, CONFIG.PURCHASE_CANCEL_EMOJI);
+                        if (!reacted && !result.duplicate) {
+                            await sendStatusFallback(message, `❌ 다이샷 취소 완료: ${userName} ${amount}`);
+                        }
                     } else {
-                        await safeReact(message, CONFIG.PURCHASE_APPROVAL_EMOJI);
-                        await safeReact(message, CONFIG.PURCHASE_SUCCESS_EMOJI);
+                        const approvalReacted = await safeReact(message, CONFIG.PURCHASE_APPROVAL_EMOJI);
+                        const successReacted = await safeReact(message, CONFIG.PURCHASE_SUCCESS_EMOJI);
+                        if (!approvalReacted && !successReacted && !result.duplicate) {
+                            await sendStatusFallback(message, `✅ 다이샷 기록 완료: ${userName} +${amount}`);
+                        }
                     }
                     logger.log?.(isCancel ? '[DEATH PENALTY CANCELLED]' : '[DEATH PENALTY RECORDED]', {
                         messageId: message.id,
-                        server,
+                        server: finalServer,
                         shift,
                         userName,
                         amount,
                         range: result.range,
-                        nextValue: result.nextValue
+                        nextValue: result.nextValue,
+                        duplicate: Boolean(result.duplicate)
                     });
                     if (typeof onGreatTabChanged === 'function') onGreatTabChanged();
                 } else {
+                    const finalServer = result.server || server;
+                    const finalPayload = { ...payload, server: finalServer };
                     const queued = await opsQueueService?.enqueue?.({
                         kind: 'death-penalty',
                         action: isCancel ? 'cancel' : 'approve',
                         messageId: message.id,
                         channelId: message.channelId,
-                        server,
+                        server: finalServer,
                         shift,
                         userName,
                         code: result.code,
                         errorMessage: result.errorMessage || null,
-                        payload
+                        payload: finalPayload
                     });
                     await clearStatusReactions(message);
                     await safeReact(message, CONFIG.PURCHASE_FAILURE_EMOJI);
                     logger.warn?.('[DEATH PENALTY SHEET FAIL]', {
                         messageId: message.id,
                         code: result.code,
-                        server,
+                        server: finalServer,
                         shift,
                         userName
                     });

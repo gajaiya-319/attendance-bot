@@ -18,7 +18,7 @@ const { parseGreatTabPayrollRows, SERVER_LABELS } = require('../src/utils/payrol
 const RAW_DATA_SHEET = 'Raw_Data';
 const RAW_HEADERS = [
     '저장일시', '회차', '서버', '총 획득 아데나', '총 급여',
-    '수수료 5%', '직원 65%', '오너 35%', '총 페소', '저장자'
+    '수수료 5%', '직원 70%', '오너 30%', '총 페소', '저장자'
 ];
 
 function parseArgs(argv) {
@@ -84,7 +84,7 @@ function toRawRow(row, meta) {
 async function readGreatRows(sheets, id) {
     const specs = [
         { tab: process.env.PURCHASE_PAAGRIO_TAB_NAME || CONFIG.PURCHASE_SERVER_TABS.PAAGRIO, server: SERVER_LABELS.PAAGRIO },
-        { tab: process.env.PURCHASE_HEINE_TAB_NAME || CONFIG.PURCHASE_SERVER_TABS.HEINE, server: SERVER_LABELS.HEINE }
+        { tab: process.env.PURCHASE_VALACAS_TAB_NAME || process.env.PURCHASE_HEINE_TAB_NAME || CONFIG.PURCHASE_SERVER_TABS.HEINE, server: SERVER_LABELS.HEINE }
     ];
     const rows = [];
     for (const spec of specs) {

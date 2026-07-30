@@ -67,6 +67,61 @@ const { createButtonInteractionHandler } = require('../src/events/buttonInteract
     });
     assert.strictEqual(await handledHandler(interaction), 'context-response');
 
+    const dmCalls = [];
+    const dmButtonHandler = createButtonInteractionHandler({
+        createAutoDelete: receivedInteraction => {
+            dmCalls.push(receivedInteraction.customId);
+            return autoDelete;
+        },
+        buttonInteractionContext: {
+            prepare: async () => {
+                throw new Error('DM OT confirmation should not require guild button context');
+            }
+        },
+        buttonActionHandlers: {
+            runAction: async () => {
+                throw new Error('regular action should not run for OT confirmation');
+            },
+            handleAutoOvertimeConfirmationButton: async payload => {
+                dmCalls.push(payload.autoDel === autoDelete ? 'autoDel' : 'noAutoDel');
+                dmCalls.push(payload.interaction.customId);
+                return 'ot-confirmed';
+            }
+        }
+    });
+    assert.strictEqual(
+        await dmButtonHandler({ isButton: () => true, customId: 'auto_ot_confirm:start:u1:tok1' }),
+        'ot-confirmed'
+    );
+    assert.deepStrictEqual(dmCalls, [
+        'auto_ot_confirm:start:u1:tok1',
+        'autoDel',
+        'auto_ot_confirm:start:u1:tok1'
+    ]);
+
+    const reviewCalls = [];
+    const reviewButtonHandler = createButtonInteractionHandler({
+        createAutoDelete: () => autoDelete,
+        buttonInteractionContext: {
+            prepare: async () => { throw new Error('review button must bypass attendance context'); }
+        },
+        buttonActionHandlers: {
+            runAction: async () => { throw new Error('review button must bypass attendance actions'); }
+        },
+        endAdenaReviewCommand: {
+            isButton: customId => customId.startsWith('end-adena-review:'),
+            handleButton: async received => {
+                reviewCalls.push(received.customId);
+                return 'reviewed';
+            }
+        }
+    });
+    assert.strictEqual(await reviewButtonHandler({
+        isButton: () => true,
+        customId: 'end-adena-review:refresh:DAY:1:2'
+    }), 'reviewed');
+    assert.deepStrictEqual(reviewCalls, ['end-adena-review:refresh:DAY:1:2']);
+
     const nonButtonHandler = createButtonInteractionHandler({
         createAutoDelete: () => autoDelete,
         buttonInteractionContext: {

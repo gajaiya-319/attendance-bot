@@ -3,7 +3,7 @@
 /**
  * Apply 3-day payroll totals from screenshot JSON into Raw_Data (upsert by server).
  *
- *   node scripts/apply-paagrio-screenshot-raw-data.js scripts/data/heine-3day-screenshot-2026-06-03.json
+ *   node scripts/apply-paagrio-screenshot-raw-data.js scripts/data/heine-3day-screenshot-2026-06-03.json (legacy Valacas source)
  *   node scripts/apply-paagrio-screenshot-raw-data.js --both-3day
  */
 
@@ -49,7 +49,7 @@ function upsertRows(existingValues, payloads) {
             byServer.set(row.server, toRawRow(payload, row));
         }
     }
-    const order = ['파아그리오', '하이네'];
+    const order = ['파아그리오', 'Valacas'];
     return [...byServer.entries()]
         .sort((a, b) => {
             const ai = order.indexOf(a[0]);
@@ -85,7 +85,7 @@ async function main() {
     const values = res.data.values || [];
     const header = values[0] || [
         '저장일시', '회차', '서버', '총 획득 아데나', '총 급여',
-        '수수료 5%', '직원 65%', '오너 35%', '총 페소', '저장자'
+        '수수료 5%', '직원 70%', '오너 30%', '총 페소', '저장자'
     ];
     const dataRows = upsertRows(values, payloads);
     const out = [header, ...dataRows];

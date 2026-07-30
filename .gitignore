@@ -1,4 +1,5 @@
 node_modules
+.npm-cache/
 .env
 sheet-bot-key.json
 *sheet*key*.json
@@ -21,3 +22,4 @@ snippet.js
 .cursor/
 outputs/
 attendanceData.before*.json
+tmp-webapp-*.html

@@ -40,7 +40,12 @@ function createInteractionHandlers(ctx) {
         createGuildMemberEventHandlers
     } = deps;
 
-    const { canManageLiveException, dayOffRequestInteractions, syncCurrentWorkerProfile } = services;
+    const {
+        canManageLiveException,
+        dayOffRequestInteractions,
+        syncCurrentWorkerProfile,
+        removeCurrentWorkerProfile
+    } = services;
 
     const buttonInteractionContext = createButtonInteractionContext({
         MessageFlags,
@@ -92,6 +97,7 @@ function createInteractionHandlers(ctx) {
             botState.liveExceptions[id] = exception;
         },
         startPreShiftOvertime: (...args) => workflowApi.startPreShiftOvertime(...args),
+        handleAutoOvertimeConfirmation: (...args) => workflowApi.handleAutoOvertimeConfirmation(...args),
         updateWorkingRole,
         recordLog: (...args) => workflowApi.recordLog(...args),
         getCompletionMessage: type => (JOKES[type?.toUpperCase()] || ['Completed.'])[0]
@@ -100,7 +106,8 @@ function createInteractionHandlers(ctx) {
     const buttonInteractionHandler = createButtonInteractionHandler({
         createAutoDelete,
         buttonInteractionContext,
-        buttonActionHandlers
+        buttonActionHandlers,
+        endAdenaReviewCommand: slash.endAdenaReviewCommand
     });
 
     const interactionErrorHandler = createInteractionErrorHandler({
@@ -148,6 +155,7 @@ function createInteractionHandlers(ctx) {
         opsQueueCommands: slash.opsQueueCommands,
         opsSafetyCommands: slash.opsSafetyCommands,
         payrollAuditCommand: slash.payrollAuditCommand,
+        endAdenaReviewCommand: slash.endAdenaReviewCommand,
         maintenanceCommands: slash.maintenanceCommands,
         dayOffReadCommands: slash.dayOffReadCommands,
         dayOffMutationCommands: slash.dayOffMutationCommands,
@@ -188,6 +196,8 @@ function createInteractionHandlers(ctx) {
         writeDayOffLog: (...args) => workflowApi.writeDayOffLog(...args),
         saveSystem: () => saveSystemAsync(),
         syncCurrentWorkerProfile,
+        removeCurrentWorkerProfile,
+        isAssignedWorker: services.isAssignedWorker,
         renderDashboard: options => workflowApi.queueDashboardRender(options)
     });
 

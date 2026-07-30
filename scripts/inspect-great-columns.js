@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 
 require('dotenv').config();
 const { google } = require('googleapis');
@@ -58,16 +58,16 @@ async function inspectSummary(sheets) {
     const [vals, forms] = await Promise.all([
         sheets.spreadsheets.values.get({
             spreadsheetId: id,
-            range: "'최근_3일_요약'!B3:H12",
+            range: "'理쒓렐_3???붿빟'!B3:H12",
             valueRenderOption: 'UNFORMATTED_VALUE'
         }),
         sheets.spreadsheets.values.get({
             spreadsheetId: id,
-            range: "'최근_3일_요약'!B3:H12",
+            range: "'理쒓렐_3???붿빟'!B3:H12",
             valueRenderOption: 'FORMULA'
         })
     ]);
-    console.log('\n=== 최근_3일_요약 ===');
+    console.log('\n=== 理쒓렐_3???붿빟 ===');
     console.log('values:', JSON.stringify(vals.data.values, null, 2));
 }
 
@@ -78,7 +78,7 @@ async function main() {
     });
     const sheets = google.sheets({ version: 'v4', auth });
     await inspectTab(sheets, 'Paagrio Great');
-    await inspectTab(sheets, 'Heine Great');
+    await inspectTab(sheets, 'Valakas Great');
     await inspectSummary(sheets);
 }
 

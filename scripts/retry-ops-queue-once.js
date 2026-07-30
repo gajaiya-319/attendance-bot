@@ -4,12 +4,14 @@ const { google } = require('googleapis');
 const { CONFIG } = require('../src/config/constants');
 const { createPurchaseSheetService } = require('../src/services/purchaseSheetService');
 const { createOpsQueueService } = require('../src/services/opsQueueService');
+const { runOpsQueueAutoRecovery } = require('../src/services/opsQueueAutoRecoveryService');
 
 const purchaseSheetService = createPurchaseSheetService({
     google,
     keyFile: CONFIG.PURCHASE_GOOGLE_KEY_FILE,
     spreadsheetId: CONFIG.PURCHASE_SPREADSHEET_ID,
     serverTabs: CONFIG.PURCHASE_SERVER_TABS,
+    serverSheetIds: CONFIG.PURCHASE_SERVER_SHEET_IDS,
     sectionLabels: CONFIG.PURCHASE_SECTION_LABELS,
     sheetNameAliases: CONFIG.SHEET_NAME_ALIASES
 });
@@ -31,7 +33,11 @@ async function retryItem(item) {
 }
 
 (async () => {
-    const result = await opsQueueService.retryAll(retryItem);
+    const result = await runOpsQueueAutoRecovery({
+        opsQueueService,
+        retryItem,
+        force: process.argv.includes('--force')
+    });
     console.log(JSON.stringify(result, null, 2));
 })().catch(error => {
     console.error(error);

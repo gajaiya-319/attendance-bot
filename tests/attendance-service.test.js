@@ -5,9 +5,15 @@ const { auditStateInvariants } = require('../scripts/audit-state-invariants');
 
 const CONFIG = {
     TIMEZONE: 'Asia/Manila',
-    POINTS: { NORMAL_IN: 10, LATE: -5, EARLY_OUT: -10, OT: 15, ABSENT: -20 },
+    POINTS: { NORMAL_IN: 10, LATE: -5, EXCESSIVE_LATE: -10, EARLY_OUT: -10, OT: 5, ABSENT: -25 },
     PURGE_MANUAL_OT: 40,
-    LIVE_OFF_CLOCK_OUT_MINS: 30
+    MAX_AUTO_OT_MINS: 14 * 60,
+    LIVE_OFF_IGNORE_MINS: 2,
+    LIVE_OFF_CLOCK_OUT_MINS: 30,
+    CLOCK_IN_GRACE_MINS: 0,
+    PRE_SHIFT_VOICE_LIVE_GRACE_MINS: 10,
+    PRE_SHIFT_VOICE_MEMORY_MINS: 7 * 60,
+    PRE_SHIFT_RECONNECT_GRACE_MINS: 10
 };
 
 function at(value) {
@@ -37,8 +43,11 @@ const service = createAttendanceService({
     determineShift: () => 'night',
     getShiftSessionKey: (shift, now) => `${shift}:${moment(now).tz(CONFIG.TIMEZONE).format('YYYY-MM-DD HH:mm')}`,
     getShiftBounds: (shift, now) => {
-        const start = moment(now).tz(CONFIG.TIMEZONE).hour(21).minute(0).second(0).millisecond(0);
-        const end = start.clone().add(12, 'hours');
+        const startHour = shift === 'day' ? 9 : 21;
+        const start = moment(now).tz(CONFIG.TIMEZONE).hour(startHour).minute(0).second(0).millisecond(0);
+        const end = shift === 'day'
+            ? start.clone().hour(21)
+            : start.clone().add(12, 'hours');
         return { start, end };
     }
 });
@@ -88,6 +97,29 @@ function assertUserStateClean(user, message) {
 }
 
 {
+    const member = createMember({ id: 'clockin-clear', displayName: 'Clock Clear' });
+    const user = service.ensureUserData(member, 'night');
+    user.checkOutTime = '02:00 PM';
+    user.checkOutRaw = at('2026-05-20 14:00').toISOString();
+    user.lastClockOutSource = 'previous-shift';
+    user.lastClockOutReason = 'previous out';
+    user.lastClockOutDetectedAt = at('2026-05-20 14:00').toISOString();
+
+    const result = service.applyClockInCore(user, member, 'night', at('2026-05-21 21:02'), {
+        ok: true,
+        recognizedAt: at('2026-05-21 21:02'),
+        preShift: false
+    }, true);
+
+    assert.strictEqual(result.ok, true, 'clock-in succeeds');
+    assert.strictEqual(user.checkOutTime, null, 'new clock-in clears stale checkout display time');
+    assert.strictEqual(user.checkOutRaw, null, 'new clock-in clears stale checkout raw time');
+    assert.strictEqual(user.lastClockOutSource, null, 'new clock-in clears stale checkout source');
+    assert.strictEqual(user.lastClockOutReason, null, 'new clock-in clears stale checkout reason');
+    assert.strictEqual(user.lastClockOutDetectedAt, null, 'new clock-in clears stale checkout detected time');
+}
+
+{
     const user = state.attendanceData.user1;
     user.dayOff = true;
     user.attendanceStatus = 'DAY_OFF';
@@ -134,6 +166,60 @@ function assertUserStateClean(user, message) {
 }
 
 {
+    const user = service.ensureUserData(createMember({ id: 'post-start-clockin-user', displayName: 'Post Start Clock In User' }), 'night');
+    const result = service.applyClockInCore(user, createMember({ id: 'post-start-clockin-user' }), 'night', at('2026-05-21 21:02'), {
+        ok: true,
+        recognizedAt: at('2026-05-21 21:02'),
+        bounds: { start: at('2026-05-21 21:00'), end: at('2026-05-22 09:00') },
+        preShift: false
+    }, true);
+
+    assert.strictEqual(result.ok, true, 'post-start clock-in succeeds');
+    assert.strictEqual(result.status, 'late', 'post-start clock-in without pre-shift voice grace is late');
+    assert.strictEqual(user.totalLate, 1, 'late count is awarded for post-start entry');
+}
+
+{
+    const user = service.ensureUserData(createMember({ id: 'absent-return-user', displayName: 'Absent Return User' }), 'night');
+    user.status = 'absent';
+    user.attendanceStatus = 'ABSENT';
+    user.strikeReceivedThisShift = true;
+    user.points = CONFIG.POINTS.ABSENT;
+    user.totalAbsent = 1;
+    user.monthlyStats = {
+        month: '2026-05',
+        totalNormal: 0,
+        totalLate: 0,
+        totalExcessiveLate: 0,
+        totalEarly: 0,
+        totalAbsent: 1,
+        totalOT: 0,
+        points: CONFIG.POINTS.ABSENT
+    };
+
+    const result = service.applyClockInCore(user, createMember({ id: 'absent-return-user' }), 'night', at('2026-05-21 23:30'), {
+        ok: true,
+        recognizedAt: at('2026-05-21 23:30'),
+        bounds: { start: at('2026-05-21 21:00'), end: at('2026-05-22 09:00') },
+        preShift: false
+    }, false);
+
+    assert.strictEqual(result.ok, true, 'late return after absent succeeds');
+    assert.strictEqual(result.convertedAbsentToLate, true, 'late return converts final absent to late');
+    assert.strictEqual(result.excessiveLate, true, 'late return is marked as 2h+ late');
+    assert.strictEqual(user.status, 'late', 'late return is counted as late');
+    assert.strictEqual(user.excessiveLateThisShift, true, 'user keeps 2h+ late flag for the dashboard');
+    assert.strictEqual(user.totalAbsent, 0, 'late return removes the absent count');
+    assert.strictEqual(user.totalLate, 1, 'late return adds a late count');
+    assert.strictEqual(user.totalExcessiveLate, 1, 'late return adds a 2h+ late count');
+    assert.strictEqual(user.points, CONFIG.POINTS.LATE + CONFIG.POINTS.EXCESSIVE_LATE, 'late return converts absent penalty to 2h+ late penalty');
+    assert.strictEqual(user.monthlyStats.totalAbsent, 0, 'monthly absent count is corrected');
+    assert.strictEqual(user.monthlyStats.totalLate, 1, 'monthly late count is corrected');
+    assert.strictEqual(user.monthlyStats.totalExcessiveLate, 1, 'monthly 2h+ late count is recorded');
+    assert.strictEqual(user.monthlyStats.points, CONFIG.POINTS.LATE + CONFIG.POINTS.EXCESSIVE_LATE, 'monthly points are corrected');
+}
+
+{
     const user = service.ensureUserData(createMember({ id: 'too-early-user', displayName: 'Too Early User' }), 'night');
     user.dayOff = true;
     user.isFinished = true;
@@ -160,6 +246,107 @@ function assertUserStateClean(user, message) {
 }
 
 {
+    const member = createMember({ id: 'pre-shift-reconnect-user', displayName: 'Pre Shift Reconnect User' });
+    const user = service.ensureUserData(member, 'night');
+    user.preShiftLiveAt = at('2026-05-21 20:40').toISOString();
+
+    const result = service.applyClockInCore(user, member, 'night', at('2026-05-21 21:07'), {
+        ok: true,
+        recognizedAt: at('2026-05-21 21:07'),
+        bounds: { start: at('2026-05-21 21:00'), end: at('2026-05-22 09:00') },
+        preShift: false
+    }, true);
+
+    assert.strictEqual(result.ok, true, 'pre-shift reconnect clock-in succeeds');
+    assert.strictEqual(result.status, 'ontime', 'pre-shift reconnect within grace is on time');
+    assert.strictEqual(result.recognizedAt.format('YYYY-MM-DD HH:mm'), '2026-05-21 21:00', 'pre-shift reconnect is recognized at shift start');
+    assert.strictEqual(result.preShiftReconnectGrace, true, 'result records pre-shift reconnect grace');
+    assert.strictEqual(user.preShiftLiveAt, null, 'pre-shift live marker is cleared after clock-in');
+    assert.strictEqual(user.totalNormal, 1, 'normal attendance is awarded');
+}
+
+{
+    const member = createMember({ id: 'pre-shift-voice-user', displayName: 'Pre Shift Voice User' });
+    const user = service.ensureUserData(member, 'night');
+    user.preShiftVoiceAt = at('2026-05-21 20:20').toISOString();
+    user.preShiftVoiceMode = 'regular';
+
+    const result = service.applyClockInCore(user, member, 'night', at('2026-05-21 21:09'), {
+        ok: true,
+        recognizedAt: at('2026-05-21 21:09'),
+        bounds: { start: at('2026-05-21 21:00'), end: at('2026-05-22 09:00') },
+        preShift: false
+    }, true);
+
+    assert.strictEqual(result.ok, true, 'pre-shift voice grace clock-in succeeds');
+    assert.strictEqual(result.status, 'ontime', 'pre-shift voice grace is on time');
+    assert.strictEqual(result.recognizedAt.format('YYYY-MM-DD HH:mm'), '2026-05-21 21:00', 'pre-shift voice grace is recognized at shift start');
+    assert.strictEqual(result.preShiftVoiceGrace, true, 'result records pre-shift voice grace');
+    assert.strictEqual(result.preShiftVoiceMode, 'regular', 'regular pre-shift voice mode is preserved');
+    assert.strictEqual(user.preShiftVoiceAt, null, 'pre-shift voice marker is cleared after clock-in');
+}
+
+{
+    const member = createMember({ id: 'maintenance-pre-shift-voice-user', displayName: 'Maintenance Pre Shift Voice User' });
+    const user = service.ensureUserData(member, 'day');
+    user.preShiftVoiceAt = at('2026-05-20 04:00').toISOString();
+    user.preShiftVoiceMode = 'maintenance';
+    user.preShiftVoiceWindowStartAt = at('2026-05-20 04:00').toISOString();
+    user.preShiftVoiceWindowEndAt = at('2026-05-20 09:00').toISOString();
+
+    const result = service.applyClockInCore(user, member, 'day', at('2026-05-20 09:09'), {
+        ok: true,
+        recognizedAt: at('2026-05-20 09:09'),
+        bounds: { start: at('2026-05-20 09:00'), end: at('2026-05-20 21:00') },
+        preShift: false
+    }, true);
+
+    assert.strictEqual(result.ok, true, 'maintenance pre-shift voice grace clock-in succeeds');
+    assert.strictEqual(result.status, 'ontime', 'maintenance pre-shift voice grace is on time');
+    assert.strictEqual(result.recognizedAt.format('YYYY-MM-DD HH:mm'), '2026-05-20 09:00', 'maintenance pre-shift voice grace is recognized at shift start');
+    assert.strictEqual(result.preShiftVoiceMode, 'maintenance', 'maintenance pre-shift voice mode is preserved');
+    assert.strictEqual(user.preShiftVoiceAt, null, 'maintenance pre-shift voice marker is cleared after clock-in');
+}
+
+{
+    const member = createMember({ id: 'maintenance-window-mismatch-user', displayName: 'Maintenance Window Mismatch User' });
+    const user = service.ensureUserData(member, 'day');
+    user.preShiftVoiceAt = at('2026-05-20 04:00').toISOString();
+    user.preShiftVoiceMode = 'maintenance';
+    user.preShiftVoiceWindowStartAt = at('2026-05-20 04:00').toISOString();
+    user.preShiftVoiceWindowEndAt = at('2026-05-20 08:30').toISOString();
+
+    const result = service.applyClockInCore(user, member, 'day', at('2026-05-20 09:09'), {
+        ok: true,
+        recognizedAt: at('2026-05-20 09:09'),
+        bounds: { start: at('2026-05-20 09:00'), end: at('2026-05-20 21:00') },
+        preShift: false
+    }, true);
+
+    assert.strictEqual(result.ok, true, 'maintenance mismatch clock-in succeeds');
+    assert.strictEqual(result.status, 'late', 'maintenance window must end at shift start to grant on-time status');
+    assert.strictEqual(result.preShiftVoiceGrace, false, 'mismatched maintenance window is ignored');
+}
+
+{
+    const member = createMember({ id: 'stale-pre-shift-voice-user', displayName: 'Stale Pre Shift Voice User' });
+    const user = service.ensureUserData(member, 'night');
+    user.preShiftVoiceAt = at('2026-05-21 13:30').toISOString();
+    user.preShiftVoiceMode = 'regular';
+
+    const result = service.applyClockInCore(user, member, 'night', at('2026-05-21 21:09'), {
+        ok: true,
+        recognizedAt: at('2026-05-21 21:09'),
+        bounds: { start: at('2026-05-21 21:00'), end: at('2026-05-22 09:00') },
+        preShift: false
+    }, true);
+
+    assert.strictEqual(result.ok, true, 'stale pre-shift voice clock-in succeeds');
+    assert.strictEqual(result.status, 'late', 'stale pre-shift voice marker does not create on-time status');
+    assert.strictEqual(result.preShiftVoiceGrace, false, 'stale pre-shift voice marker is ignored');
+}
+
+{
     const user = service.ensureUserData(createMember({ id: 'session-user', displayName: 'Session User' }), 'night');
     const session = service.startAttendanceSession(user, 'night', at('2026-05-21 21:00'), 'unit-test');
 
@@ -175,6 +362,22 @@ function assertUserStateClean(user, message) {
 
     const summary = service.getUserLatestSessionSummary(user, at('2026-05-21 23:30'));
     assert.strictEqual(summary.creditedMinutes, 105, 'latest session summary uses closed session totals');
+}
+
+{
+    const user = service.ensureUserData(createMember({ id: 'short-live-off-user', displayName: 'Short Live Off User' }), 'night');
+    const session = service.startAttendanceSession(user, 'night', at('2026-05-21 21:00'), 'unit-test');
+
+    service.startSessionPeriod(session.liveOffPeriods, at('2026-05-21 21:10'), 'live-off');
+    service.closeOpenSessionPeriod(session.liveOffPeriods, at('2026-05-21 21:12'));
+    service.startSessionPeriod(session.liveOffPeriods, at('2026-05-21 21:20'), 'live-off');
+    service.closeOpenSessionPeriod(session.liveOffPeriods, at('2026-05-21 21:23'));
+
+    const summary = service.calculateSessionWorkedMinutes(session, at('2026-05-21 22:00'));
+
+    assert.strictEqual(service.sumSessionPeriods(session.liveOffPeriods, at('2026-05-21 22:00')), 5, 'raw live-off periods still keep short interruptions');
+    assert.strictEqual(summary.liveOffMinutes, 3, 'short live-off interruptions at or below ignore threshold do not reduce credited time');
+    assert.strictEqual(summary.creditedMinutes, 57, 'credited time subtracts only tracked live-off minutes');
 }
 
 {
@@ -456,13 +659,20 @@ function assertUserStateClean(user, message) {
     assert.strictEqual(user.liveOffStartedAt, at('2026-05-21 22:00').toISOString(), 'live-off state records start time');
     assert.strictEqual(user.pendingClockOut.source, 'live_off', 'live-off state creates pending clock-out');
     assert.strictEqual(service.getOpenSession(user).liveOffPeriods.length, 1, 'live-off state starts live-off period');
+    user.pendingClockOut.finalizeAfterShiftEnd = true;
+    user.pendingClockOut.shiftEndAt = at('2026-05-22 09:00').toISOString();
+    user.pendingClockOut.timeoutNotifiedAt = at('2026-05-21 22:30').toISOString();
+    const pointsBeforeRecovery = user.points;
+    const earlyBeforeRecovery = user.totalEarly || 0;
 
     const onChanged = service.clearLiveOffState(user, at('2026-05-21 22:15'));
 
     assert.strictEqual(onChanged, true, 'live-on recovery reports changed');
     assert.strictEqual(user.voiceStatus, 'LIVE_ON', 'live-on recovery records LIVE_ON');
     assert.strictEqual(user.liveOffStartedAt, null, 'live-on recovery clears liveOffStartedAt');
-    assert.strictEqual(user.pendingClockOut, null, 'live-on recovery clears pending clock-out');
+    assert.strictEqual(user.pendingClockOut, null, 'live-on recovery clears held pending clock-out');
+    assert.strictEqual(user.points, pointsBeforeRecovery, 'held live-off recovery does not change points');
+    assert.strictEqual(user.totalEarly || 0, earlyBeforeRecovery, 'held live-off recovery does not add early-out');
     assert.strictEqual(service.getOpenSession(user).liveOffPeriods[0].minutes, 15, 'live-on recovery closes live-off period');
 }
 
@@ -486,14 +696,29 @@ function assertUserStateClean(user, message) {
     assert.strictEqual(user.voiceStatus, 'DISCONNECTED', 'disconnected core records DISCONNECTED');
     assert.strictEqual(user.pendingClockOut.source, 'voice_leave', 'disconnected core creates voice-leave pending clock-out');
     assert.strictEqual(service.getOpenSession(user).dcPeriods.length, 1, 'disconnected core starts dc period');
+    user.pendingClockOut.finalizeAfterShiftEnd = true;
+    user.pendingClockOut.shiftEndAt = at('2026-05-22 09:00').toISOString();
+    user.pendingClockOut.timeoutNotifiedAt = at('2026-05-21 22:10').toISOString();
+    const pointsBeforeRecovery = user.points;
+    const earlyBeforeRecovery = user.totalEarly || 0;
 
     const live = service.applyLiveOnCore(user, at('2026-05-21 22:05'), 'unit-test', 'unit-live-on');
 
     assert.strictEqual(live.ok, true, 'live-on core succeeds');
     assert.strictEqual(user.disconnected, false, 'live-on core clears disconnected');
     assert.strictEqual(user.voiceStatus, 'LIVE_ON', 'live-on core records LIVE_ON');
-    assert.strictEqual(user.pendingClockOut, null, 'live-on core clears pending clock-out');
+    assert.strictEqual(user.pendingClockOut, null, 'live-on core clears held pending clock-out');
+    assert.strictEqual(user.points, pointsBeforeRecovery, 'held dc recovery does not change points');
+    assert.strictEqual(user.totalEarly || 0, earlyBeforeRecovery, 'held dc recovery does not add early-out');
     assert.strictEqual(service.getOpenSession(user).dcPeriods[0].minutes, 5, 'live-on core closes dc period');
+    const recoveryEvents = user.attendanceEvents.filter(event => event.type === 'live_on_recovered').length;
+    const stableLive = service.applyLiveOnCore(user, at('2026-05-21 22:06'), 'heartbeat', 'live-on-recovered');
+    assert.strictEqual(stableLive.changed, false, 'stable live-on heartbeat is not treated as a recovery');
+    assert.strictEqual(
+        user.attendanceEvents.filter(event => event.type === 'live_on_recovered').length,
+        recoveryEvents,
+        'stable live-on heartbeat does not append a duplicate recovery event'
+    );
 }
 
 {
@@ -705,6 +930,57 @@ function assertUserStateClean(user, message) {
 }
 
 {
+    const member = createMember({ id: 'scenario-erzie', displayName: 'Erzie Scenario' });
+    const user = service.ensureUserData(member, 'night');
+    user.checkedIn = true;
+    user.attendanceStatus = 'WORKING';
+    user.voiceStatus = 'LIVE_ON';
+    user.status = 'late';
+    user.strikeReceivedThisShift = true;
+    user.points = -15;
+    user.totalLate = 1;
+    user.totalEarly = 1;
+    user.earlyOut = true;
+    user.monthlyStats = {
+        month: '2026-05',
+        totalNormal: 0,
+        totalLate: 1,
+        totalExcessiveLate: 0,
+        totalEarly: 1,
+        totalAbsent: 0,
+        totalOT: 0,
+        points: -15
+    };
+    service.startAttendanceSession(user, 'night', at('2026-05-21 21:08'), 'unit-test');
+    service.applyDisconnectedCore(user, at('2026-05-22 02:00'), 'unit-test', {
+        graceMins: 10,
+        pendingReason: 'scenario dc'
+    });
+    const timeout = service.applyClockOutCore(member, user, at('2026-05-22 02:10'), 'DC timeout', null, {
+        clockOutSource: 'dc-timeout',
+        effectiveTime: at('2026-05-22 02:00'),
+        detectedAt: at('2026-05-22 02:10')
+    });
+    service.closeOpenSessionPeriod(user.sessions[0].dcPeriods, at('2026-05-22 02:00'));
+    user.reversibleEarlyPenaltyKey = timeout.reversibleEarlyPenaltyKey;
+    user.reversibleEarlyPenaltyPoints = Math.abs(CONFIG.POINTS.EARLY_OUT);
+
+    const resumed = service.applyAutoTimeoutResumeCore(user, 'night', at('2026-05-22 03:20'), 'unit-test');
+
+    assert.strictEqual(resumed.ok, true, 'auto timeout session is resumable before shift end');
+    assert.strictEqual(user.checkedIn, true, 'resume keeps worker checked in');
+    assert.strictEqual(user.isFinished, false, 'resume clears finished state');
+    assert.strictEqual(user.checkOutRaw, null, 'resume removes temporary checkout');
+    assert.strictEqual(service.getOpenSession(user)?.id, timeout.session.id, 'resume reopens the original session');
+    assert.strictEqual(user.totalEarly, 0, 'resume reverses early-out count');
+    assert.strictEqual(user.monthlyStats.totalEarly, 0, 'resume reverses monthly early-out count');
+    assert.strictEqual(user.monthlyStats.points, -5, 'resume reverses only the early-out penalty');
+    assert.strictEqual(user.monthlyStats.totalLate, 1, 'resume preserves the original attendance status');
+    assert.strictEqual(user.sessions[0].dcPeriods[0].minutes, 80, 'resume records full DC duration until recovery');
+    assert.strictEqual(user.sessions[0].clockOutAt, null, 'original session is no longer closed');
+}
+
+{
     const user = service.ensureUserData(createMember({ id: 'scenario-daba', displayName: 'Daba Scenario' }), 'night');
     user.dayOff = true;
     user.dayOffExpireAt = at('2026-05-22 09:00').toISOString();
@@ -746,6 +1022,31 @@ function assertUserStateClean(user, message) {
     assert.strictEqual(user.voiceStatus, 'LIVE_ON', 'scenario restored OT records LIVE_ON');
     assert.strictEqual(state.overtimeUsers.some(ot => ot.id === user.id && ot.type === 'AUTO'), true, 'scenario restored OT appears in overtime list');
     assertUserStateClean(user, 'restored overtime state is clean');
+}
+
+{
+    const user = service.ensureUserData(createMember({ id: 'scenario-denxie-stale', displayName: 'denxie stale' }), 'night');
+    user.checkedIn = false;
+    user.isFinished = true;
+    user.attendanceStatus = 'FINISHED';
+    user.voiceStatus = 'LIVE_ON';
+    user.lastClockOutSource = 'auto-repair-stale-overtime';
+    user.sessions = [{
+        id: 'scenario-denxie-stale-ot-session',
+        shift: 'night',
+        clockInAt: at('2026-06-30 09:00').toISOString(),
+        clockOutAt: at('2026-06-30 09:00').toISOString(),
+        clockOutSource: 'auto-repair-stale-overtime',
+        scheduledEndAt: at('2026-06-30 09:00').toISOString(),
+        otStartedAt: at('2026-06-30 09:00').toISOString(),
+        otType: 'AUTO'
+    }];
+    user.activeSessionId = null;
+
+    const restored = service.applyRestoreOvertimeAfterFinishCore(user, 'night', at('2026-07-01 13:00'), 'scenario-test');
+    assert.strictEqual(restored.ok, false, 'stale auto-repaired overtime is not restored after finish');
+    assert.strictEqual(user.checkedIn, false, 'stale auto-repaired overtime does not check user back in');
+    assert.strictEqual(state.overtimeUsers.some(ot => ot.id === user.id), false, 'stale auto-repaired overtime is not re-added');
 }
 
 {
@@ -820,6 +1121,28 @@ function assertUserStateClean(user, message) {
 }
 
 {
+    const member = createMember({
+        id: 'normalize-stale-checkin',
+        displayName: 'Normalize Stale CheckIn',
+        voice: { channelId: 'voice1', streaming: true }
+    });
+    const user = service.ensureUserData(member, 'night');
+    user.shiftSessionKey = 'night:2026-05-21 21:00';
+    user.checkedIn = true;
+    user.checkInRaw = at('2026-05-21 02:36').toISOString();
+    user.checkInTime = '02:36 AM';
+    user.attendanceStatus = 'WORKING';
+    user.voiceStatus = 'LIVE_ON';
+
+    const result = service.normalizeCurrentShiftSessionCore(member, user, 'night', at('2026-05-21 21:02'));
+
+    assert.strictEqual(result.changed, true, 'normalize repairs stale check-in from before current shift start');
+    assert.strictEqual(result.action, 'clock-in', 'streaming stale session is clocked into the new shift');
+    assert.strictEqual(user.checkInRaw, null, 'stale check-in time is cleared before new clock-in');
+    assert.strictEqual(user.activeSessionId, null, 'stale active session is cleared');
+}
+
+{
     const user = service.ensureUserData(createMember({
         id: 'post-shift-ot',
         displayName: 'Post Shift OT'
@@ -829,6 +1152,7 @@ function assertUserStateClean(user, message) {
     user.dayOff = false;
     user.attendanceStatus = 'PRE_SHIFT';
     user.lastClockOutSource = 'shift-handoff-auto-finish';
+    user.lastLiveOnAt = at('2026-05-22 08:50').toISOString();
     user.sessions = [{
         id: 'post-shift-session',
         shift: 'night',
@@ -858,6 +1182,132 @@ function assertUserStateClean(user, message) {
         false,
         'manual-resume-required users are not silently moved into post-shift OT'
     );
+
+    user.manualResumeRequired = false;
+    user.postShiftOtInterruptedAt = at('2026-05-22 09:03').toISOString();
+    user.postShiftOtInterruptedReason = 'left_voice_after_shift_end';
+    assert.strictEqual(
+        service.canStartPostShiftOvertime(user, at('2026-05-22 09:10')),
+        false,
+        'post-shift live break blocks automatic continuous OT'
+    );
+}
+
+{
+    const user = service.ensureUserData(createMember({
+        id: 'post-shift-late-return',
+        displayName: 'Post Shift Late Return'
+    }), 'night');
+    user.checkedIn = false;
+    user.isFinished = true;
+    user.dayOff = false;
+    user.attendanceStatus = 'FINISHED';
+    user.lastClockOutSource = 'shift-handoff-auto-finish';
+    user.checkInRaw = at('2026-05-21 21:00').toISOString();
+    user.checkInTime = '09:00 PM';
+    user.sessions = [{
+        id: 'post-shift-late-return-session',
+        shift: 'night',
+        scheduledStartAt: at('2026-05-21 21:00').toISOString(),
+        scheduledEndAt: at('2026-05-22 09:00').toISOString(),
+        clockInAt: at('2026-05-21 21:00').toISOString(),
+        clockOutAt: at('2026-05-22 09:00').toISOString(),
+        clockOutSource: 'shift-handoff-auto-finish'
+    }];
+
+    assert.strictEqual(
+        service.canStartPostShiftOvertime(user, at('2026-05-22 18:30')),
+        false,
+        'late post-shift return is not silently attached to the old shift'
+    );
+    assert.strictEqual(
+        service.canStartPostShiftOvertime(user, at('2026-05-22 18:30'), { allowLateReturn: true }),
+        true,
+        'explicit live re-entry can start a detached post-shift overtime'
+    );
+    assert.strictEqual(
+        service.getPostShiftOvertimeStartMoment(user, at('2026-05-22 18:30'), { allowLateReturn: true }).format('HH:mm'),
+        '18:30',
+        'detached post-shift overtime starts at the live re-entry time'
+    );
+
+    const result = service.applyOvertimeCore(user, at('2026-05-22 18:30'), 'AUTO', 'unit-test', 'late-post-shift-return', {
+        startedAt: at('2026-05-22 18:30'),
+        sessionSource: 'post-shift-auto-ot',
+        resetClockInForOvertime: true,
+        sessionScheduledStartAt: at('2026-05-22 18:30'),
+        sessionScheduledEndAt: at('2026-05-22 18:30'),
+        monthlyAt: at('2026-05-22 18:30')
+    });
+
+    assert.strictEqual(result.ok, true, 'detached post-shift overtime starts');
+    assert.strictEqual(user.checkInRaw, at('2026-05-22 18:30').toISOString(), 'detached overtime replaces display clock-in time');
+    assert.strictEqual(user.checkOutRaw, null, 'detached overtime clears stale checkout raw time');
+    assert.strictEqual(user.checkOutTime, null, 'detached overtime clears stale checkout display time');
+    assert.strictEqual(user.lastClockOutSource, null, 'detached overtime clears stale checkout source');
+    assert.strictEqual(result.session.scheduledStartAt, at('2026-05-22 18:30').toISOString(), 'detached overtime does not reuse the old shift start');
+}
+
+{
+    const user = service.ensureUserData(createMember({
+        id: 'stale-repaired-live-return',
+        displayName: 'Stale Repaired Live Return'
+    }), 'night');
+    user.checkedIn = false;
+    user.isFinished = true;
+    user.attendanceStatus = 'FINISHED';
+    user.lastClockOutSource = 'auto-repair-stale-overtime';
+    user.sessions = [{
+        id: 'stale-repaired-auto-ot',
+        shift: 'night',
+        scheduledStartAt: at('2026-05-21 21:00').toISOString(),
+        scheduledEndAt: at('2026-05-22 09:00').toISOString(),
+        clockInAt: at('2026-05-22 09:00').toISOString(),
+        clockInSource: 'post-shift-auto-ot',
+        clockOutAt: at('2026-05-22 09:00').toISOString(),
+        clockOutSource: 'auto-repair-stale-overtime',
+        otStartedAt: at('2026-05-22 09:00').toISOString(),
+        otType: 'AUTO'
+    }];
+
+    assert.strictEqual(
+        service.canStartPostShiftOvertime(user, at('2026-05-22 18:30')),
+        false,
+        'stale repaired overtime is not silently restored'
+    );
+    assert.strictEqual(
+        service.canStartPostShiftOvertime(user, at('2026-05-22 18:30'), { allowLateReturn: true }),
+        true,
+        'actual live return after stale repair can start a new detached overtime'
+    );
+}
+
+{
+    const user = service.ensureUserData(createMember({
+        id: 'month-boundary-ot',
+        displayName: 'Month Boundary OT'
+    }), 'night');
+    user.sessions = [{
+        id: 'regular-night-2026-06-30',
+        shift: 'night',
+        sessionKey: 'night:2026-06-30 21:00',
+        scheduledStartAt: at('2026-06-30 21:00').toISOString(),
+        scheduledEndAt: at('2026-07-01 09:00').toISOString(),
+        clockInAt: at('2026-06-30 21:00').toISOString(),
+        clockOutAt: at('2026-07-01 09:00').toISOString(),
+        clockOutSource: 'shift-handoff-auto-finish'
+    }];
+
+    const result = service.applyOvertimeCore(user, at('2026-07-01 09:05'), 'AUTO', 'unit-test', 'month-boundary-auto-ot', {
+        startedAt: at('2026-07-01 09:00'),
+        sessionSource: 'post-shift-auto-ot'
+    });
+
+    assert.strictEqual(result.ok, true, 'month boundary overtime starts');
+    assert.strictEqual(user.monthlyStats.month, '2026-06', 'overtime points use shift work month');
+    assert.strictEqual(user.monthlyStats.totalOT, 1, 'overtime count is assigned to work month');
+    assert.strictEqual(result.session.sessionKey, 'night:2026-06-30 21:00', 'overtime session keeps source shift session key');
+    assert.strictEqual(state.overtimeUsers.some(ot => ot.id === user.id && ot.shiftSessionKey === 'night:2026-06-30 21:00'), true, 'overtime entry keeps source shift session key');
 }
 
 console.log('attendance-service tests passed');

@@ -41,6 +41,9 @@ function auditStateInvariants(input) {
     if (hasOvertimeUsers && !Array.isArray(db.overtimeUsers)) {
         issues.push({ id: null, name: null, type: 'invalid-overtimeUsers' });
     }
+    if (Object.prototype.hasOwnProperty.call(db || {}, 'attendanceEventLog') && !Array.isArray(db.attendanceEventLog)) {
+        issues.push({ id: null, name: null, type: 'invalid-attendanceEventLog' });
+    }
 
     for (const user of Object.values(users || {})) {
         if (!user || !user.id) continue;

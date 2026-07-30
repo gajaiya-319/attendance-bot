@@ -107,7 +107,7 @@ function createHandler({ calls, message, purchaseSheetService, momentOverride = 
 }
 
 assert.strictEqual(getServerForChannel('paagrio-penalty', CONFIG.DEATH_PENALTY_CHANNEL_IDS), 'PAAGRIO');
-assert.strictEqual(getServerForChannel('heine-penalty', CONFIG.DEATH_PENALTY_CHANNEL_IDS), 'HEINE');
+assert.strictEqual(getServerForChannel('heine-penalty', CONFIG.DEATH_PENALTY_CHANNEL_IDS), 'VALAKAS');
 assert.strictEqual(getServerForChannel('other', CONFIG.DEATH_PENALTY_CHANNEL_IDS), null);
 assert.strictEqual(isSafetyZonePost('safety zone check'), true);
 assert.strictEqual(isSafetyZonePost('SAFETYZONE'), true);
@@ -137,6 +137,33 @@ assert.strictEqual(
         assert.deepStrictEqual(calls, [
             `react:${CONFIG.PURCHASE_PROCESSING_EMOJI}`
         ]);
+    }
+
+    {
+        const calls = [];
+        const errors = [];
+        const message = createMessage({ calls, content: 'deleted message' });
+        message.react = async () => {
+            const error = new Error('Unknown Message');
+            error.code = 10008;
+            error.status = 404;
+            throw error;
+        };
+        const handler = createDeathPenaltyReactionHandler({
+            MessagePermissionFlags: {
+                Administrator: 'Administrator',
+                ManageMessages: 'ManageMessages'
+            },
+            CONFIG,
+            moment: () => ({ tz: () => ({ date: () => 1 }) }),
+            purchaseSheetService: {
+                addPurchase: async () => ({ ok: true })
+            },
+            logger: { log: () => {}, warn: () => {}, error: (...args) => errors.push(args) }
+        });
+
+        await handler.messageCreate(message);
+        assert.deepStrictEqual(errors, [], 'deleted messages should not create reaction error logs');
     }
 
     {
@@ -220,7 +247,7 @@ assert.strictEqual(
             message
         }, { id: 'owner', bot: false });
 
-        assert(calls.includes('sheet:HEINE:NIGHT:Chog:1000:31'));
+        assert(calls.includes('sheet:VALAKAS:NIGHT:Chog:1000:31'));
     }
 
     {
@@ -253,7 +280,7 @@ assert.strictEqual(
             message
         }, { id: 'head', bot: false });
 
-        assert(calls.includes('sheet:HEINE:NIGHT:Lancyy:1000:1'));
+        assert(calls.includes('sheet:VALAKAS:NIGHT:Lancyy:1000:1'));
     }
 
     {

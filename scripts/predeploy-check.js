@@ -81,6 +81,31 @@ function runNpmTest() {
     run('npm', ['test']);
 }
 
+function runProductionSecurityAudit() {
+    if (process.platform === 'win32') {
+        run('cmd.exe', ['/d', '/s', '/c', 'npm.cmd', 'audit', '--omit=dev', '--audit-level=high']);
+        return;
+    }
+    run('npm', ['audit', '--omit=dev', '--audit-level=high']);
+}
+
+function runResilienceTests() {
+    run('node', ['tests/rotating-jsonl.test.js']);
+    run('node', ['tests/attendance-event-ledger.test.js']);
+    run('node', ['tests/attendance-auto-repair-service.test.js']);
+    run('node', ['tests/end-adena-reconciliation-service.test.js']);
+    run('node', ['tests/end-adena-freshness-service.test.js']);
+    run('node', ['tests/voice-live-off-policy.test.js']);
+    run('node', ['tests/background-job-queue-service.test.js']);
+    run('node', ['tests/payroll-owner-notify.test.js']);
+    run('node', ['tests/disaster-recovery.test.js']);
+    run('node', ['tests/operational-evidence.test.js']);
+    run('node', ['tests/operational-certification-status-service.test.js']);
+    run('node', ['tests/external-dependency-smoke-service.test.js']);
+    run('node', ['tests/recovery-drill-service.test.js']);
+    run('node', ['tests/security-posture-audit-service.test.js']);
+}
+
 function runStateInvariantAudit() {
     if (!require('fs').existsSync('attendanceData.json')) {
         console.log('State invariant audit skipped: attendanceData.json not found.');
@@ -185,6 +210,8 @@ function printGitStatusSummary() {
 function main() {
     assertRuntimeDataUntracked();
     checkJavaScriptSyntax();
+    runProductionSecurityAudit();
+    runResilienceTests();
     runNpmTest();
     runStateInvariantAudit();
     runStateWriteAudit();

@@ -42,6 +42,13 @@ assertBounds('Normal night', 'night', '2026-05-21 22:00', '2026-05-21 21:00', '2
 assert.strictEqual(time.getOperationalShift(at('2026-05-20 06:00')), null, 'Wednesday maintenance has no operational shift');
 assert.strictEqual(time.isMaintenanceWindow(at('2026-05-20 06:00')), true, 'Wednesday 06:00 is maintenance');
 assert.strictEqual(time.isMaintenanceWindow(at('2026-05-20 09:00')), false, 'Wednesday 09:00 exits maintenance');
+const defaultHandoff = time.getMaintenanceHandoffWindow(at('2026-05-20 06:00'), 'day');
+assert.strictEqual(defaultHandoff.previousShiftStartAt.format('YYYY-MM-DD HH:mm'), '2026-05-19 19:00', 'maintenance handoff previous night starts at Tuesday night start');
+assert.strictEqual(defaultHandoff.previousShiftEndAt.format('YYYY-MM-DD HH:mm'), '2026-05-20 04:00', 'maintenance handoff previous night ends at maintenance start');
+assert.strictEqual(defaultHandoff.maintenanceStartAt.format('YYYY-MM-DD HH:mm'), '2026-05-20 04:00', 'maintenance handoff starts at maintenance start');
+assert.strictEqual(defaultHandoff.maintenanceEndAt.format('YYYY-MM-DD HH:mm'), '2026-05-20 09:00', 'maintenance handoff ends at maintenance end');
+assert.strictEqual(defaultHandoff.targetShiftStartAt.format('YYYY-MM-DD HH:mm'), '2026-05-20 09:00', 'maintenance handoff target day starts at maintenance end');
+assert.strictEqual(defaultHandoff.isDirectHandoff, true, 'default maintenance is direct night-maintenance-day handoff');
 assert.strictEqual(time.isWithinPreShiftWindow('day', at('2026-05-20 08:50')), true, '08:50 is day pre-shift buffer');
 assert.strictEqual(time.isWithinPreShiftWindow('day', at('2026-05-20 08:49')), false, '08:49 is before day pre-shift buffer');
 assert.strictEqual(time.getDashboardShift(at('2026-05-20 08:55')), 'day', 'day pre-shift takes over dashboard before 09:00');
@@ -77,6 +84,10 @@ assert.strictEqual(overrideTime.isMaintenanceWindow(at('2026-06-03 06:00')), fal
 assertOverrideBounds('Delayed Wednesday maintenance day shift', 'day', '2026-06-03 12:00', '2026-06-03 09:00', '2026-06-03 19:00');
 assertOverrideBounds('Delayed Wednesday maintenance night shift', 'night', '2026-06-03 20:00', '2026-06-03 19:00', '2026-06-04 04:00');
 assert.strictEqual(overrideTime.isMaintenanceWindow(at('2026-06-04 06:00')), true, 'delayed Wednesday update opens maintenance on the next morning');
+const delayedHandoff = overrideTime.getMaintenanceHandoffWindow(at('2026-06-04 06:00'), 'day');
+assert.strictEqual(delayedHandoff.previousShiftEndAt.format('YYYY-MM-DD HH:mm'), '2026-06-04 04:00', 'delayed maintenance handoff previous night ends at moved maintenance start');
+assert.strictEqual(delayedHandoff.targetShiftStartAt.format('YYYY-MM-DD HH:mm'), '2026-06-04 09:00', 'delayed maintenance handoff target day starts after maintenance');
+assert.strictEqual(delayedHandoff.isDirectHandoff, true, 'delayed maintenance is still direct handoff');
 assertOverrideBounds('Next Tuesday returns to normal maintenance day shift', 'day', '2026-06-09 12:00', '2026-06-09 09:00', '2026-06-09 19:00');
 assertOverrideBounds('Next Tuesday returns to normal maintenance night shift', 'night', '2026-06-09 20:00', '2026-06-09 19:00', '2026-06-10 04:00');
 assert.strictEqual(overrideTime.isMaintenanceWindow(at('2026-06-10 06:00')), true, 'next Tuesday default maintenance window still applies');
@@ -98,5 +109,6 @@ const overnightWindowTime = createTimeLogic({
 assert.strictEqual(overnightWindowTime.isMaintenanceWindow(at('2026-06-04 23:30')), true, 'override maintenance window can cross midnight');
 assert.strictEqual(overnightWindowTime.isMaintenanceWindow(at('2026-06-05 00:30')), true, 'override maintenance remains active after midnight');
 assert.strictEqual(overnightWindowTime.isMaintenanceWindow(at('2026-06-05 01:00')), false, 'override maintenance exits at next-day end');
+assert.strictEqual(overnightWindowTime.getMaintenanceHandoffWindow(at('2026-06-04 23:30'), 'day').isDirectHandoff, false, 'non-adjacent custom maintenance is not a day-shift handoff');
 
 console.log('time-logic tests passed');

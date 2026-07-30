@@ -1,7 +1,13 @@
 'use strict';
 
-function getPurchaseSheetDayOfMonth(moment, timezone, dateInput = Date.now()) {
-    return moment(dateInput).tz(timezone).date();
+const { getShiftSheetDayOfMonth } = require('../utils/shiftSheetDate');
+const {
+    formatPurchaseRequestOwnerDm,
+    formatPurchaseApprovedDm
+} = require('../utils/purchaseDmMessages');
+
+function getPurchaseSheetDayOfMonth(moment, timezone, dateInput = Date.now(), shift = null) {
+    return getShiftSheetDayOfMonth(moment, timezone, shift, dateInput);
 }
 
 function isInstructionalPurchasePost(text) {
@@ -18,7 +24,7 @@ function stripPurchaseNoise(text) {
         .replace(/\bbuy\b/ig, ' ')
         .replace(/\.?\s*\uD3EC\uC158\s*(?:\uC0AC\uAE30|\uAD6C\uB9E4)/ig, ' ')
         .replace(/\b\d+\s*(?:ea|each|\uAC1C)?\b/ig, ' ')
-        .replace(/[-–—_:;,.()[\]{}]+/g, ' ')
+        .replace(/[-_:;,.()[\]{}]+/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
 }
@@ -101,7 +107,7 @@ function getPurchaseSheetName(member, parsedName, roles) {
 }
 
 function getMemberServer(member, roles) {
-    if (member?.roles?.cache?.has(roles.HEINE)) return 'HEINE';
+    if (member?.roles?.cache?.has(roles.HEINE)) return 'VALAKAS';
     if (member?.roles?.cache?.has(roles.PAAGRIO)) return 'PAAGRIO';
     return null;
 }
@@ -132,30 +138,6 @@ function hasReaction(message, emojiName) {
 function getReactionCount(message, emojiName) {
     const reaction = message?.reactions?.cache?.find?.(item => item.emoji?.name === emojiName);
     return reaction?.count || 0;
-}
-
-function formatPurchaseRequestOwnerDm({ userName, quantity, itemLabel = 'potion', amount = null }) {
-    const requestText = itemLabel === 'haste buff'
-        ? `haste buff ${Number(amount || 0).toLocaleString('en-US')}`
-        : `포션을 ${quantity}개`;
-    return [
-        '\uD83E\uDDEA 포션 구매 신청 알림',
-        '',
-        `${userName}님이 ${requestText} 신청했습니다.`,
-        '확인한 후 구매해 주세요. 감사합니다!'
-    ].join('\n');
-}
-
-function formatPurchaseApprovedDm({ quantity, itemLabel = 'potion' }) {
-    const itemText = itemLabel?.startsWith('haste buff')
-        ? itemLabel
-        : `${quantity} ${quantity === 1 ? 'potion' : 'potions'}`;
-    const verb = itemLabel?.startsWith('haste buff') || quantity === 1 ? 'has' : 'have';
-    return [
-        `\u2705 Your ${itemText} ${verb} been purchased.`,
-        `Please check your ${itemLabel?.startsWith('haste buff') ? 'buff' : 'potions'} when you have a moment.`,
-        '\uD83E\uDDEA Thank you, and enjoy your hunt!'
-    ].join('\n');
 }
 
 function createPurchaseReactionHandler({
@@ -203,7 +185,10 @@ function createPurchaseReactionHandler({
 
     async function safeReact(message, emoji) {
         if (!emoji) return;
-        await message.react(emoji).catch(error => logger.error?.('[PURCHASE REACT ERROR]', error));
+        await message.react(emoji).catch(error => {
+            if (error?.code === 10008 || error?.status === 404) return;
+            logger.error?.('[PURCHASE REACT ERROR]', error);
+        });
     }
 
     async function safeSendDm(user, content, label) {
@@ -243,24 +228,28 @@ function createPurchaseReactionHandler({
         }
     }
 
-    async function writePurchaseWithServerFallback({ server, shift, userName, amount, dayOfMonth }) {
+    async function writePurchaseWithServerFallback({ server, shift, userName, amount, dayOfMonth, messageId = null, channelId = null }) {
         if (server) {
+            const payload = { server, shift, userName, amount, dayOfMonth, messageId, channelId };
             return {
                 server,
-                result: await purchaseSheetService.addPurchase({ server, shift, userName, amount, dayOfMonth })
+                result: await purchaseSheetService.addPurchase(payload, { messageId, channelId })
             };
         }
 
         const fallbackServers = Object.keys(CONFIG.PURCHASE_SERVER_TABS || {});
         let lastResult = null;
         for (const candidateServer of fallbackServers) {
-            const result = await purchaseSheetService.addPurchase({
+            const payload = {
                 server: candidateServer,
                 shift,
                 userName,
                 amount,
-                dayOfMonth
-            });
+                dayOfMonth,
+                messageId,
+                channelId
+            };
+            const result = await purchaseSheetService.addPurchase(payload, { messageId, channelId });
             if (result.ok) return { server: candidateServer, result };
             lastResult = result;
             if (!['user-not-found', 'section-not-found', 'day-not-found', 'missing-config'].includes(result.code)) {
@@ -335,6 +324,26 @@ function createPurchaseReactionHandler({
         await removeEmojiReactions(message, CONFIG.PURCHASE_PROCESSING_EMOJI);
     }
 
+    async function syncStatusReactions(message, desiredEmojis) {
+        const desired = new Set(desiredEmojis.filter(Boolean));
+        const statusEmojis = [
+            CONFIG.PURCHASE_APPROVAL_EMOJI,
+            CONFIG.PURCHASE_CANCEL_EMOJI,
+            CONFIG.PURCHASE_SUCCESS_EMOJI,
+            CONFIG.PURCHASE_FAILURE_EMOJI,
+            CONFIG.PURCHASE_PROCESSING_EMOJI
+        ].filter(Boolean);
+
+        for (const emoji of statusEmojis) {
+            if (!desired.has(emoji) && hasReaction(message, emoji)) {
+                await removeEmojiReactions(message, emoji);
+            }
+        }
+        for (const emoji of desired) {
+            if (!hasReaction(message, emoji)) await safeReact(message, emoji);
+        }
+    }
+
     async function handleMessageCreate(message) {
         try {
             if (!isEnabled() || message.author?.bot || !isPurchaseChannel(message)) return;
@@ -366,36 +375,24 @@ function createPurchaseReactionHandler({
             const isCancelled = hasReaction(message, CONFIG.PURCHASE_CANCEL_EMOJI) && !isApproved;
 
             if (isApproved) {
-                if (!hasReaction(message, CONFIG.PURCHASE_APPROVAL_EMOJI)) {
-                    await safeReact(message, CONFIG.PURCHASE_APPROVAL_EMOJI);
-                }
-                if (!hasReaction(message, CONFIG.PURCHASE_SUCCESS_EMOJI)) {
-                    await safeReact(message, CONFIG.PURCHASE_SUCCESS_EMOJI);
-                }
-                await removeBotReaction(message, CONFIG.PURCHASE_PROCESSING_EMOJI);
-                await removeBotReaction(message, CONFIG.PURCHASE_FAILURE_EMOJI);
+                await syncStatusReactions(message, [
+                    CONFIG.PURCHASE_APPROVAL_EMOJI,
+                    CONFIG.PURCHASE_SUCCESS_EMOJI
+                ]);
                 return true;
             }
 
             if (isCancelled && !isQueued) {
-                if (!hasReaction(message, CONFIG.PURCHASE_CANCEL_EMOJI)) {
-                    await safeReact(message, CONFIG.PURCHASE_CANCEL_EMOJI);
-                }
-                await removeBotReaction(message, CONFIG.PURCHASE_PROCESSING_EMOJI);
-                await removeBotReaction(message, CONFIG.PURCHASE_FAILURE_EMOJI);
+                await syncStatusReactions(message, [CONFIG.PURCHASE_CANCEL_EMOJI]);
                 return true;
             }
 
             if (isQueued) {
-                if (!hasReaction(message, CONFIG.PURCHASE_FAILURE_EMOJI)) {
-                    await safeReact(message, CONFIG.PURCHASE_FAILURE_EMOJI);
-                }
-                await removeBotReaction(message, CONFIG.PURCHASE_PROCESSING_EMOJI);
+                await syncStatusReactions(message, [CONFIG.PURCHASE_FAILURE_EMOJI]);
                 return true;
             }
 
-            if (!isQueued) await removeEmojiReactions(message, CONFIG.PURCHASE_FAILURE_EMOJI);
-            await safeReact(message, CONFIG.PURCHASE_PROCESSING_EMOJI);
+            await syncStatusReactions(message, [CONFIG.PURCHASE_PROCESSING_EMOJI]);
             return true;
         } catch (error) {
             logger.error?.('[PURCHASE STATUS SYNC ERROR]', error);
@@ -457,18 +454,20 @@ function createPurchaseReactionHandler({
                     return;
                 }
 
-                const dayOfMonth = getPurchaseSheetDayOfMonth(moment, CONFIG.TIMEZONE, message.createdAt || Date.now());
+                const dayOfMonth = getPurchaseSheetDayOfMonth(moment, CONFIG.TIMEZONE, message.createdAt || Date.now(), shift);
                 const amount = isCancel ? -parsed.amount : parsed.amount;
                 const payload = {
                     server,
                     shift,
                     userName,
                     amount,
-                    dayOfMonth
+                    dayOfMonth,
+                    messageId: message.id,
+                    channelId: message.channelId
                 };
                 const write = await writePurchaseWithServerFallback(payload);
-                const finalServer = write.server || server;
                 const result = write.result;
+                const finalServer = result?.server || write.server || server;
                 const finalPayload = { ...payload, server: finalServer };
 
                 if (result.ok) {
@@ -490,7 +489,8 @@ function createPurchaseReactionHandler({
                         userName,
                         amount: isCancel ? -parsed.amount : parsed.amount,
                         range: result.range,
-                        nextValue: result.nextValue
+                        nextValue: result.nextValue,
+                        duplicate: Boolean(result.duplicate)
                     });
                     if (typeof onGreatTabChanged === 'function') onGreatTabChanged();
                 } else {

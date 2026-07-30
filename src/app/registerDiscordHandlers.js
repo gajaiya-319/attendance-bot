@@ -1,15 +1,19 @@
 'use strict';
 
 const { initPayrollCronSchedulers } = require('../scheduler/payrollCron');
+const { notifyPayrollOwners } = require('../utils/payrollOwnerNotify');
 
 function registerDiscordHandlers(ctx) {
     let payrollCronStop = () => {};
+    let rawAttendanceRetryStop = () => {};
+    let backgroundQueueMonitorStop = () => {};
     const {
         Events,
         PermissionFlagsBits,
         MessageFlags,
         CONFIG,
         moment,
+        getShiftBounds,
         client,
         cron,
         REST,
@@ -22,6 +26,9 @@ function registerDiscordHandlers(ctx) {
         markMemberActivity,
         saveSystemAsync,
         purchaseSheetService,
+        endAdenaSubmissionValidationService,
+        endAdenaReconciliationService,
+        endAdenaFreshnessService,
         opsQueueService,
         voiceStateUpdateHandler,
         guildMemberEventHandlers,
@@ -46,11 +53,46 @@ function registerDiscordHandlers(ctx) {
         loadSystem,
         createScheduledBackupIfDue,
         syncCurrentWorkerProfiles,
+        rawAttendanceSheetService,
+        backgroundJobQueueService,
         payrollLiveSummarySyncService,
+        payrollIntegrityAuditService,
         payrollArchiveService,
         payrollOperationLogService,
         botState
     } = ctx;
+
+    if (typeof backgroundJobQueueService?.startEventLoopLagMonitor === 'function') {
+        backgroundQueueMonitorStop = backgroundJobQueueService.startEventLoopLagMonitor();
+    }
+
+    if (typeof rawAttendanceSheetService?.startPendingAttendanceRetryLoop === 'function') {
+        rawAttendanceRetryStop = rawAttendanceSheetService.startPendingAttendanceRetryLoop({
+            intervalMs: Number(process.env.RAW_ATTENDANCE_RETRY_INTERVAL_MS || 300000),
+            runImmediately: false,
+            onNeedsReview: async items => {
+                const preview = items.slice(0, 10).map(item => {
+                    const row = item.row || {};
+                    return `- ${row.date || '-'} ${row.server || '-'} ${row.shift || '-'} ${row.name || '-'} (${item.attempts}회, ${item.failureClass || 'unknown'})`;
+                }).join('\n');
+                const notification = await notifyPayrollOwners({
+                    client,
+                    CONFIG,
+                    logger: console,
+                    content: [
+                        `⚠️ 출석 시트 기록 장기 실패 (${items.length}건)`,
+                        `자동 재시도 ${items[0]?.attempts || 0}회 이상 실패했습니다.`,
+                        preview,
+                        items.length > 10 ? `외 ${items.length - 10}건` : '',
+                        '자동 재시도는 5분마다 계속됩니다.'
+                    ].filter(Boolean).join('\n')
+                });
+                if (!notification.sent && !notification.fallbackSent) {
+                    throw new Error('출석 시트 장기 실패 알림을 받을 관리자를 찾지 못했습니다.');
+                }
+            }
+        });
+    }
 
     if (payrollArchiveService) {
         const payrollCron = initPayrollCronSchedulers({
@@ -60,6 +102,8 @@ function registerDiscordHandlers(ctx) {
             payrollArchiveService,
             payrollOperationLogService,
             payrollLiveSummarySyncService,
+            payrollIntegrityAuditService,
+            backgroundJobQueueService,
             logger: console
         });
         if (payrollCron && typeof payrollCron.stop === 'function') {
@@ -71,9 +115,28 @@ function registerDiscordHandlers(ctx) {
         ? () => payrollLiveSummarySyncService.scheduleSync()
         : null;
 
+    function scheduleLateEndAdenaReconciliation(event) {
+        if (typeof endAdenaReconciliationService?.reconcileLateApproval !== 'function') return null;
+        const actionAt = moment(event?.audit?.actionAt);
+        const shiftEndAt = moment(event?.audit?.shiftEndAt);
+        if (!actionAt.isValid() || !shiftEndAt.isValid() || actionAt.isBefore(shiftEndAt.clone().add(60, 'minutes'))) {
+            return { accepted: false, skipped: true, reason: 'regular-reconciliation-pending' };
+        }
+        const task = () => endAdenaReconciliationService.reconcileLateApproval(event, {
+            guild: client.guilds.cache.get(CONFIG.GUILD_ID)
+        });
+        if (typeof backgroundJobQueueService?.enqueue === 'function') {
+            return backgroundJobQueueService.enqueue({
+                key: `end-adena-late-${event.shift}-${event.messageId}-${event.action}`,
+                task,
+                priority: 99,
+                timeoutMs: 180_000
+            });
+        }
+        return task();
+    }
+
     const dayOffMessageEventHandlers = createDayOffMessageEventHandlers({
-        MessagePermissionFlags: PermissionFlagsBits,
-        reviewerId: CONFIG.DAYOFF_REVIEWER_ID,
         approvalEmoji: DAYOFF_APPROVAL_EMOJI,
         cancelEmoji: '❌',
         dayOffService,
@@ -108,9 +171,12 @@ function registerDiscordHandlers(ctx) {
         MessagePermissionFlags: PermissionFlagsBits,
         CONFIG,
         moment,
+        getShiftBounds,
         purchaseSheetService,
+        submissionValidationService: endAdenaSubmissionValidationService,
         opsQueueService,
-        onGreatTabChanged: schedulePayrollLiveSync
+        onGreatTabChanged: schedulePayrollLiveSync,
+        onApprovalRecorded: scheduleLateEndAdenaReconciliation
     });
 
     function withTimeout(promise, ms, fallback = null) {
@@ -207,6 +273,8 @@ function registerDiscordHandlers(ctx) {
         Routes,
         client,
         cron,
+        getNow: () => moment().tz(CONFIG.TIMEZONE),
+        getShiftBounds,
         token,
         buildCommandDefinitions,
         hiddenCommandAliases,
@@ -221,22 +289,64 @@ function registerDiscordHandlers(ctx) {
         checkLiveExceptions: (...args) => workflowApi.checkLiveExceptions(...args),
         checkScheduledAnnouncements: (...args) => workflowApi.checkScheduledAnnouncements(...args),
         checkDayOffReservations: (...args) => workflowApi.checkDayOffReservations(...args),
+        reconcileRecentDayOffMessages: (...args) => workflowApi.reconcileRecentDayOffMessages(...args),
         autoAssignGuestForUnassignedMembers: (...args) => workflowApi.autoAssignGuestForUnassignedMembers(...args),
         syncWorkingRoles: (...args) => workflowApi.syncWorkingRoles(...args),
         syncCurrentWorkerProfiles,
+        backgroundJobQueueService,
         syncLiveThreeDayPayrollSummary: payrollLiveSummarySyncService
             ? () => payrollLiveSummarySyncService.sync()
             : null,
         syncPayrollReactionStatuses,
+        sendDailyCloseReport: (...args) => workflowApi.sendDailyCloseReport(...args),
         createScheduledBackupIfDue,
         syncAutoPanels: (...args) => workflowApi.syncAutoPanels(...args),
         processOpsQueueAutoRetry: (...args) => workflowApi.processOpsQueueAutoRetry(...args),
         checkOperationalIssues: (...args) => workflowApi.checkOperationalIssues(...args),
+        runAutoAuditRepair: (...args) => workflowApi.runAutoAuditRepair(...args),
         expireDayOffSessions: (...args) => workflowApi.expireDayOffSessions(...args),
         cleanupOldDayOffReservations,
         saveSystem: () => saveSystemAsync(),
         renderDashboard: () => workflowApi.queueDashboardRender(),
         performSmartReset: (...args) => workflowApi.performSmartReset(...args),
+        reportEndAdenaCloseReadiness: typeof endAdenaReconciliationService?.reportCloseReadiness === 'function'
+            ? options => endAdenaReconciliationService.reportCloseReadiness({
+                ...options,
+                guild: client.guilds.cache.get(CONFIG.GUILD_ID)
+            })
+            : null,
+        resetEndAdenaSummary: typeof purchaseSheetService?.resetAdenaSummary === 'function'
+            ? (shift, due = {}) => purchaseSheetService.resetAdenaSummary({
+                shift,
+                bounds: due.bounds || null,
+                scheduledAt: due.resetAt || null
+            })
+            : null,
+        remindPendingEndAdenaApprovals: typeof endAdenaReconciliationService?.remindPendingApprovals === 'function'
+            ? options => endAdenaReconciliationService.remindPendingApprovals({
+                ...options,
+                guild: client.guilds.cache.get(CONFIG.GUILD_ID)
+            })
+            : null,
+        reconcileEndAdenaSummary: typeof endAdenaReconciliationService?.run === 'function'
+            ? options => endAdenaReconciliationService.run({
+                ...options,
+                guild: client.guilds.cache.get(CONFIG.GUILD_ID)
+            })
+            : null,
+        resolveEndAdenaSettlementWindow: typeof endAdenaReconciliationService?.getSettlementWindow === 'function'
+            ? options => endAdenaReconciliationService.getSettlementWindow(options)
+            : null,
+        recoverLateEndAdenaApprovals: typeof endAdenaReconciliationService?.recoverLateApprovals === 'function'
+            ? () => endAdenaReconciliationService.recoverLateApprovals({
+                guild: client.guilds.cache.get(CONFIG.GUILD_ID)
+            })
+            : null,
+        auditEndAdenaFreshness: typeof endAdenaFreshnessService?.audit === 'function'
+            ? () => endAdenaFreshnessService.audit({
+                guild: client.guilds.cache.get(CONFIG.GUILD_ID)
+            })
+            : null,
         printStartupBanner,
         getNowLabel: () => moment().tz(CONFIG.TIMEZONE).format('YYYY-MM-DD HH:mm:ss'),
         setCommandRegisterOk: ({ at, count }) => {
@@ -259,7 +369,11 @@ function registerDiscordHandlers(ctx) {
         endAdenaReactionHandler,
         interactionRouter,
         clientReadyHandler,
-        payrollCronStop
+        payrollCronStop: () => {
+            payrollCronStop();
+            rawAttendanceRetryStop();
+            backgroundQueueMonitorStop();
+        }
     };
 }
 

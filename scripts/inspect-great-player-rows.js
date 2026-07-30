@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 
 require('dotenv').config();
 const { google } = require('googleapis');
@@ -35,13 +35,13 @@ async function dumpPlayers(sheets, tab) {
     }
     const recent = await sheets.spreadsheets.values.get({
         spreadsheetId: id,
-        range: "'최근_3일_요약'!B3:H8",
+        range: "'理쒓렐_3???붿빟'!B3:H8",
         valueRenderOption: 'UNFORMATTED_VALUE'
     });
-    console.log('\n최근_3일_요약 values:', JSON.stringify(recent.data.values, null, 2));
+    console.log('\n理쒓렐_3???붿빟 values:', JSON.stringify(recent.data.values, null, 2));
     const formulas = await sheets.spreadsheets.values.get({
         spreadsheetId: id,
-        range: "'최근_3일_요약'!C5:H6",
+        range: "'理쒓렐_3???붿빟'!C5:H6",
         valueRenderOption: 'FORMULA'
     });
     console.log('\nC5:H6 formulas:', JSON.stringify(formulas.data.values, null, 2));
@@ -54,7 +54,7 @@ async function main() {
     });
     const sheets = google.sheets({ version: 'v4', auth });
     await dumpPlayers(sheets, 'Paagrio Great');
-    await dumpPlayers(sheets, 'Heine Great');
+    await dumpPlayers(sheets, 'Valakas Great');
 }
 
 main().catch(err => {

@@ -5,6 +5,7 @@ const {
     buildLiveOffGuidanceDm,
     buildFinishedLiveOffReminderDm
 } = require('../utils/attendanceDmMessages');
+const { appendJsonLineWithRotation } = require('../utils/rotatingJsonl');
 
 function createDayOffWorkflow(deps) {
     const {
@@ -45,6 +46,24 @@ async function sendTemporaryDayOffReply(message, content) {
 
 function isReactionBlockedError(error) {
     return error?.code === 90001 || error?.rawError?.code === 90001;
+}
+
+function isExpectedDmFailure(error) {
+    const code = Number(error?.code || error?.rawError?.code || error?.status);
+    return code === 50007 || code === 50013 || code === 50278 || code === 403;
+}
+
+function logDmFailure(label, error) {
+    const payload = {
+        message: error?.message || String(error),
+        code: error?.code || error?.rawError?.code || null,
+        status: error?.status || null
+    };
+    if (isExpectedDmFailure(error)) {
+        logger.log?.(`[${label} SKIP]`, payload);
+        return;
+    }
+    logger.error?.(`[${label} ERROR]`, error);
 }
 
 async function setDayOffStatusEmoji(message, emoji) {
@@ -150,7 +169,11 @@ async function appendDayOffAudit(event, payload = {}) {
             event,
             ...payload
         };
-        await fs.appendFile(CONFIG.FILES.DAYOFF_LOG, `${JSON.stringify(record)}\n`);
+        await appendJsonLineWithRotation({
+            filePath: CONFIG.FILES.DAYOFF_LOG,
+            record,
+            fs
+        });
     } catch (e) {
         console.error('[DAYOFF AUDIT LOG ERROR]', e);
     }
@@ -189,7 +212,7 @@ async function notifyDayOffReviewer(reservation) {
             await reviewer.send(text).then(() => {
                 dmStatus = '발송 완료';
             }).catch(e => {
-                console.error('[DAYOFF REVIEWER DM ERROR]', e);
+                logDmFailure('DAYOFF REVIEWER DM', e);
                 dmStatus = '발송 실패';
             });
         } else {
@@ -229,6 +252,28 @@ function dayOffReservationToParsed(reservation) {
         leaveDate: reservation.leaveDate,
         userId: reservation.userId
     };
+}
+
+function getDayOffApprovalKey(reservation) {
+    if (!reservation) return null;
+    return [
+        reservation.leaveDate || '-',
+        reservation.shift || '-',
+        reservation.userId || '-'
+    ].join(':');
+}
+
+function isPastDayOffDate(leaveDate) {
+    if (!leaveDate) return false;
+    const today = moment().tz(CONFIG.TIMEZONE).format('YYYY-MM-DD');
+    return leaveDate < today;
+}
+
+function hasFinalizedDayOffApprovalNotice(reservation, approvalKey) {
+    if (!reservation || !approvalKey) return false;
+    return reservation.approvalNoticeKey === approvalKey ||
+        reservation.approvalLogKey === approvalKey ||
+        reservation.lastDmKey === approvalKey;
 }
 
 function getDayOffReservationUserId(message, parsed = null) {
@@ -343,7 +388,7 @@ async function submitDayOffRequestFromInteraction({
         .setTitle('Day Off Request')
         .setColor('#3B82F6')
         .setDescription([
-            `👤 Applicant: <@${requestUserId}>`,
+            `👤 Applicant: ${displayBaseName || submittedBaseName || 'Unknown'}`,
             '```',
             `🏷️ Name   : ${submittedBaseName || displayBaseName || 'Unknown'}`,
             `🕒 Shift  : ${shiftLabel}`,
@@ -351,7 +396,7 @@ async function submitDayOffRequestFromInteraction({
             `📝 Reason : ${reason}`,
             '```'
         ].join('\n'))
-        .setFooter({ text: 'React with ✅ to approve.' })
+        .setFooter({ text: `React with ✅ to approve. User ID: ${requestUserId}` })
         .setTimestamp();
     const message = await channel.send({
         embeds: [embed],
@@ -427,7 +472,14 @@ async function processDayOffMessage(message, { silent = false } = {}) {
 
     const existingReservation = getDayOffReservations()[message.id];
     if (existingReservation?.status === 'approved' && dayOffService.hasApprovalReaction(message)) {
-        await approveDayOffMessage(message, null, parsed, silent);
+        const approvalKey = getDayOffApprovalKey(existingReservation);
+        if (!hasFinalizedDayOffApprovalNotice(existingReservation, approvalKey) && !isPastDayOffDate(existingReservation.leaveDate)) {
+            existingReservation.approvalNoticeKey = approvalKey;
+            existingReservation.approvalNoticeSkippedAt = moment().tz(CONFIG.TIMEZONE).toISOString();
+            existingReservation.approvalNoticeSkipReason = 'already-approved-reprocess-guard';
+            getDayOffReservations()[message.id] = existingReservation;
+            await saveSystemAsync();
+        }
         return;
     }
 
@@ -448,13 +500,27 @@ async function processDayOffMessage(message, { silent = false } = {}) {
 async function approveDayOffMessage(message, approverMember = null, parsed = null, silent = false) {
     if (!dayOffService.isDayOffChannel(message)) return;
     const existingReservation = getDayOffReservations()[message.id];
-    if (message.author?.bot && !existingReservation) return;
-    const freshParsed = parsed || dayOffReservationToParsed(existingReservation) || dayOffService.parseDayOffRequest(message);
+    const freshParsed = parsed
+        || dayOffReservationToParsed(existingReservation)
+        || (message.author?.bot
+            ? dayOffService.parsePostedDayOffRequestMessage(message)
+            : dayOffService.parseDayOffRequest(message));
+    if (message.author?.bot && !existingReservation && !freshParsed?.ok) return;
     if (!freshParsed.ok) {
         await processDayOffMessage(message, { silent });
         return;
     }
     const requestUserId = getDayOffReservationUserId(message, freshParsed);
+    const currentApprovalKey = getDayOffApprovalKey({
+        ...existingReservation,
+        messageId: message.id,
+        userId: requestUserId,
+        leaveDate: freshParsed.leaveDate,
+        shift: freshParsed.shift
+    });
+    if (existingReservation?.status === 'approved' && hasFinalizedDayOffApprovalNotice(existingReservation, currentApprovalKey)) {
+        return { ok: true, skipped: true, reason: 'already-approved-finalized' };
+    }
 
     const duplicate = Object.values(getDayOffReservations()).find(r =>
         r &&
@@ -516,12 +582,29 @@ async function approveDayOffMessage(message, approverMember = null, parsed = nul
     }
 
     const reservation = await saveDayOffReservation(message, freshParsed, 'approved', approverMember);
-    const dmKey = `${reservation.leaveDate}:${reservation.shift}:${reservation.userId}`;
+    const approvalKey = getDayOffApprovalKey(reservation);
+    if (hasFinalizedDayOffApprovalNotice(existingReservation, approvalKey)) {
+        reservation.approvalNoticeKey = existingReservation.approvalNoticeKey || approvalKey;
+        reservation.approvalLogKey = existingReservation.approvalLogKey || approvalKey;
+        reservation.lastDmKey = existingReservation.lastDmKey || approvalKey;
+        getDayOffReservations()[message.id] = reservation;
+        await saveSystemAsync();
+        return { ok: true, skipped: true, reason: 'already-approved-finalized' };
+    }
+
+    const suppressPastRecoveryNotice = silent && isPastDayOffDate(reservation.leaveDate);
+    const dmKey = approvalKey;
     let dmStatus = 'DM 발송 완료';
-    if (reservation.lastDmKey !== dmKey) {
+    if (suppressPastRecoveryNotice) {
+        dmStatus = '과거 휴무 복구 - DM 생략';
+        reservation.lastDmKey = dmKey;
+        reservation.dmSkippedAt = moment().tz(CONFIG.TIMEZONE).toISOString();
+        reservation.dmSkipReason = 'past-dayoff-reconcile';
+        await saveSystemAsync();
+    } else if (reservation.lastDmKey !== dmKey) {
         const targetUser = await fetchDayOffReservationUser(reservation);
         await targetUser?.send(dayOffService.buildDayOffDm(reservation)).catch(e => {
-            console.error('[DAYOFF DM ERROR]', e);
+            logDmFailure('DAYOFF DM', e);
             dmStatus = 'DM 발송 실패';
         });
         if (!targetUser) dmStatus = 'DM 대상 찾기 실패';
@@ -536,13 +619,31 @@ async function approveDayOffMessage(message, approverMember = null, parsed = nul
     if (!statusEmojiResult.ok && statusEmojiResult.reactionBlocked) {
         await sendDayOffStatusFallback(message, reservation, 'Approved', '✅');
     }
+    if (suppressPastRecoveryNotice) {
+        reservation.approvalLogKey = approvalKey;
+        reservation.approvalLogSkippedAt = moment().tz(CONFIG.TIMEZONE).toISOString();
+        reservation.approvalLogSkipReason = 'past-dayoff-reconcile';
+        getDayOffReservations()[message.id] = reservation;
+        await saveSystemAsync();
+        await appendDayOffAudit('APPROVED_PAST_RECONCILED_SILENTLY', {
+            messageId: message.id,
+            userId: reservation.userId,
+            name: reservation.name,
+            shift: reservation.shiftLabel,
+            leaveDate: reservation.leaveDate
+        });
+        return { ok: true, skipped: true, reason: 'past-dayoff-reconcile' };
+    }
+    if (reservation.approvalLogKey === approvalKey) {
+        return { ok: true, skipped: true, reason: 'approval-log-already-written' };
+    }
     if (!silent) {
         await sendTemporaryDayOffReply(message, `${message.author} Your day off has been approved.\nShift: ${reservation.shiftLabel}\nLeave Date: ${reservation.leaveDate}`);
     }
     await writeDayOffLog(`✅ 휴무 승인 완료\n이름: ${reservation.name}\n근무조: ${reservation.shiftLabel}\n휴무일: ${reservation.leaveDate}\n승인자: ${reservation.approvedByName || '시스템'}\nDM 상태: ${dmStatus}`);
     await appendDayOffAudit('APPROVED', {
         messageId: message.id,
-        userId: message.author.id,
+        userId: reservation.userId,
         name: reservation.name,
         shift: reservation.shiftLabel,
         leaveDate: reservation.leaveDate,
@@ -550,6 +651,100 @@ async function approveDayOffMessage(message, approverMember = null, parsed = nul
         approvedByName: reservation.approvedByName || null,
         dmStatus
     });
+    reservation.approvalLogKey = approvalKey;
+    getDayOffReservations()[message.id] = reservation;
+    await saveSystemAsync();
+    return { ok: true, skipped: false, dmStatus };
+}
+
+function getDayOffApprovalReaction(message) {
+    return message?.reactions?.cache?.find?.(
+        item => item.emoji?.name === dayOffService.DAYOFF_APPROVAL_EMOJI
+    ) || null;
+}
+
+async function hasRecoverableDayOffApproval(message, reservationWasMissing = false, {
+    allowRemoteFetch = true
+} = {}) {
+    const reaction = getDayOffApprovalReaction(message);
+    if (!reaction || reaction.count <= 0) return false;
+    if (reservationWasMissing && reaction.me) return true;
+    if (!allowRemoteFetch) return Boolean(reaction.me);
+
+    const users = await reaction.users?.fetch?.().catch(() => null);
+    if (!users) return false;
+    if (CONFIG.DAYOFF_REVIEWER_ID && users.has(CONFIG.DAYOFF_REVIEWER_ID)) return true;
+    return Boolean(message.guild?.ownerId && users.has(message.guild.ownerId));
+}
+
+let dayOffReconcileRunCount = 0;
+
+async function reconcileRecentDayOffMessages(limit = null) {
+    const startedAt = Date.now();
+    const channel = await client.channels.fetch(CONFIG.DAYOFF_CHANNEL).catch(() => null);
+    if (!channel?.messages?.fetch) return { scanned: 0, recovered: 0, approved: 0 };
+    const recoveryCutoff = moment().tz(CONFIG.TIMEZONE).subtract(1, 'day').format('YYYY-MM-DD');
+    const scheduledFullScan = limit === null && dayOffReconcileRunCount % 12 === 0;
+    const scanLimit = Number(limit) > 0 ? Number(limit) : (scheduledFullScan ? 100 : 30);
+    dayOffReconcileRunCount += 1;
+
+    const messages = await channel.messages.fetch({ limit: scanLimit }).catch(error => {
+        logger.error?.('[DAYOFF RECONCILE FETCH ERROR]', error);
+        return null;
+    });
+    if (!messages) return { scanned: 0, recovered: 0, approved: 0 };
+
+    let recovered = 0;
+    let approved = 0;
+    for (const message of messages.values()) {
+        if (isDayOffRequestPanelMessage(message)) continue;
+        let reservation = getDayOffReservations()[message.id] || null;
+        const reservationWasMissing = !reservation;
+
+        if (!reservation) {
+            const parsed = message.author?.bot
+                ? dayOffService.parsePostedDayOffRequestMessage(message)
+                : dayOffService.parseDayOffRequest(message);
+            if (!parsed?.ok) continue;
+            const isPastRequest = parsed.leaveDate < recoveryCutoff;
+            if (isPastRequest) continue;
+            const recoverableApproval = await hasRecoverableDayOffApproval(message, true);
+
+            reservation = await saveDayOffReservation(message, parsed, 'pending');
+            reservation.reason = parsed.reason || reservation.reason || null;
+            reservation.source = reservation.source || 'channel-reconcile';
+            reservation.recoveredAt = moment().tz(CONFIG.TIMEZONE).toISOString();
+            getDayOffReservations()[message.id] = reservation;
+            await saveSystemAsync();
+            await appendDayOffAudit('RECOVERED_REQUEST', {
+                messageId: reservation.messageId,
+                userId: reservation.userId,
+                name: reservation.name,
+                shift: reservation.shiftLabel,
+                leaveDate: reservation.leaveDate
+            });
+            recovered += 1;
+        }
+
+        const isPastReservation = reservation.leaveDate && reservation.leaveDate < recoveryCutoff;
+        if (!isPastReservation && reservation.status === 'pending' && await hasRecoverableDayOffApproval(
+            message,
+            reservationWasMissing,
+            { allowRemoteFetch: !isPastReservation }
+        )) {
+            await approveDayOffMessage(message, null, dayOffReservationToParsed(reservation), true);
+            approved += 1;
+        }
+    }
+
+    const summary = { scanned: messages.size, recovered, approved };
+    logger.log?.('[DAYOFF RECONCILE]', {
+        ...summary,
+        scanLimit,
+        fullScan: scheduledFullScan,
+        durationMs: Math.max(0, Date.now() - startedAt)
+    });
+    return summary;
 }
 
 async function cancelDayOffApproval(message, cancelledBy = null) {
@@ -781,7 +976,7 @@ async function rejectDayOffReservationByCommand(member, leaveDate, rejectedBy, r
     if (message) await setDayOffStatusEmoji(message, '❌');
 
     await member.send(dayOffService.buildDayOffRejectDm(reservation)).catch(e => {
-        console.error('[DAYOFF REJECT DM ERROR]', e);
+        logDmFailure('DAYOFF REJECT DM', e);
     });
 
     await saveSystemAsync();
@@ -836,7 +1031,7 @@ async function approveDayOffReservationByCommand(member, leaveDate, approvedBy) 
         const targetUser = await client.users.fetch(reservation.userId).catch(() => null);
         if (targetUser) {
             await targetUser.send(dayOffService.buildDayOffDm(reservation)).catch(e => {
-                console.error('[DAYOFF DM ERROR]', e);
+                logDmFailure('DAYOFF DM', e);
                 dmStatus = 'DM 발송 실패';
             });
         } else {
@@ -949,6 +1144,7 @@ async function applyApprovedDayOffReservation(reservation, member, user, now, so
         submitDayOffRequestFromInteraction,
         processDayOffMessage,
         approveDayOffMessage,
+        reconcileRecentDayOffMessages,
         cancelDayOffApproval,
         cancelDayOffRequest,
         markWorkedOnDayOff,

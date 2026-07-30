@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
@@ -11,11 +11,15 @@
     #loading { padding: 42px 0; text-align: center; color: #aaa; }
     #dashboard { display: none; }
     #last-updated { display: inline-block; margin-left: 8px; color: #8ab4f8; font-size: 12px; font-weight: normal; }
+    .lang-switch { display: flex; justify-content: flex-end; gap: 8px; margin: -8px 0 16px; }
+    .lang-switch a { color: #93c5fd; border: 1px solid #334155; border-radius: 6px; padding: 7px 11px; text-decoration: none; font-size: 13px; font-weight: 800; }
+    .lang-switch a.active { background: #283593; border-color: #3949ab; color: #fff; }
     .legend { display: flex; flex-wrap: wrap; gap: 12px; margin: 16px 0; font-size: 13px; font-weight: 700; }
     .legend span { display: inline-flex; align-items: center; gap: 6px; }
     .box { width: 12px; height: 12px; border-radius: 3px; }
     .jung { background: #4CAF50; }
     .ji { background: #FFC107; }
+    .h2late { background: #FF6D00; }
     .gyul { background: #E53935; }
     .jo { background: #FF9800; }
     .yeon { background: #8E24AA; }
@@ -29,6 +33,8 @@
     table { width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 14px; }
     th, td { padding: 13px 8px; text-align: center; border-bottom: 1px solid #242424; }
     th { color: #c7c7c7; border-bottom-color: #444; }
+    .name-cell { color: #dbeafe; font-weight: 700; cursor: pointer; text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 4px; }
+    .name-cell:hover, .name-cell.active { color: #8ab4f8; text-decoration-color: #8ab4f8; }
     .highlight { color: #ff6b6b; font-weight: 700; }
     .summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 22px; }
     .card { border: 1px solid #333; background: #181818; padding: 15px; border-radius: 6px; text-align: center; }
@@ -40,7 +46,28 @@
     .shift-label { margin-left: 24px; }
     button { min-width: 96px; min-height: 54px; background: transparent; color: #b7b7b7; border: 1px solid #333; padding: 13px 24px; border-radius: 6px; cursor: pointer; font-size: 18px; font-weight: 700; }
     button.active { background: #283593; color: #fff; border-color: #3949ab; }
+    .month-row button { min-width: 122px; }
     .empty { padding: 26px; text-align: center; color: #888; border: 1px dashed #333; border-radius: 6px; }
+    .detail-panel { display: none; margin: 0 0 26px; border: 1px solid #333; background: #181818; border-radius: 6px; overflow: hidden; }
+    .detail-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border-bottom: 1px solid #303030; }
+    .detail-title { font-size: 16px; font-weight: 800; color: #f1f5f9; }
+    .detail-close { min-width: 42px; min-height: 36px; padding: 6px 12px; font-size: 18px; line-height: 1; }
+    .detail-scroll { overflow-x: auto; }
+    .detail-panel table { margin: 0; min-width: 820px; font-size: 13px; }
+    .detail-note { max-width: 420px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ranking-panel { margin: 8px 0 28px; border: 1px solid #333; background: #181818; border-radius: 6px; overflow: hidden; }
+    .ranking-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px; border-bottom: 1px solid #303030; }
+    .ranking-title { font-size: 18px; font-weight: 900; color: #f8fafc; }
+    .ranking-controls { display: flex; gap: 8px; flex-wrap: wrap; }
+    .ranking-controls button { min-width: 96px; min-height: 40px; padding: 8px 14px; font-size: 14px; }
+    .ranking-rule { padding: 12px 16px; border-bottom: 1px solid #303030; color: #cbd5e1; font-size: 13px; line-height: 1.7; }
+    .ranking-rule b { color: #f8fafc; }
+    .ranking-meta { color: #93c5fd; font-weight: 800; }
+    .ranking-body { overflow-x: auto; }
+    .ranking-panel table { margin: 0; min-width: 860px; font-size: 13px; }
+    .rank-top { color: #facc15; font-weight: 900; }
+    .score-good { color: #86efac; font-weight: 800; }
+    .score-bad { color: #fca5a5; font-weight: 800; }
     @media (max-width: 720px) {
       body { padding: 12px; }
       h2 { font-size: 19px; }
@@ -51,6 +78,7 @@
       th, td { padding: 10px 5px; }
       .table-wrap { overflow-x: auto; }
       .table-wrap table { min-width: 760px; }
+      .detail-head { align-items: flex-start; }
       .control-row { gap: 10px; }
       .control-label { width: 60px; font-size: 18px; }
       button { min-width: 88px; min-height: 52px; padding: 12px 16px; font-size: 16px; }
@@ -61,7 +89,11 @@
 </head>
 <body>
   <div class="container">
-    <h2>&#128081;GRAET TEAM&#128081; &#50900;&#44036; &#52636;&#44208; &#53685;&#44228; <span id="last-updated"></span></h2>
+    <h2><span id="main-title">&#128081;GRAET TEAM&#128081; &#50900;&#44036; &#52636;&#44208; &amp; &#47021;&#53433;&#51216;&#49688; &#53685;&#44228;</span> <span id="last-updated"></span></h2>
+    <div class="lang-switch">
+      <a id="lang-ko" href="#">한국어</a>
+      <a id="lang-en" href="#">English</a>
+    </div>
 
     <div id="loading">&#44396;&#44544; &#49884;&#53944;&#50640;&#49436; &#52636;&#44208; &#44592;&#47197;&#51012; &#48520;&#47084;&#50724;&#45716; &#51473;&#51077;&#45768;&#45796;...</div>
 
@@ -69,6 +101,7 @@
       <div class="legend">
         <span><i class="box jung"></i>&#51221;&#52636;</span>
         <span><i class="box ji"></i>&#51648;&#44033;</span>
+        <span><i class="box h2late"></i>2H+ &#51648;&#44033;</span>
         <span><i class="box gyul"></i>&#44208;&#49437;</span>
         <span><i class="box jo"></i>&#51312;&#53748;</span>
         <span><i class="box yeon"></i>&#50672;&#51109;&#44540;&#47924;</span>
@@ -82,7 +115,7 @@
         <table>
           <thead>
             <tr>
-              <th>&#51060;&#47492;</th><th>&#51221;&#52636;</th><th>&#51648;&#44033;</th><th>&#44208;&#49437;</th><th>&#51312;&#53748;</th><th>&#50672;&#51109;&#44540;&#47924;</th><th>&#55092;&#47924;</th>
+              <th>&#51060;&#47492;</th><th>&#51221;&#52636;</th><th>&#51648;&#44033;</th><th>2H+ &#51648;&#44033;</th><th>&#44208;&#49437;</th><th>&#51312;&#53748;</th><th>&#50672;&#51109;&#44540;&#47924;</th><th>&#55092;&#47924;</th>
               <th>&#52636;&#44540;&#47456;(%)</th><th>&#44208;&#49437;&#47456;(%)</th><th>&#51648;&#44033;&#47456;(%)</th>
             </tr>
           </thead>
@@ -97,11 +130,64 @@
         <div class="card"><span>&#54217;&#44512; &#51648;&#44033;&#47456;</span><b id="avg-late">0%</b></div>
       </div>
 
+      <div class="ranking-panel">
+        <div class="ranking-head">
+          <div class="ranking-title" id="ranking-title">&#128081; &#53685;&#54633; &#47021;&#53433; &#49884;&#49828;&#53596;</div>
+          <div class="ranking-controls" id="ranking-range-buttons">
+            <button class="active" onclick="setRankingRange(this, 7)">&#52572;&#44540; 7&#51068;</button>
+            <button onclick="setRankingRange(this, 30)">&#52572;&#44540; 30&#51068;</button>
+          </div>
+        </div>
+        <div class="ranking-rule" id="ranking-rule">
+          <b>&#51216;&#49688; &#44592;&#51456;</b>
+          &#51221;&#52636; +10 / &#50672;&#51109; +5 / &#51648;&#44033; -5 / 2H+ &#51648;&#44033; &#52628;&#44032; -10 / &#51312;&#53748; -10 / &#44208;&#49437; -25 / &#55092;&#47924; 0
+          <br>
+          <span class="ranking-meta" id="ranking-meta">&#51665;&#44228; &#44592;&#51456; &#54869;&#51064; &#51473;</span>
+          &middot; LIVE OFF/DC&#45716; &#51216;&#49688;&#50640; &#54252;&#54632;&#54616;&#51648; &#50506;&#49845;&#45768;&#45796;.
+        </div>
+        <div class="ranking-body">
+          <table>
+            <thead>
+              <tr>
+                <th>&#49692;&#50948;</th><th>&#51060;&#47492;</th><th>&#51216;&#49688;</th><th>&#51221;&#52636;</th><th>&#51648;&#44033;</th><th>2H+</th><th>&#44208;&#49437;</th><th>&#51312;&#53748;</th><th>&#50672;&#51109;</th><th>&#55092;&#47924;</th>
+              </tr>
+            </thead>
+            <tbody id="ranking-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="detail-panel" id="detail-panel">
+        <div class="detail-head">
+          <div class="detail-title" id="detail-title">&#49440;&#49688; &#49345;&#49464; &#52636;&#44208;</div>
+          <button class="detail-close" type="button" onclick="clearDetail()" aria-label="Close detail" title="Close detail">&times;</button>
+        </div>
+        <div class="detail-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>&#45216;&#51676;</th>
+                <th>&#49436;&#48260;</th>
+                <th>&#44540;&#47924;&#51312;</th>
+                <th>&#49345;&#53468;</th>
+                <th>&#52636;&#44540;</th>
+                <th>&#53748;&#44540;</th>
+                <th>&#48708;&#44256;</th>
+              </tr>
+            </thead>
+            <tbody id="detail-body"></tbody>
+          </table>
+        </div>
+      </div>
+
       <div class="controls">
+        <div class="control-row month-row" id="month-buttons">
+          <span class="control-label">&#50900;&#48324;</span>
+        </div>
         <div class="control-row filter-row">
           <span class="control-label">&#49436;&#48260;</span>
           <button class="active" onclick="setFilter(this, 'server', 'ALL')">&#51204;&#52404;</button>
-          <button onclick="setFilter(this, 'server', 'HEINE')">HEINE</button>
+          <button onclick="setFilter(this, 'server', 'HEINE')">&#48156;&#46972;&#52852;&#49828;</button>
           <button onclick="setFilter(this, 'server', 'PAAGRIO')">PAAGRIO</button>
           <span class="control-label shift-label">&#44540;&#47924;&#51312;</span>
           <button class="active" onclick="setFilter(this, 'shift', 'ALL')">&#51204;&#52404;</button>
@@ -121,10 +207,218 @@
 
   <script>
     const API_URL = 'https://script.google.com/macros/s/AKfycbx3a9-T71S_zfRwf-hCCwmLfzJR2mW3E3FTNXHWNaa1s-p5gdJqmCd3L6W9IoVNvBGj/exec?api=raw';
+    const WEB_APP_URL = '<?= webAppUrl ?>' || 'https://script.google.com/macros/s/AKfycbx3a9-T71S_zfRwf-hCCwmLfzJR2mW3E3FTNXHWNaa1s-p5gdJqmCd3L6W9IoVNvBGj/exec';
+    const LANG = '<?= lang ?>' === 'en' ? 'en' : 'ko';
+    const LABELS = {
+      ko: {
+        title: '👑GRAET TEAM👑 월간 출결 & 랭킹점수 통계',
+        pageTitle: '👑GRAET TEAM👑 출결관리',
+        loading: '구글 시트에서 출결 기록을 불러오는 중입니다...',
+        loadError: '데이터를 불러오는 중 오류가 발생했습니다: ',
+        lastLoaded: '마지막 불러오기',
+        month: '월별',
+        server: '서버',
+        shift: '근무조',
+        sort: '정렬',
+        all: '전체',
+        valakas: 'VALAKAS',
+        paagrio: 'PAAGRIO',
+        day: 'DAY',
+        night: 'NIGHT',
+        onTime: '정출',
+        late: '지각',
+        h2late: '2H+ 지각',
+        absent: '결석',
+        earlyOut: '조퇴',
+        overtime: '연장근무',
+        dayOff: '휴무',
+        attendanceRate: '출근율(%)',
+        absentRate: '결석률(%)',
+        lateRate: '지각률(%)',
+        displayedWorkers: '표시 인원',
+        avgAttendance: '평균 출근율',
+        avgAbsent: '평균 결석률',
+        avgLate: '평균 지각률',
+        rankTitle: '👑 통합 랭킹 시스템',
+        rankRule: '점수 기준',
+        rankRuleText: '정출 +10 / 연장 +5 / 지각 -5 / 2H+ 지각 추가 -10 / 조퇴 -10 / 결석 -25 / 휴무 0',
+        rankRuleNote: 'LIVE OFF/DC는 점수에 포함하지 않습니다.',
+        rank7: '최근 7일',
+        rank30: '최근 30일',
+        rank: '순위',
+        name: '이름',
+        score: '점수',
+        noRanking: '표시할 랭킹 데이터가 없습니다.',
+        noRecords: '선택한 조건에 표시할 출결 기록이 없습니다.',
+        detailTitleSuffix: '상세 출결',
+        noDetail: '선택한 월에 상세 출결 기록이 없습니다.',
+        date: '날짜',
+        status: '상태',
+        inTime: '출근',
+        outTime: '퇴근',
+        note: '비고',
+        closeDetail: '상세 닫기',
+        detectedIn: '감지',
+        recognizedIn: '인정',
+        sortAtt: '출근율순',
+        sortAbs: '결석많은순',
+        sortLate: '지각많은순',
+        sortOt: '연장많은순',
+        metaNone: '집계 가능한 출결 기록이 없습니다.',
+        meta: '집계 기간: {month} / 최근 {days}일 기준 / 최신 기록일 {latest}'
+      },
+      en: {
+        title: '👑GRAET TEAM👑 Monthly Attendance & Ranking Score',
+        pageTitle: '👑GRAET TEAM👑 Attendance Dashboard',
+        loading: 'Loading attendance records from Google Sheets...',
+        loadError: 'Failed to load attendance data: ',
+        lastLoaded: 'Last loaded',
+        month: 'Month',
+        server: 'Server',
+        shift: 'Shift',
+        sort: 'Sort',
+        all: 'All',
+        valakas: 'Valakas',
+        paagrio: 'Paagrio',
+        day: 'Day',
+        night: 'Night',
+        onTime: 'On Time',
+        late: 'Late',
+        h2late: '2H+ Late',
+        absent: 'Absent',
+        earlyOut: 'Early Out',
+        overtime: 'Overtime',
+        dayOff: 'Day Off',
+        attendanceRate: 'Attendance (%)',
+        absentRate: 'Absent (%)',
+        lateRate: 'Late (%)',
+        displayedWorkers: 'Workers Shown',
+        avgAttendance: 'Avg Attendance',
+        avgAbsent: 'Avg Absent',
+        avgLate: 'Avg Late',
+        rankTitle: '👑 Combined Ranking System',
+        rankRule: 'Score Rules',
+        rankRuleText: 'On Time +10 / Overtime +5 / Late -5 / 2H+ Late extra -10 / Early Out -10 / Absent -25 / Day Off 0',
+        rankRuleNote: 'LIVE OFF/DC are not included in the score.',
+        rank7: 'Last 7 Days',
+        rank30: 'Last 30 Days',
+        rank: 'Rank',
+        name: 'Name',
+        score: 'Score',
+        noRanking: 'No ranking data to display.',
+        noRecords: 'No attendance records match the selected filters.',
+        detailTitleSuffix: 'Attendance Detail',
+        noDetail: 'No detailed attendance records for the selected month.',
+        date: 'Date',
+        status: 'Status',
+        inTime: 'Clock In',
+        outTime: 'Clock Out',
+        note: 'Note',
+        closeDetail: 'Close detail',
+        detectedIn: 'detected',
+        recognizedIn: 'recognized',
+        sortAtt: 'Attendance',
+        sortAbs: 'Most Absent',
+        sortLate: 'Most Late',
+        sortOt: 'Most OT',
+        metaNone: 'No attendance records available for ranking.',
+        meta: 'Period: {month} / Last {days} days / Latest record {latest}'
+      }
+    };
+    function t(key) {
+      return (LABELS[LANG] && LABELS[LANG][key]) || LABELS.ko[key] || key;
+    }
+    function localStatus(status) {
+      const map = {
+        '\uc815\ucd9c': 'onTime',
+        '\uc9c0\uac01': 'late',
+        '\uacb0\uc11d': 'absent',
+        '\uc870\ud1f4': 'earlyOut',
+        '\uc5f0\uc7a5\uadfc\ubb34': 'overtime',
+        '\ud734\ubb34': 'dayOff'
+      };
+      return t(map[status] || status);
+    }
+    function localServer(server) {
+      if (server === 'HEINE' || server === '\ubc1c\ub77c\uce74\uc2a4') return t('valakas');
+      if (server === 'PAAGRIO') return t('paagrio');
+      return server || '-';
+    }
+    function localShift(shift) {
+      if (shift === 'DAY') return t('day');
+      if (shift === 'NIGHT') return t('night');
+      return shift || '-';
+    }
+    function applyLanguage() {
+      document.documentElement.lang = LANG;
+      document.title = t('pageTitle');
+      document.getElementById('main-title').innerText = t('title');
+      document.getElementById('loading').innerText = t('loading');
+      document.getElementById('lang-ko').href = WEB_APP_URL + '?lang=ko&authuser=0';
+      document.getElementById('lang-en').href = WEB_APP_URL + '?lang=en&authuser=0';
+      document.getElementById('lang-ko').className = LANG === 'ko' ? 'active' : '';
+      document.getElementById('lang-en').className = LANG === 'en' ? 'active' : '';
+      const legend = document.querySelectorAll('.legend span');
+      const legendKeys = ['onTime', 'late', 'h2late', 'absent', 'earlyOut', 'overtime', 'dayOff'];
+      legend.forEach(function(node, index) {
+        const box = node.querySelector('.box');
+        node.innerHTML = '';
+        if (box) node.appendChild(box);
+        node.appendChild(document.createTextNode(t(legendKeys[index] || '')));
+      });
+      const mainHeaders = document.querySelectorAll('.table-wrap thead th');
+      ['name', 'onTime', 'late', 'h2late', 'absent', 'earlyOut', 'overtime', 'dayOff', 'attendanceRate', 'absentRate', 'lateRate']
+        .forEach(function(key, index) {
+          if (mainHeaders[index]) mainHeaders[index].innerText = t(key);
+        });
+      const summaryLabels = document.querySelectorAll('.summary .card span');
+      ['displayedWorkers', 'avgAttendance', 'avgAbsent', 'avgLate'].forEach(function(key, index) {
+        if (summaryLabels[index]) summaryLabels[index].innerText = t(key);
+      });
+      const rankingButtons = document.querySelectorAll('#ranking-range-buttons button');
+      if (rankingButtons[0]) rankingButtons[0].innerText = t('rank7');
+      if (rankingButtons[1]) rankingButtons[1].innerText = t('rank30');
+      const rankingRule = document.getElementById('ranking-rule');
+      if (rankingRule) {
+        rankingRule.innerHTML = '<b>' + t('rankRule') + '</b> ' + t('rankRuleText') +
+          '<br><span class="ranking-meta" id="ranking-meta"></span> · ' + t('rankRuleNote');
+      }
+      const rankingHeaders = document.querySelectorAll('.ranking-panel thead th');
+      ['rank', 'name', 'score', 'onTime', 'late', 'h2late', 'absent', 'earlyOut', 'overtime', 'dayOff']
+        .forEach(function(key, index) {
+          if (rankingHeaders[index]) rankingHeaders[index].innerText = t(key);
+        });
+      const detailHeaders = document.querySelectorAll('.detail-panel thead th');
+      ['date', 'server', 'shift', 'status', 'inTime', 'outTime', 'note'].forEach(function(key, index) {
+        if (detailHeaders[index]) detailHeaders[index].innerText = t(key);
+      });
+      const detailClose = document.querySelector('.detail-close');
+      if (detailClose) {
+        detailClose.setAttribute('aria-label', t('closeDetail'));
+        detailClose.setAttribute('title', t('closeDetail'));
+      }
+      const controlLabels = document.querySelectorAll('.controls .control-label');
+      ['month', 'server', 'shift', 'sort'].forEach(function(key, index) {
+        if (controlLabels[index]) controlLabels[index].innerText = t(key);
+      });
+      const filterButtons = document.querySelectorAll('.filter-row button');
+      ['all', 'valakas', 'paagrio', 'all', 'day', 'night'].forEach(function(key, index) {
+        if (filterButtons[index]) filterButtons[index].innerText = t(key);
+      });
+      const sortButtons = document.querySelectorAll('#sort-buttons button');
+      ['sortAtt', 'sortAbs', 'sortLate', 'sortOt'].forEach(function(key, index) {
+        if (sortButtons[index]) sortButtons[index].innerText = t(key);
+      });
+    }
     let aggregatedData = [];
+    let rawAttendanceRows = [];
+    let availableMonths = [];
+    let currentMonth = '';
     let currentServer = 'ALL';
     let currentShift = 'ALL';
     let currentSort = 'ATT';
+    let selectedDetailKey = '';
+    let currentRankingRange = 7;
 
     function pick(row, keys, fallback = '') {
       for (const key of keys) {
@@ -135,7 +429,7 @@
 
     function normalizeServer(value) {
       const text = String(value || '').trim().toUpperCase();
-      if (text.includes('HEINE') || text.includes('\ud558\uc774\ub124')) return 'HEINE';
+      if (text.includes('VALACAS') || text.includes('VALAKAS') || text.includes('HEINE') || text.includes('\ubc1c\ub77c\uce74\uc2a4') || text.includes('\ud558\uc774\ub124')) return 'HEINE';
       if (text.includes('PAAGRIO') || text.includes('\ud30c\uc544\uadf8\ub9ac\uc624')) return 'PAAGRIO';
       return text || '-';
     }
@@ -149,9 +443,12 @@
 
     function canonicalName(value) {
       const name = String(value || '')
-        .replace(/\s*[-\u2013\u2014]\s*(?:(?:Great\s*)?(?:Manager|Trainee|Traine)\s+)?(?:[PH]\s*)?(?:Day|Night)\s*Time(?:\s*\([^)]*\))?(?:\s+.*)?$/i, ' ')
-        .replace(/\s*[-\u2013\u2014]\s*(?:(?:Great\s*)?(?:Manager|Trainee|Traine)\s+)?(?:Heine|Paagrio)\s*(?:Day|Night)\s*Time(?:\s*\([^)]*\))?(?:\s+.*)?$/i, ' ')
-        .replace(/\s*[-\u2013\u2014]\s*(?:Great\s*)?(?:Manager|Trainee|Guest)(?:\s+.*)?$/i, ' ')
+        .replace(/\s*[-\u2013\u2014]\s*(?=.*(?:trainee|traine|manager|guest|day\s*time|night\s*time|valacas|valakas|paagrio|heine)).*$/i, ' ')
+        .replace(/\s*[-\u2013\u2014]\s*(?:(?:Great\s*)?(?:Manager|Trainee|Traine)\s+)?(?:[PVH]\s*)?(?:Day|Night)\s*Time(?:\s*\([^)]*\))?(?:\s+.*)?$/i, ' ')
+        .replace(/\s*[-\u2013\u2014]\s*(?:(?:Great\s*)?(?:Manager|Trainee|Traine)\s+)?(?:[PVH]\s*)?(?:Day|Night)\s*Time.*$/i, ' ')
+        .replace(/\s*[-\u2013\u2014]\s*(?:(?:Great\s*)?(?:Manager|Trainee|Traine)\s+)?(?:Valacas|Heine|Paagrio)\s*(?:Day|Night)\s*Time.*$/i, ' ')
+        .replace(/\s*[-\u2013\u2014]\s*(?:[PVH]\s*)?(?:Great\s*)?(?:Manager|Trainee|Traine|Guest).*$/i, ' ')
+        .replace(/\s*[-\u2013\u2014]\s*(?:Great\s*)?(?:Manager|Trainee|Traine|Guest).*$/i, ' ')
         .replace(/\b(?:over\s*time|overtime|ot)\b/gi, ' ')
         .replace(/ding\s*[-\u2013\u2014]\s*dong/gi, 'Ding dong')
         .replace(/\s+/g, ' ')
@@ -186,6 +483,261 @@
       return /\uc624\ubc84\ud0c0\uc784|\uc5f0\uc7a5\s*\uadfc\ubb34|\uc5f0\uc7a5\s*\uc2dc\uc791|overtime|\bot\b/i.test(String(value || ''));
     }
 
+    function hasExcessiveLateNote(value) {
+      return /2\s*(?:h|\uc2dc\uac04)\s*(?:\+|\uc774\uc0c1)?\s*(?:late|\uc9c0\uac01)|2H\+|serious\s+late/i.test(String(value || ''));
+    }
+
+    function parseClockMinutes(value) {
+      const text = String(value || '').trim();
+      const match = text.match(/(\d{1,2}):(\d{2})(?:\s*([AP]M))?/i);
+      if (!match) return null;
+      let hour = Number(match[1]);
+      const minute = Number(match[2]);
+      const meridiem = (match[3] || '').toUpperCase();
+      if (meridiem === 'PM' && hour < 12) hour += 12;
+      if (meridiem === 'AM' && hour === 12) hour = 0;
+      if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
+      return hour * 60 + minute;
+    }
+
+    function getManilaNowParts() {
+      const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Manila',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      }).formatToParts(new Date()).reduce(function(map, part) {
+        map[part.type] = part.value;
+        return map;
+      }, {});
+      return {
+        date: parts.year + '-' + parts.month + '-' + parts.day,
+        minutes: (Number(parts.hour || 0) * 60) + Number(parts.minute || 0)
+      };
+    }
+
+    function isFutureClockInRow(row, logicalDate) {
+      const inTime = pick(row, ['\ucd9c\uadfc\uc2dc\uac04', 'inTime', 'In']);
+      const clockMinutes = parseClockMinutes(inTime);
+      if (clockMinutes == null || !logicalDate) return false;
+      const now = getManilaNowParts();
+      if (logicalDate !== now.date) return false;
+      return clockMinutes > now.minutes + 5;
+    }
+
+    function shiftStartMinutes(shift, dateValue) {
+      const day = String(dateValue || '').match(/^\d{4}-\d{2}-\d{2}$/)
+        ? new Date(dateValue + 'T00:00:00').getDay()
+        : -1;
+      if (shift === 'NIGHT') return day === 2 ? 19 * 60 : 21 * 60;
+      return 9 * 60;
+    }
+
+    function isExcessiveLateRow(row, status, note, shift) {
+      if (status !== '\uc9c0\uac01') return false;
+      if (hasExcessiveLateNote(note)) return true;
+      const inTime = pick(row, ['\ucd9c\uadfc\uc2dc\uac04', 'inTime', 'In']);
+      let clockMinutes = parseClockMinutes(inTime);
+      if (clockMinutes == null) return false;
+      const startMinutes = shiftStartMinutes(shift, getLogicalAttendanceDate(row));
+      if (shift === 'NIGHT' && clockMinutes < startMinutes) clockMinutes += 24 * 60;
+      return clockMinutes - startMinutes >= 120;
+    }
+
+    function normalizeShiftClockMinutes(clockMinutes, shift, startMinutes) {
+      if (clockMinutes == null) return null;
+      let value = clockMinutes;
+      if (shift === 'NIGHT' && value < startMinutes - 180) value += 24 * 60;
+      return value;
+    }
+
+    function getInitialClockInInfo(row, note, shift) {
+      const logicalDate = getLogicalAttendanceDate(row);
+      const startMinutes = shiftStartMinutes(shift, logicalDate);
+      const markers = [];
+      const text = String(note || '');
+      const patterns = [
+        {
+          pattern: /(?:\uc778\uc815\s*\ucd9c\uadfc|\uc790\ub3d9\s*\ucd9c\uadfc|2\s*\uc2dc\uac04\s*\uc774\uc0c1\s*\uc9c0\uac01\s*\ucd9c\uadfc|\ubb34\ub2e8\uacb0\uadfc\s*\uc720\uc608\s*\uc2dc\uac04\s*\ucd08\uacfc\s*\ud6c4\s*\ucd9c\uadfc|clock\s*in)\s*(\d{1,2}:\d{2})/ig,
+          serious: /2\s*\uc2dc\uac04|\ubb34\ub2e8\uacb0\uadfc/i
+        },
+        {
+          pattern: /(?:^|[\/\s])\ucd9c\uadfc\s*(\d{1,2}:\d{2})/ig,
+          serious: null
+        }
+      ];
+      patterns.forEach(function(entry) {
+        let match;
+        while ((match = entry.pattern.exec(text)) !== null) {
+          markers.push({
+            index: match.index,
+            minutes: normalizeShiftClockMinutes(parseClockMinutes(match[1]), shift, startMinutes),
+            serious: entry.serious ? entry.serious.test(match[0]) : false
+          });
+        }
+      });
+      markers.sort(function(a, b) { return a.index - b.index; });
+      if (markers.length && markers[0].minutes != null) return markers[0];
+
+      const inTime = pick(row, ['\ucd9c\uadfc\uc2dc\uac04', 'inTime', 'In']);
+      const fallbackMinutes = normalizeShiftClockMinutes(parseClockMinutes(inTime), shift, startMinutes);
+      return { index: -1, minutes: fallbackMinutes, serious: false };
+    }
+
+    function getInitialLateFlags(row, status, note, shift) {
+      const logicalDate = getLogicalAttendanceDate(row);
+      const startMinutes = shiftStartMinutes(shift, logicalDate);
+      const info = getInitialClockInInfo(row, note, shift);
+      if (info.minutes == null) {
+        const lateByStatus = status === '\uc9c0\uac01';
+        return {
+          late: lateByStatus,
+          h2late: lateByStatus && hasExcessiveLateNote(note),
+          hasClockIn: false
+        };
+      }
+      const lateMinutes = info.minutes - startMinutes;
+      const late = lateMinutes > 5 || status === '\uc9c0\uac01';
+      return {
+        late,
+        h2late: late && (info.serious || lateMinutes >= 120),
+        hasClockIn: true
+      };
+    }
+
+    function getLastEarlyOutIndex(note) {
+      const text = String(note || '');
+      const pattern = /\uc870\uae30\s*\ud1f4\uadfc/ig;
+      let match;
+      let lastIndex = -1;
+      while ((match = pattern.exec(text)) !== null) lastIndex = match.index;
+      return lastIndex;
+    }
+
+    function hasReturnAfterLastEarlyOut(note) {
+      const text = String(note || '');
+      const lastEarlyOutIndex = getLastEarlyOutIndex(text);
+      if (lastEarlyOutIndex < 0) return false;
+      const after = text.slice(lastEarlyOutIndex);
+      return /(?:\uc790\ub3d9\s*\ucd9c\uadfc|\uc778\uc815\s*\ucd9c\uadfc|2\s*\uc2dc\uac04\s*\uc774\uc0c1\s*\uc9c0\uac01\s*\ucd9c\uadfc|\ubb34\ub2e8\uacb0\uadfc\s*\uc720\uc608\s*\uc2dc\uac04\s*\ucd08\uacfc\s*\ud6c4\s*\ucd9c\uadfc|\ub77c\uc774\ube0c\s*ON\s*\ubcf5\uad6c|LIVE\s*ON\s*\ubcf5\uad6c|\ubcf5\uad6c|\uad00\ub9ac\uc790\s*\uac15\uc81c\s*\ud734\ubb34|force\s*off|day\s*off)/i.test(after);
+    }
+
+    function hasFinalNormalClockOutNote(note) {
+      const text = String(note || '');
+      const lastEarlyOutIndex = getLastEarlyOutIndex(text);
+      if (lastEarlyOutIndex >= 0) return false;
+      return /(?:\uc815\uc0c1\s*\ud1f4\uadfc|\uc815\uaddc\s*\ud1f4\uadfc\s*\uc2dc\uac04\s*\uc774\ud6c4|normal\s*clock\s*out|regular\s*clock\s*out)/i.test(text);
+    }
+
+    function isFinalEarlyOutRow(status, note) {
+      return status === '\uc870\ud1f4' && !hasReturnAfterLastEarlyOut(note) && !hasFinalNormalClockOutNote(note);
+    }
+
+    function getRankFlags(row, status, note, shift) {
+      if (!status || status === '-') return null;
+      const absent = status === '\uacb0\uc11d';
+      const off = status === '\ud734\ubb34';
+      const overtime = status === '\uc5f0\uc7a5\uadfc\ubb34' || hasOvertimeNote(note);
+      const early = !absent && !off && isFinalEarlyOutRow(status, note);
+      const lateFlags = (!absent && !off) ? getInitialLateFlags(row, status, note, shift) : { late: false, h2late: false, hasClockIn: false };
+      const normal = !absent && !off && !lateFlags.late &&
+        (status === '\uc815\ucd9c' || status === '\uc5f0\uc7a5\uadfc\ubb34' || overtime || lateFlags.hasClockIn);
+      return {
+        jung: normal,
+        ji: lateFlags.late,
+        h2late: lateFlags.h2late,
+        gyul: absent,
+        jo: early,
+        yeon: overtime,
+        hyu: off
+      };
+    }
+
+    function addRankFlags(item, dayFlags, flags) {
+      if (!flags) return;
+      if (flags.jung && !dayFlags.jung) { item.jung += 1; dayFlags.jung = true; }
+      if (flags.ji && !dayFlags.ji) { item.ji += 1; dayFlags.ji = true; }
+      if (flags.h2late && !dayFlags.h2late) { item.h2late += 1; dayFlags.h2late = true; }
+      if (flags.gyul && !dayFlags.gyul) { item.gyul += 1; dayFlags.gyul = true; }
+      if (flags.jo && !dayFlags.jo) { item.jo += 1; dayFlags.jo = true; }
+      if (flags.yeon && !dayFlags.yeon) { item.yeon += 1; dayFlags.yeon = true; }
+      if (flags.hyu && !dayFlags.hyu) { item.hyu += 1; dayFlags.hyu = true; }
+    }
+
+    function escapeHtml(value) {
+      return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function formatAttendanceTime(value) {
+      const text = String(value || '').trim();
+      if (!text || text === '-') return '-';
+      const match = text.match(/(\d{1,2}):(\d{2})(?::\d{2})?/);
+      if (!match) return text;
+      return match[1].padStart(2, '0') + ':' + match[2];
+    }
+
+    function extractRecognizedClockInTime(note) {
+      const text = String(note || '');
+      const patterns = [
+        /(?:인정\s*출근|자동\s*출근|2시간\s*이상\s*지각\s*출근|무단결근\s*유예시간\s*초과\s*후\s*출근|출근)\s*(\d{1,2}:\d{2})/i,
+        /(?:recognized\s*clock\s*in|recognized\s*in|auto\s*clock\s*in|clock\s*in)\s*(\d{1,2}:\d{2})/i
+      ];
+      for (const pattern of patterns) {
+        const match = text.match(pattern);
+        if (match) return formatAttendanceTime(match[1]);
+      }
+      return '-';
+    }
+
+    function formatDetailInTime(rawInTime, note) {
+      const detected = formatAttendanceTime(rawInTime);
+      const recognized = extractRecognizedClockInTime(note);
+      if (recognized !== '-' && detected !== '-' && recognized !== detected) {
+        return LANG === 'en'
+          ? recognized + ' (' + t('detectedIn') + ' ' + detected + ')'
+          : t('recognizedIn') + ' ' + recognized + ' (' + t('detectedIn') + ' ' + detected + ')';
+      }
+      return recognized !== '-' ? recognized : detected;
+    }
+
+    function getLogicalAttendanceDate(row) {
+      const rawKey = pick(row, ['\ud0a4', 'key', 'Key']);
+      const keyDate = String(rawKey || '').split('|')[0];
+      if (/^\d{4}-\d{2}-\d{2}$/.test(keyDate)) return keyDate;
+      const rawDate = pick(row, ['\ub0a0\uc9dc', 'date', 'Date']);
+      const match = String(rawDate || '').match(/\d{4}-\d{2}-\d{2}/);
+      return match ? match[0] : '';
+    }
+
+    function getDashboardKey(row) {
+      const name = canonicalName(pick(row, ['\uc774\ub984', 'name', 'Name']));
+      const server = normalizeServer(pick(row, ['\uc11c\ubc84', '\uc11c\ubc84(\ud300)', 'server', 'Server']));
+      const shift = normalizeShift(pick(row, ['\uadfc\ubb34\uc870', 'shift', 'Shift']));
+      return server + '|' + shift + '|' + nameKey(name);
+    }
+
+    function getAttendanceMonths(rows) {
+      const months = [];
+      const seen = {};
+      (rows || []).forEach(function(row) {
+        const day = getLogicalAttendanceDate(row);
+        const month = day ? day.slice(0, 7) : '';
+        if (month && !seen[month]) {
+          seen[month] = true;
+          months.push(month);
+        }
+      });
+      return months.sort();
+    }
+
     async function loadRows() {
       if (window.google && google.script && google.script.run) {
         google.script.run
@@ -210,15 +762,41 @@
     }
 
     function showLoadError(error) {
-      document.getElementById('loading').innerText = '\ub370\uc774\ud130\ub97c \ubd88\ub7ec\uc624\ub294 \uc911 \uc624\ub958\uac00 \ubc1c\uc0dd\ud588\uc2b5\ub2c8\ub2e4: ' + (error && error.message ? error.message : error);
+      document.getElementById('loading').innerText = t('loadError') + (error && error.message ? error.message : error);
       if (window.console) console.error(error);
     }
 
     function handleRows(rawData) {
+      rawAttendanceRows = rawData || [];
+      availableMonths = getAttendanceMonths(rawAttendanceRows);
+      currentMonth = currentMonth && availableMonths.indexOf(currentMonth) !== -1
+        ? currentMonth
+        : (availableMonths[availableMonths.length - 1] || '');
+      renderMonthButtons();
+      rebuildAggregatedData();
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('dashboard').style.display = 'block';
+      render();
+    }
+
+    function renderMonthButtons() {
+      const group = document.getElementById('month-buttons');
+      group.innerHTML = '<span class="control-label">' + t('month') + '</span>';
+      availableMonths.forEach(function(month) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = month === currentMonth ? 'active' : '';
+        button.textContent = month;
+        button.onclick = function() { setMonth(button, month); };
+        group.appendChild(button);
+      });
+    }
+
+    function rebuildAggregatedData() {
       const userMap = {};
       const dayStatusMap = {};
       const placeholderRows = [];
-      (rawData || []).forEach(function(row) {
+      (rawAttendanceRows || []).forEach(function(row) {
         const name = canonicalName(pick(row, ['\uc774\ub984', 'name', 'Name']));
         if (!name) return;
 
@@ -226,66 +804,37 @@
         const shift = normalizeShift(pick(row, ['\uadfc\ubb34\uc870', 'shift', 'Shift']));
         const status = normalizeStatus(pick(row, ['statusNormalized', '\uc0c1\ud0dc', 'status', 'Status']));
         const dateKey = pick(row, ['\ub0a0\uc9dc', 'date', 'Date']);
+        const logicalDate = getLogicalAttendanceDate(row);
         const note = pick(row, ['\ube44\uace0', 'note', 'Note']);
-        const key = server + '|' + shift + '|' + nameKey(name);
+        const key = getDashboardKey(row);
+        if (isFutureClockInRow(row, logicalDate)) return;
         if ((!dateKey || dateKey === '-') && (!status || status === '-')) {
           placeholderRows.push({ key, name, server, shift });
           return;
         }
-        const dayKey = key + '|' + dateKey;
+        if (currentMonth && logicalDate && logicalDate.slice(0, 7) !== currentMonth) return;
+        const dayKey = key + '|' + (logicalDate || dateKey);
 
         if (!userMap[key]) {
-          userMap[key] = { order: Object.keys(userMap).length, name, server, shift, jung: 0, ji: 0, gyul: 0, jo: 0, yeon: 0, hyu: 0 };
+          userMap[key] = { order: Object.keys(userMap).length, name, server, shift, jung: 0, ji: 0, h2late: 0, gyul: 0, jo: 0, yeon: 0, hyu: 0 };
         }
         if (!dayStatusMap[dayKey]) dayStatusMap[dayKey] = {};
 
-        if (status === '\uc815\ucd9c' && !dayStatusMap[dayKey].jung) {
-          userMap[key].jung += 1;
-          dayStatusMap[dayKey].jung = true;
-        }
-        else if (status === '\uc9c0\uac01' && !dayStatusMap[dayKey].ji) {
-          userMap[key].ji += 1;
-          dayStatusMap[dayKey].ji = true;
-        }
-        else if (status === '\uacb0\uc11d' && !dayStatusMap[dayKey].gyul) {
-          userMap[key].gyul += 1;
-          dayStatusMap[dayKey].gyul = true;
-        }
-        else if (status === '\uc870\ud1f4' && !dayStatusMap[dayKey].jo) {
-          userMap[key].jo += 1;
-          dayStatusMap[dayKey].jo = true;
-        }
-        else if (status === '\uc5f0\uc7a5\uadfc\ubb34') {
-          if (!dayStatusMap[dayKey].jung) {
-            userMap[key].jung += 1;
-            dayStatusMap[dayKey].jung = true;
-          }
-          if (!dayStatusMap[dayKey].yeon) {
-            userMap[key].yeon += 1;
-            dayStatusMap[dayKey].yeon = true;
-          }
-        }
-        else if (status === '\ud734\ubb34' && !dayStatusMap[dayKey].hyu) {
-          userMap[key].hyu += 1;
-          dayStatusMap[dayKey].hyu = true;
-        }
-
-        if (hasOvertimeNote(note) && !dayStatusMap[dayKey].yeon) {
-          userMap[key].yeon += 1;
-          dayStatusMap[dayKey].yeon = true;
-        }
+        addRankFlags(userMap[key], dayStatusMap[dayKey], getRankFlags(row, status, note, shift));
       });
 
       placeholderRows.forEach(function(row) {
         if (userMap[row.key]) return;
-        userMap[row.key] = { order: Object.keys(userMap).length, name: row.name, server: row.server, shift: row.shift, jung: 0, ji: 0, gyul: 0, jo: 0, yeon: 0, hyu: 0 };
+        userMap[row.key] = { order: Object.keys(userMap).length, name: row.name, server: row.server, shift: row.shift, jung: 0, ji: 0, h2late: 0, gyul: 0, jo: 0, yeon: 0, hyu: 0 };
       });
 
       aggregatedData = Object.values(userMap);
-      document.getElementById('last-updated').innerText = '\ub9c8\uc9c0\ub9c9 \ubd88\ub7ec\uc624\uae30: ' + new Date().toLocaleString('ko-KR');
-      document.getElementById('loading').style.display = 'none';
-      document.getElementById('dashboard').style.display = 'block';
-      render();
+      if (selectedDetailKey && !aggregatedData.some(function(item) {
+        return item.server + '|' + item.shift + '|' + nameKey(item.name) === selectedDetailKey;
+      })) {
+        selectedDetailKey = '';
+      }
+      document.getElementById('last-updated').innerText = (currentMonth ? currentMonth + ' / ' : '') + t('lastLoaded') + ': ' + new Date().toLocaleString(LANG === 'en' ? 'en-US' : 'ko-KR');
     }
 
     function activateButton(button, type) {
@@ -304,6 +853,15 @@
       if (type === 'server') currentServer = value;
       if (type === 'shift') currentShift = value;
       activateButton(button, type);
+      selectedDetailKey = '';
+      render();
+    }
+
+    function setMonth(button, value) {
+      currentMonth = value;
+      activateButton(button);
+      selectedDetailKey = '';
+      rebuildAggregatedData();
       render();
     }
 
@@ -313,6 +871,105 @@
       render();
     }
 
+    function setRankingRange(button, value) {
+      currentRankingRange = Number(value) || 7;
+      activateButton(button);
+      renderRanking();
+    }
+
+    function getLatestLogicalDate(rows, month) {
+      let latest = '';
+      (rows || []).forEach(function(row) {
+        const day = getLogicalAttendanceDate(row);
+        if (isFutureClockInRow(row, day)) return;
+        if (month && (!day || day.slice(0, 7) !== month)) return;
+        if (day && day > latest) latest = day;
+      });
+      return latest;
+    }
+
+    function addRankStatus(item, status, isH2Late) {
+      if (status === '\uc815\ucd9c') item.jung += 1;
+      else if (status === '\uc9c0\uac01') item.ji += 1;
+      else if (status === '\uacb0\uc11d') item.gyul += 1;
+      else if (status === '\uc870\ud1f4') item.jo += 1;
+      else if (status === '\uc5f0\uc7a5\uadfc\ubb34') {
+        item.jung += 1;
+        item.yeon += 1;
+      }
+      else if (status === '\ud734\ubb34') item.hyu += 1;
+      if (isH2Late) item.h2late += 1;
+    }
+
+    function calculateRankScore(item) {
+      return (item.jung * 10) + (item.yeon * 5) - (item.ji * 5) - (item.h2late * 10) - (item.jo * 10) - (item.gyul * 25);
+    }
+
+    function getRankingRows(rangeDays) {
+      const month = currentMonth || getLatestLogicalDate(rawAttendanceRows).slice(0, 7);
+      const latest = getLatestLogicalDate(rawAttendanceRows, month);
+      if (!latest) return [];
+      const latestDate = new Date(latest + 'T00:00:00');
+      const cutoffDate = new Date(latestDate.getTime() - ((Math.max(1, rangeDays) - 1) * 86400000));
+      const cutoff = cutoffDate.toISOString().slice(0, 10);
+      const map = {};
+      const dayStatusMap = {};
+
+      (rawAttendanceRows || []).forEach(function(row) {
+        const logicalDate = getLogicalAttendanceDate(row);
+        if (month && (!logicalDate || logicalDate.slice(0, 7) !== month)) return;
+        if (!logicalDate || logicalDate < cutoff || logicalDate > latest) return;
+        const name = canonicalName(pick(row, ['\uc774\ub984', 'name', 'Name']));
+        if (!name) return;
+        const server = normalizeServer(pick(row, ['\uc11c\ubc84', '\uc11c\ubc84(\ud300)', 'server', 'Server']));
+        const shift = normalizeShift(pick(row, ['\uadfc\ubb34\uc870', 'shift', 'Shift']));
+        if (isFutureClockInRow(row, logicalDate)) return;
+        if (currentServer !== 'ALL' && server !== currentServer) return;
+        if (currentShift !== 'ALL' && shift !== currentShift) return;
+        const status = normalizeStatus(pick(row, ['statusNormalized', '\uc0c1\ud0dc', 'status', 'Status']));
+        const note = pick(row, ['\ube44\uace0', 'note', 'Note']);
+        const key = server + '|' + shift + '|' + nameKey(name);
+        const dayKey = key + '|' + logicalDate;
+        if (!map[key]) map[key] = { key, name, server, shift, jung: 0, ji: 0, h2late: 0, gyul: 0, jo: 0, yeon: 0, hyu: 0 };
+        if (!dayStatusMap[dayKey]) dayStatusMap[dayKey] = {};
+        addRankFlags(map[key], dayStatusMap[dayKey], getRankFlags(row, status, note, shift));
+      });
+
+      return Object.values(map).map(function(item) {
+        item.score = calculateRankScore(item);
+        return item;
+      }).sort(function(a, b) {
+        return b.score - a.score || b.jung - a.jung || a.gyul - b.gyul || a.ji - b.ji || a.name.localeCompare(b.name);
+      });
+    }
+
+    function renderRanking() {
+      const body = document.getElementById('ranking-body');
+      if (!body) return;
+      const title = document.getElementById('ranking-title');
+      if (title) title.innerText = t('rankTitle') + (currentMonth ? ' (' + currentMonth + ')' : '');
+      const latest = getLatestLogicalDate(rawAttendanceRows, currentMonth || '');
+      const meta = document.getElementById('ranking-meta');
+      if (meta) {
+        meta.innerText = latest
+          ? t('meta').replace('{month}', currentMonth).replace('{days}', currentRankingRange).replace('{latest}', latest)
+          : t('metaNone');
+      }
+      const rows = getRankingRows(currentRankingRange);
+      body.innerHTML = rows.length ? '' : '<tr><td colspan="10" class="empty">' + t('noRanking') + '</td></tr>';
+      rows.forEach(function(row, idx) {
+        const tr = document.createElement('tr');
+        const scoreClass = row.score > 0 ? 'score-good' : (row.score < 0 ? 'score-bad' : '');
+        const detailKey = escapeHtml(row.key || (row.server + '|' + row.shift + '|' + nameKey(row.name)));
+        tr.innerHTML =
+          '<td class="' + (idx < 3 ? 'rank-top' : '') + '">' + (idx + 1) + '</td>' +
+          '<td><span class="name-cell" onclick="showDetail(&quot;' + detailKey + '&quot;)">' + escapeHtml(row.name) + '</span></td>' +
+          '<td class="' + scoreClass + '">' + row.score + '</td>' +
+          '<td>' + row.jung + '</td><td>' + row.ji + '</td><td>' + row.h2late + '</td><td>' + row.gyul + '</td>' +
+          '<td>' + row.jo + '</td><td>' + row.yeon + '</td><td>' + row.hyu + '</td>';
+        body.appendChild(tr);
+      });
+    }
     function render() {
       let filtered = aggregatedData.filter(function(d) {
         return (currentServer === 'ALL' || d.server === currentServer) && (currentShift === 'ALL' || d.shift === currentShift);
@@ -351,21 +1008,24 @@
       document.getElementById('avg-att').innerText = Math.round(tBase === 0 ? 0 : (tAttended / tBase) * 100) + '%';
       document.getElementById('avg-abs').innerText = Math.round(tBase === 0 ? 0 : (tGyul / tBase) * 100) + '%';
       document.getElementById('avg-late').innerText = Math.round(tBase === 0 ? 0 : (tJi / tBase) * 100) + '%';
+      renderDetailPanel();
+      renderRanking();
 
       const chart = document.getElementById('chart-body');
-      chart.innerHTML = filtered.length ? '' : '<div class="empty">\uc120\ud0dd\ud55c \uc870\uac74\uc5d0 \ud45c\uc2dc\ud560 \ucd9c\uacb0 \uae30\ub85d\uc774 \uc5c6\uc2b5\ub2c8\ub2e4.</div>';
+      chart.innerHTML = filtered.length ? '' : '<div class="empty">' + t('noRecords') + '</div>';
       filtered.forEach(function(d) {
         const row = document.createElement('div');
         row.className = 'chart-row';
         row.innerHTML =
           '<div class="chart-label" title="' + d.name + '">' + d.name + '</div>' +
           '<div class="bar">' +
-          segment(d.jung, 'jung', '\uc815\ucd9c') +
-          segment(d.ji, 'ji', '\uc9c0\uac01') +
-          segment(d.gyul, 'gyul', '\uacb0\uc11d') +
-          segment(d.jo, 'jo', '\uc870\ud1f4') +
-          segment(d.yeon, 'yeon', '\uc5f0\uc7a5\uadfc\ubb34') +
-          segment(d.hyu, 'hyu', '\ud734\ubb34') +
+          segment(d.jung, 'jung', t('onTime')) +
+          segment(d.ji, 'ji', t('late')) +
+          segment(d.h2late, 'h2late', t('h2late')) +
+          segment(d.gyul, 'gyul', t('absent')) +
+          segment(d.jo, 'jo', t('earlyOut')) +
+          segment(d.yeon, 'yeon', t('overtime')) +
+          segment(d.hyu, 'hyu', t('dayOff')) +
           '</div>';
         chart.appendChild(row);
       });
@@ -374,9 +1034,10 @@
       tbody.innerHTML = '';
       filtered.forEach(function(d) {
         const tr = document.createElement('tr');
+        const detailKey = d.server + '|' + d.shift + '|' + nameKey(d.name);
         tr.innerHTML =
-          '<td>' + d.name + '</td>' +
-          '<td>' + d.jung + '</td><td>' + d.ji + '</td><td>' + d.gyul + '</td>' +
+          '<td><span class="name-cell' + (detailKey === selectedDetailKey ? ' active' : '') + '" onclick="showDetail(&quot;' + escapeHtml(detailKey) + '&quot;)">' + escapeHtml(d.name) + '</span></td>' +
+          '<td>' + d.jung + '</td><td>' + d.ji + '</td><td>' + (d.h2late || 0) + '</td><td>' + d.gyul + '</td>' +
           '<td>' + d.jo + '</td><td>' + d.yeon + '</td><td>' + d.hyu + '</td>' +
           '<td>' + d.attRate.toFixed(1) + '%</td>' +
           '<td class="' + (d.absRate >= 10 ? 'highlight' : '') + '">' + d.absRate.toFixed(1) + '%</td>' +
@@ -385,11 +1046,75 @@
       });
     }
 
+    function getDetailRows(detailKey) {
+      return (rawAttendanceRows || []).map(function(row) {
+        const logicalDate = getLogicalAttendanceDate(row);
+        const status = normalizeStatus(pick(row, ['statusNormalized', '\uc0c1\ud0dc', 'status', 'Status']));
+        const rawDate = pick(row, ['\ub0a0\uc9dc', 'date', 'Date']);
+        if ((!rawDate || rawDate === '-') && (!status || status === '-')) return null;
+        if (isFutureClockInRow(row, logicalDate)) return null;
+        if (currentMonth && logicalDate && logicalDate.slice(0, 7) !== currentMonth) return null;
+        if (getDashboardKey(row) !== detailKey) return null;
+        return {
+          date: logicalDate || rawDate || '-',
+          server: localServer(normalizeServer(pick(row, ['\uc11c\ubc84', '\uc11c\ubc84(\ud300)', 'server', 'Server']))),
+          shift: localShift(normalizeShift(pick(row, ['\uadfc\ubb34\uc870', 'shift', 'Shift']))),
+          status: status ? localStatus(status) : '-',
+          inTime: formatDetailInTime(pick(row, ['\ucd9c\uadfc\uc2dc\uac04', 'inTime', 'In']), pick(row, ['\ube44\uace0', 'note', 'Note'], '-')),
+          outTime: formatAttendanceTime(pick(row, ['\ud1f4\uadfc\uc2dc\uac04', 'outTime', 'Out'])),
+          note: pick(row, ['\ube44\uace0', 'note', 'Note'], '-')
+        };
+      }).filter(Boolean).sort(function(a, b) {
+        return a.date.localeCompare(b.date);
+      });
+    }
+
+    function showDetail(detailKey) {
+      selectedDetailKey = detailKey;
+      render();
+    }
+
+    function clearDetail() {
+      selectedDetailKey = '';
+      render();
+    }
+
+    function renderDetailPanel() {
+      const panel = document.getElementById('detail-panel');
+      const body = document.getElementById('detail-body');
+      if (!selectedDetailKey) {
+        panel.style.display = 'none';
+        body.innerHTML = '';
+        return;
+      }
+      const selected = aggregatedData.find(function(item) {
+        return item.server + '|' + item.shift + '|' + nameKey(item.name) === selectedDetailKey;
+      });
+      const rows = getDetailRows(selectedDetailKey);
+      document.getElementById('detail-title').innerText =
+        (selected ? selected.name : selectedDetailKey) + ' / ' + (currentMonth || '-') + ' ' + t('detailTitleSuffix');
+      panel.style.display = 'block';
+      body.innerHTML = rows.length ? '' : '<tr><td colspan="7" class="empty">' + t('noDetail') + '</td></tr>';
+      rows.forEach(function(row) {
+        const tr = document.createElement('tr');
+        tr.innerHTML =
+          '<td>' + escapeHtml(row.date) + '</td>' +
+          '<td>' + escapeHtml(row.server) + '</td>' +
+          '<td>' + escapeHtml(row.shift) + '</td>' +
+          '<td>' + escapeHtml(row.status) + '</td>' +
+          '<td>' + escapeHtml(row.inTime) + '</td>' +
+          '<td>' + escapeHtml(row.outTime) + '</td>' +
+          '<td class="detail-note" title="' + escapeHtml(row.note) + '">' + escapeHtml(row.note) + '</td>';
+        body.appendChild(tr);
+      });
+    }
+
     function segment(count, className, label) {
       if (count <= 0) return '';
       return '<div class="seg ' + className + '" style="width:' + ((count / 30) * 100) + '%" title="' + label + ': ' + count + '"></div>';
     }
 
+    applyLanguage();
     loadRows();
   </script>
 </body>

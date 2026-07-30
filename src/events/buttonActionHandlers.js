@@ -27,6 +27,7 @@ function createButtonActionHandlers({
     saveSystem,
     setLiveException,
     startPreShiftOvertime,
+    handleAutoOvertimeConfirmation = null,
     updateWorkingRole,
     recordLog,
     getCompletionMessage = () => '처리되었습니다.'
@@ -56,6 +57,9 @@ function createButtonActionHandlers({
     if (typeof saveSystem !== 'function') throw new TypeError('saveSystem must be a function');
     if (typeof setLiveException !== 'function') throw new TypeError('setLiveException must be a function');
     if (typeof startPreShiftOvertime !== 'function') throw new TypeError('startPreShiftOvertime must be a function');
+    if (handleAutoOvertimeConfirmation !== null && typeof handleAutoOvertimeConfirmation !== 'function') {
+        throw new TypeError('handleAutoOvertimeConfirmation must be a function');
+    }
     if (typeof updateWorkingRole !== 'function') throw new TypeError('updateWorkingRole must be a function');
     if (typeof recordLog !== 'function') throw new TypeError('recordLog must be a function');
     if (typeof getCompletionMessage !== 'function') throw new TypeError('getCompletionMessage must be a function');
@@ -70,6 +74,28 @@ function createButtonActionHandlers({
     async function persistDashboard() {
         await saveSystem();
         await renderDashboard({ forceMemberRefresh: true });
+    }
+
+    async function handleAutoOvertimeConfirmationButton({ interaction }) {
+        if (typeof handleAutoOvertimeConfirmation !== 'function') {
+            return interaction.reply({
+                content: 'OT confirmation is not available right now.',
+                flags: interaction.guildId ? MessageFlags.Ephemeral : undefined
+            });
+        }
+        const result = await handleAutoOvertimeConfirmation(interaction);
+        if (result.changed) await persistDashboard();
+        const payload = {
+            content: result.message || 'OT confirmation handled.',
+            components: []
+        };
+        if (typeof interaction.update === 'function') {
+            return interaction.update(payload);
+        }
+        return interaction.reply({
+            content: payload.content,
+            flags: interaction.guildId ? MessageFlags.Ephemeral : undefined
+        });
     }
 
     async function preflightAction({ interaction, autoDel, user, type }) {
@@ -296,8 +322,11 @@ function createButtonActionHandlers({
         }
 
         if (user.disconnected) {
+            const dcStartedAt = user.disconnectedAt || null;
             applyLiveOnState(user, now, 'button-or-command', 'clock-in-dc-recovered');
-            await recordLog(user, 'reconnect', 'DC 복구');
+            await recordLog(user, 'reconnect', 'DC 복구', null, {
+                presenceStartedAt: dcStartedAt
+            });
         } else {
             const clockedIn = await handleClockIn(member, user, shift, now, false);
             if (!clockedIn) {
@@ -500,6 +529,7 @@ function createButtonActionHandlers({
         clockInLiveGate: handleClockInLiveGate,
         clockInComplete: handleClockInComplete,
         overtime: handleOvertime,
+        handleAutoOvertimeConfirmationButton,
         completeAction
     };
 }

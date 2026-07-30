@@ -1,7 +1,7 @@
 ﻿const assert = require('assert');
 const { createGuildMemberEventHandlers } = require('../src/events/guildMemberEventHandlers');
 
-function member({ id = 'u1', name = 'Robin - Heine Day Time', roles = [] } = {}) {
+function member({ id = 'u1', name = 'Robin - Valacas Day Time', roles = [] } = {}) {
     const calls = [];
     const cache = {
         has: role => roles.includes(role)
@@ -71,6 +71,12 @@ function createHandlers(overrides = {}) {
         writeDayOffLog: async text => calls.push(`log:${text.split('\n')[0]}`),
         saveSystem: async () => calls.push('save'),
         syncCurrentWorkerProfile: async newMember => calls.push(`profile:${newMember.id}`),
+        removeCurrentWorkerProfile: async member => calls.push(`removeProfile:${member.id}`),
+        isAssignedWorker: member => {
+            const hasServer = member?.roles?.cache?.has('heine') || member?.roles?.cache?.has('paagrio');
+            const hasShift = member?.roles?.cache?.has('day') || member?.roles?.cache?.has('night');
+            return Boolean(hasServer && hasShift);
+        },
         renderDashboard: options => calls.push(`render:${Boolean(options?.forceMemberRefresh)}`),
         logger: {
             error: (label, error) => calls.push(`error:${label}:${error.message}`)
@@ -88,7 +94,7 @@ function createHandlers(overrides = {}) {
 (async () => {
     const { handlers: updateHandlers, calls: updateCalls, attendanceData } = createHandlers();
     const oldMember = member({ name: 'Robin' });
-    const newMember = member({ name: 'Robin - Heine Day Time' });
+    const newMember = member({ name: 'Robin - Valacas Day Time' });
     await updateHandlers.update(oldMember, newMember);
     assert.deepStrictEqual(newMember.calls, [
         'add:heine',
@@ -100,7 +106,7 @@ function createHandlers(overrides = {}) {
     assert.deepStrictEqual(updateCalls, [
         'manualGuest',
         'assignedNickname',
-        'structured:Robin - Heine Day Time',
+        'structured:Robin - Valacas Day Time',
         'ensure:u1:day',
         'save',
         'log:✅ 역할 자동 동기화 완료',
@@ -156,6 +162,32 @@ function createHandlers(overrides = {}) {
         'profile:u5',
         'render:true'
     ]);
+
+    const removedRoleData = { u6: { checkedIn: true, shift: 'day', liveOffWarnedFor: 'x' } };
+    const removedRoleExceptions = { u6: { status: 'active' } };
+    const { handlers: removedRoleHandlers, calls: removedRoleCalls } = createHandlers({
+        attendanceData: removedRoleData,
+        liveExceptions: removedRoleExceptions
+    });
+    await removedRoleHandlers.update(
+        member({ id: 'u6', name: 'Leaving Role', roles: ['heine', 'day'] }),
+        member({ id: 'u6', name: 'Leaving Role', roles: [] })
+    );
+    assert.strictEqual(removedRoleData.u6.isFinished, true);
+    assert.strictEqual(removedRoleData.u6.shift, null);
+    assert.strictEqual(removedRoleData.u6.liveOffWarnedFor, null);
+    assert.strictEqual(removedRoleExceptions.u6.status, 'cancelled');
+    assert.strictEqual(removedRoleExceptions.u6.cancelReason, 'worker-role-removed');
+    assert.deepStrictEqual(removedRoleCalls, [
+        'manualGuest',
+        'finished:role-remove:worker-role-removed:2026-05-31T00:00:00.000Z',
+        'removeOt:u6',
+        'removeProfile:u6',
+        'log:🧹 근무자 역할 제거 감지',
+        'save',
+        'render:true'
+    ]);
+
     const liveExceptions = {
         u3: { status: 'active' }
     };
@@ -174,6 +206,7 @@ function createHandlers(overrides = {}) {
     assert.deepStrictEqual(removeCalls, [
         'finished:member-remove:member-left-guild:2026-05-31T00:00:00.000Z',
         'removeOt:u3',
+        'removeProfile:u3',
         'clear:u3',
         'save',
         'render:true'

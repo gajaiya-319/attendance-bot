@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 
 require('dotenv').config();
 
@@ -12,7 +12,7 @@ async function main() {
         scopes: ['https://www.googleapis.com/auth/spreadsheets']
     });
     const sheets = google.sheets({ version: 'v4', auth });
-    for (const tab of process.argv.slice(3).length > 0 ? process.argv.slice(3) : ['Total Summary', 'Paagrio 3-Day', 'Heine 3-Day']) {
+    for (const tab of process.argv.slice(3).length > 0 ? process.argv.slice(3) : ['Total Summary', 'Paagrio 3-Day', 'Valacas 3-Day']) {
         const response = await sheets.spreadsheets.values.get({
             spreadsheetId,
             range: `'${tab}'!A1:L14`,

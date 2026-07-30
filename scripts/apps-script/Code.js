@@ -15,6 +15,8 @@ const RAW_ATTENDANCE_HEADERS = [
   '\uC218\uC815\uC2DC\uAC04'
 ];
 const CURRENT_WORKERS_SHEET_NAME = 'Current_Workers';
+const BONUS_RANKING_ARCHIVE_PREFIX = 'Bonus_Ranking_';
+const BONUS_RANKING_ARCHIVE_PROP = 'LAST_BONUS_RANKING_ARCHIVED_MONTH';
 const CURRENT_WORKERS_HEADERS = [
   '\uC774\uB984',
   '\uC11C\uBC84',
@@ -23,10 +25,10 @@ const CURRENT_WORKERS_HEADERS = [
   '\uC218\uC815\uC2DC\uAC04'
 ];
 const PAYROLL_PAAGRIO_TAB = 'Paagrio Great';
-const PAYROLL_HEINE_TAB = 'Heine Great';
+const PAYROLL_HEINE_TAB = 'Valakas Great';
 const MIRROR_PAAGRIO_TAB = '_Great_Paagrio_Mirror';
-const MIRROR_HEINE_TAB = '_Great_Heine_Mirror';
-/** Work list ID — Paagrio/Heine Great live here when payroll summary is a separate workbook. */
+const MIRROR_HEINE_TAB = '_Great_Valacas_Mirror';
+/** Work list ID ??Paagrio/Valakas Great live here when payroll summary is a separate workbook. */
 const PAYROLL_GREAT_SPREADSHEET_ID_DEFAULT = '1oScjqyvV0EHZffLYxZL4fI_pLVr7R2ABvLv7n-_gJTk';
 const RAW_DATA_SHEET_NAME = 'Raw_Data';
 const RECENT_THREE_DAY_SUMMARY_SHEET = '\uCD5C\uADFC_3\uC77C_\uC694\uC57D';
@@ -44,14 +46,18 @@ const MONTHLY_HISTORY_BLOCK_ROWS = 4;
 
 function doGet(e) {
   try {
+    autoArchivePreviousMonthBonusRanking_();
     const params = e && e.parameter ? e.parameter : {};
     if (params.api === 'raw' || params.format === 'json') {
       return json_(getRawAttendanceRows());
     }
 
-    return HtmlService
-      .createHtmlOutputFromFile('AttendanceDashboard')
-      .setTitle('\uCD9C\uACB0\uAD00\uB9AC')
+    const template = HtmlService.createTemplateFromFile('AttendanceDashboard');
+    template.lang = params.lang === 'en' ? 'en' : 'ko';
+    template.webAppUrl = ScriptApp.getService().getUrl();
+    return template
+      .evaluate()
+      .setTitle(params.lang === 'en' ? 'Attendance Dashboard' : '\uCD9C\uACB0\uAD00\uB9AC')
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   } catch (error) {
     return json_({ success: false, error: String(error && error.message ? error.message : error) });
@@ -62,10 +68,15 @@ function getRawAttendanceRows() {
   return getRawAttendanceRows_();
 }
 
+function autoArchivePreviousMonthBonusRanking() {
+  return json_(autoArchivePreviousMonthBonusRanking_({ force: true }));
+}
+
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('\uD83D\uDEE0\uFE0F \uAE09\uC5EC \uAD00\uB9AC')
     .addItem('\u23F1\uFE0F 3\uC77C \uAE09\uC5EC \uB9C8\uAC10 \uBC0F \uC544\uB798\uC5D0 \uBCF4\uC874', 'closeThreeDaysAndAppend')
+    .addItem('\uD83C\uDFC6 \uC9C0\uB09C\uB2EC \uB7AD\uD0B9 \uBCF4\uB108\uC2A4 \uC790\uB3D9\uBCF4\uC874 \uC810\uAC80', 'autoArchivePreviousMonthBonusRanking')
     .addItem('\u2611\uFE0F \uB9C8\uAC10 \uCCB4\uD06C\uBC15\uC2A4 \uC77C\uAD04 \uBCF5\uAD6C', 'setupCheckboxButtons')
     .addToUi();
 }
@@ -83,7 +94,7 @@ function onEdit(e) {
 
 function setupThreeDayCloseCheckbox() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(RECENT_THREE_DAY_SUMMARY_SHEET);
-  if (!sheet) throw new Error('최근_3일_요약 시트를 찾을 수 없습니다.');
+  if (!sheet) throw new Error('理쒓렐_3???붿빟 ?쒗듃瑜?李얠쓣 ???놁뒿?덈떎.');
   sheet.getRange('G2').setValue('\uD83D\uDC49 3\uC77C \uB9C8\uAC10 \uC2E4\uD589 :')
     .setFontWeight('bold').setHorizontalAlignment('right').setVerticalAlignment('middle');
   sheet.getRange(THREE_DAY_CLOSE_CHECKBOX).insertCheckboxes().setValue(false)
@@ -110,7 +121,7 @@ function closeMonthAndReset() {
     const monthSheet = ss.getSheetByName(MONTHLY_SUMMARY_SHEET);
     const rawSheet = ss.getSheetByName(RAW_DATA_SHEET_NAME);
     const daySheet = ss.getSheetByName(RECENT_THREE_DAY_SUMMARY_SHEET);
-    if (!monthSheet || !rawSheet) throw new Error('월간_누적_요약 또는 Raw_Data 시트를 찾을 수 없습니다.');
+    if (!monthSheet || !rawSheet) throw new Error('?붽컙_?꾩쟻_?붿빟 ?먮뒗 Raw_Data ?쒗듃瑜?李얠쓣 ???놁뒿?덈떎.');
 
     const source = monthSheet.getRange(MONTHLY_LIVE_BLOCK);
     const values = source.getValues();
@@ -187,7 +198,7 @@ function closeThreeDaysAndAppend() {
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const sheet = ss.getSheetByName(RECENT_THREE_DAY_SUMMARY_SHEET);
-    if (!sheet) throw new Error('최근_3일_요약 시트를 찾을 수 없습니다.');
+    if (!sheet) throw new Error('理쒓렐_3???붿빟 ?쒗듃瑜?李얠쓣 ???놁뒿?덈떎.');
 
     const round = currentThreeDayRound_(sheet);
     const source = sheet.getRange(THREE_DAY_LIVE_BLOCK);
@@ -229,6 +240,9 @@ function doPost(e) {
     if (params.mode === 'profile' || params.mode === 'workerProfile') {
       return upsertCurrentWorkerProfile_(params);
     }
+    if (params.mode === 'syncProfiles' || params.mode === 'workerProfilesSync') {
+      return syncCurrentWorkerProfiles_(params);
+    }
     if (params.mode === 'removeProfile' || params.mode === 'workerProfileRemove') {
       return removeCurrentWorkerProfile_(params);
     }
@@ -250,15 +264,16 @@ function doPost(e) {
     ensureRawAttendanceHeaders_(sheet);
 
     const key = params.key || makeRawAttendanceKey_(params);
+    const playerName = canonicalName_(params.name || 'Unknown');
     const rowNumber = findRawAttendanceRow_(sheet, key);
     const previousStatus = rowNumber ? clean_(sheet.getRange(rowNumber, 5).getValue()) : '';
     const nextStatus = clean_(params.status);
 
     const rowValues = [
       clean_(params.date),
-      clean_(params.server).toUpperCase(),
+      normalizeServerDisplay_(params.server),
       clean_(params.shift).toUpperCase(),
-      clean_(params.name, 'Unknown'),
+      playerName,
       chooseFinalStatus_(previousStatus, nextStatus, params.forceStatus === true),
       chooseFinalInTime_(sheet, rowNumber, clean_(params.inTime)),
       clean_(params.outTime),
@@ -311,16 +326,40 @@ function resetRawAttendanceOnly() {
 
 function getRawAttendanceRows_() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(RAW_ATTENDANCE_SHEET_NAME);
-  if (!sheet) return [];
+  const profiles = getCurrentWorkerProfiles_();
+  const profileKeys = profiles.__keys || Object.keys(profiles);
+  const useCurrentWorkerFilter = profileKeys.length > 0;
+
+  function profilePlaceholderRows_() {
+    return profileKeys.map(function(key) {
+      const profile = profiles[key];
+      return {
+        '\uB0A0\uC9DC': '-',
+        '\uC11C\uBC84': profile.server || '-',
+        '\uADFC\uBB34\uC870': profile.shift || '-',
+        '\uC774\uB984': profile.name,
+        '\uC0C1\uD0DC': '-',
+        '\uCD9C\uADFC\uC2DC\uAC04': '-',
+        '\uD1F4\uADFC\uC2DC\uAC04': '-',
+        '\uBE44\uACE0': '-',
+        '\uD0A4': '-|' + (profile.server || '-') + '|' + (profile.shift || '-') + '|' + key,
+        '\uC218\uC815\uC2DC\uAC04': profile.updatedAt || '',
+        currentProfileApplied: true,
+        currentWorkerOnly: true,
+        statusNormalized: '-'
+      };
+    });
+  }
+
+  if (!sheet) return profilePlaceholderRows_();
 
   ensureRawAttendanceHeaders_(sheet);
 
   const values = sheet.getDataRange().getValues();
-  if (values.length < 2) return [];
+  if (values.length < 2) return profilePlaceholderRows_();
 
-  const profiles = getCurrentWorkerProfiles_();
   const headers = values[0].map(function(header) { return clean_(header, ''); });
-  return values.slice(1)
+  const rows = values.slice(1)
     .filter(function(row) {
       const attendanceCells = row.slice(0, RAW_ATTENDANCE_HEADERS.length);
       return attendanceCells.some(function(cell) { return clean_(cell, '') !== ''; });
@@ -335,7 +374,10 @@ function getRawAttendanceRows_() {
       const hasAttendanceScope = clean_(item['\uC11C\uBC84'], '') && clean_(item['\uADFC\uBB34\uC870'], '');
       const hasAttendanceFact = clean_(item['\uB0A0\uC9DC'], '') || clean_(item['\uC0C1\uD0DC'], '') || clean_(item['\uD0A4'], '');
       if (!hasIdentity && !hasAttendanceScope && !hasAttendanceFact) return null;
-      const profile = profiles[name.toLowerCase()];
+      const rawServer = normalizeServerDisplay_(item['\uC11C\uBC84']);
+      const rawShift = clean_(item['\uADFC\uBB34\uC870'], '').toUpperCase();
+      const profile = profiles[rawServer + '|' + rawShift + '|' + name.toLowerCase()] || profiles[name.toLowerCase()];
+      if (useCurrentWorkerFilter && !profile) return null;
       item['\uC774\uB984'] = name;
       if (profile) {
         item['\uC11C\uBC84'] = profile.server || item['\uC11C\uBC84'];
@@ -346,6 +388,327 @@ function getRawAttendanceRows_() {
       return item;
     })
     .filter(Boolean);
+  const byAttendanceDay = {};
+  const passthroughRows = [];
+  const placeholderKeys = {};
+  rows.forEach(function(row) {
+    const date = clean_(row['\uB0A0\uC9DC'], '');
+    const status = clean_(row['\uC0C1\uD0DC'], '');
+    const server = clean_(row['\uC11C\uBC84'], '');
+    const shift = clean_(row['\uADFC\uBB34\uC870'], '');
+    const name = canonicalName_(row['\uC774\uB984']);
+    const profileKey = server + '|' + shift + '|' + name.toLowerCase();
+    if ((!date || date === '-') && (!status || status === '-')) {
+      placeholderKeys[profileKey] = true;
+      passthroughRows.push(row);
+      return;
+    }
+    if (!date || date === '-' || !server || !shift || !name) {
+      passthroughRows.push(row);
+      return;
+    }
+    const dayKey = date + '|' + profileKey;
+    const existing = byAttendanceDay[dayKey];
+    if (!existing || statusRank_(row.statusNormalized) >= statusRank_(existing.statusNormalized)) {
+      byAttendanceDay[dayKey] = row;
+    }
+  });
+  const currentPlaceholders = profilePlaceholderRows_().filter(function(row) {
+    const key = clean_(row['\uC11C\uBC84'], '') + '|' + clean_(row['\uADFC\uBB34\uC870'], '') + '|' + canonicalName_(row['\uC774\uB984']).toLowerCase();
+    return !placeholderKeys[key];
+  });
+  return passthroughRows.concat(Object.keys(byAttendanceDay).map(function(key) {
+    return byAttendanceDay[key];
+  })).concat(currentPlaceholders);
+}
+
+function autoArchivePreviousMonthBonusRanking_(options) {
+  options = options || {};
+  const lock = LockService.getDocumentLock();
+  if (!lock.tryLock(3000)) return { success: false, skipped: true, reason: 'lock-busy' };
+  try {
+    const tz = Session.getScriptTimeZone() || 'Asia/Manila';
+    const now = new Date();
+    const currentMonth = Utilities.formatDate(now, tz, 'yyyy-MM');
+    const previousMonth = previousMonthKey_(currentMonth);
+    if (!previousMonth) return { success: false, skipped: true, reason: 'no-previous-month' };
+
+    const props = PropertiesService.getScriptProperties();
+    const lastArchived = props.getProperty(BONUS_RANKING_ARCHIVE_PROP);
+    const sheetName = BONUS_RANKING_ARCHIVE_PREFIX + previousMonth;
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    if (!options.force && lastArchived === previousMonth) {
+      return { success: true, skipped: true, reason: 'already-archived-prop', month: previousMonth };
+    }
+    if (!options.force && ss.getSheetByName(sheetName)) {
+      props.setProperty(BONUS_RANKING_ARCHIVE_PROP, previousMonth);
+      return { success: true, skipped: true, reason: 'already-archived-sheet', month: previousMonth };
+    }
+
+    const rows = buildBonusRankingRowsForMonth_(previousMonth);
+    if (!rows.length) {
+      props.setProperty(BONUS_RANKING_ARCHIVE_PROP, previousMonth);
+      return { success: true, skipped: true, reason: 'no-ranking-data', month: previousMonth };
+    }
+    writeBonusRankingArchiveSheet_(ss, sheetName, previousMonth, rows, now, tz);
+    props.setProperty(BONUS_RANKING_ARCHIVE_PROP, previousMonth);
+    return { success: true, month: previousMonth, sheetName: sheetName, rows: rows.length };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function previousMonthKey_(monthKey) {
+  const match = String(monthKey || '').match(/^(\d{4})-(\d{2})$/);
+  if (!match) return '';
+  let year = Number(match[1]);
+  let month = Number(match[2]) - 1;
+  if (month < 1) {
+    year -= 1;
+    month = 12;
+  }
+  return year + '-' + String(month).padStart(2, '0');
+}
+
+function buildBonusRankingRowsForMonth_(monthKey) {
+  const rows = readRawAttendanceRowsForBonusArchive_();
+  const map = {};
+  const dayStatusMap = {};
+  rows.forEach(function(row) {
+    const logicalDate = logicalAttendanceDateFromRow_(row);
+    if (!logicalDate || logicalDate.slice(0, 7) !== monthKey) return;
+    const name = canonicalName_(row['\uC774\uB984']);
+    if (!name || name === 'Unknown') return;
+    const server = normalizeServerDisplay_(row['\uC11C\uBC84']);
+    const shift = clean_(row['\uADFC\uBB34\uC870'], '').toUpperCase();
+    const status = normalizeStatus_(row['\uC0C1\uD0DC']);
+    if (!status || status === '-') return;
+    const key = server + '|' + shift + '|' + name.toLowerCase();
+    const dayKey = key + '|' + logicalDate;
+    if (!map[key]) {
+      map[key] = { name: name, server: server, shift: shift, jung: 0, ji: 0, h2late: 0, gyul: 0, jo: 0, yeon: 0, hyu: 0 };
+    }
+    if (!dayStatusMap[dayKey]) dayStatusMap[dayKey] = {};
+    addBonusRankingStatus_(map[key], dayStatusMap[dayKey], row, status, shift);
+  });
+
+  return Object.keys(map).map(function(key) {
+    const item = map[key];
+    item.score = calculateBonusRankingScore_(item);
+    return item;
+  }).sort(function(a, b) {
+    return b.score - a.score || b.jung - a.jung || a.gyul - b.gyul || a.ji - b.ji || a.name.localeCompare(b.name);
+  });
+}
+
+function readRawAttendanceRowsForBonusArchive_() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(RAW_ATTENDANCE_SHEET_NAME);
+  if (!sheet) return [];
+  ensureRawAttendanceHeaders_(sheet);
+  const values = sheet.getDataRange().getValues();
+  if (values.length < 2) return [];
+  const headers = values[0].map(function(header) { return clean_(header, ''); });
+  return values.slice(1).map(function(row) {
+    const item = {};
+    headers.forEach(function(header, index) {
+      item[header] = formatCellForJson_(row[index]);
+    });
+    return item;
+  }).filter(function(row) {
+    return RAW_ATTENDANCE_HEADERS.some(function(header) { return clean_(row[header], '') !== ''; });
+  });
+}
+
+function logicalAttendanceDateFromRow_(row) {
+  const rawKey = clean_(row['\uD0A4'], '');
+  const keyDate = String(rawKey || '').split('|')[0];
+  if (/^\d{4}-\d{2}-\d{2}$/.test(keyDate)) return keyDate;
+  const rawDate = clean_(row['\uB0A0\uC9DC'], '');
+  const match = String(rawDate || '').match(/\d{4}-\d{2}-\d{2}/);
+  return match ? match[0] : '';
+}
+
+function addBonusRankingStatus_(item, dayFlags, row, status, shift) {
+  const flags = getBonusRankingFlags_(row, status, shift);
+  if (!flags) return;
+  if (flags.jung && !dayFlags.jung) { item.jung += 1; dayFlags.jung = true; }
+  if (flags.ji && !dayFlags.ji) { item.ji += 1; dayFlags.ji = true; }
+  if (flags.h2late && !dayFlags.h2late) { item.h2late += 1; dayFlags.h2late = true; }
+  if (flags.gyul && !dayFlags.gyul) { item.gyul += 1; dayFlags.gyul = true; }
+  if (flags.jo && !dayFlags.jo) { item.jo += 1; dayFlags.jo = true; }
+  if (flags.yeon && !dayFlags.yeon) { item.yeon += 1; dayFlags.yeon = true; }
+  if (flags.hyu && !dayFlags.hyu) { item.hyu += 1; dayFlags.hyu = true; }
+}
+
+function calculateBonusRankingScore_(item) {
+  return (item.jung * 10) + (item.yeon * 5) - (item.ji * 5) - (item.h2late * 10) - (item.jo * 10) - (item.gyul * 25);
+}
+
+function hasBonusOvertimeNote_(value) {
+  return /\uC624\uBC84\uD0C0\uC784|\uC5F0\uC7A5\s*\uADFC\uBB34|\uC5F0\uC7A5\s*\uC2DC\uC791|overtime|\bot\b/i.test(String(value || ''));
+}
+
+function hasBonusExcessiveLateNote_(value) {
+  return /2\s*(?:h|\uC2DC\uAC04)\s*(?:\+|\uC774\uC0C1)?\s*(?:late|\uC9C0\uAC01)|2H\+|serious\s+late/i.test(String(value || ''));
+}
+
+function isBonusExcessiveLateRow_(row, status, shift) {
+  if (status !== '\uC9C0\uAC01') return false;
+  const note = clean_(row['\uBE44\uACE0'], '');
+  if (hasBonusExcessiveLateNote_(note)) return true;
+  let clockMinutes = parseBonusClockMinutes_(row['\uCD9C\uADFC\uC2DC\uAC04']);
+  if (clockMinutes == null) return false;
+  const startMinutes = bonusShiftStartMinutes_(shift, logicalAttendanceDateFromRow_(row));
+  if (shift === 'NIGHT' && clockMinutes < startMinutes) clockMinutes += 24 * 60;
+  return clockMinutes - startMinutes >= 120;
+}
+
+function normalizeBonusShiftClockMinutes_(clockMinutes, shift, startMinutes) {
+  if (clockMinutes == null) return null;
+  let value = clockMinutes;
+  if (shift === 'NIGHT' && value < startMinutes - 180) value += 24 * 60;
+  return value;
+}
+
+function getBonusInitialClockInInfo_(row, shift) {
+  const logicalDate = logicalAttendanceDateFromRow_(row);
+  const startMinutes = bonusShiftStartMinutes_(shift, logicalDate);
+  const note = clean_(row['\uBE44\uACE0'], '');
+  const markers = [];
+  const patterns = [
+    {
+      pattern: /(?:\uC778\uC815\s*\uCD9C\uADFC|\uC790\uB3D9\s*\uCD9C\uADFC|2\s*\uC2DC\uAC04\s*\uC774\uC0C1\s*\uC9C0\uAC01\s*\uCD9C\uADFC|\uBB34\uB2E8\uACB0\uADFC\s*\uC720\uC608\s*\uC2DC\uAC04\s*\uCD08\uACFC\s*\uD6C4\s*\uCD9C\uADFC|clock\s*in)\s*(\d{1,2}:\d{2})/ig,
+      serious: /2\s*\uC2DC\uAC04|\uBB34\uB2E8\uACB0\uADFC/i
+    },
+    {
+      pattern: /(?:^|[\/\s])\uCD9C\uADFC\s*(\d{1,2}:\d{2})/ig,
+      serious: null
+    }
+  ];
+  patterns.forEach(function(entry) {
+    let match;
+    while ((match = entry.pattern.exec(note)) !== null) {
+      markers.push({
+        index: match.index,
+        minutes: normalizeBonusShiftClockMinutes_(parseBonusClockMinutes_(match[1]), shift, startMinutes),
+        serious: entry.serious ? entry.serious.test(match[0]) : false
+      });
+    }
+  });
+  markers.sort(function(a, b) { return a.index - b.index; });
+  if (markers.length && markers[0].minutes != null) return markers[0];
+  return {
+    index: -1,
+    minutes: normalizeBonusShiftClockMinutes_(parseBonusClockMinutes_(row['\uCD9C\uADFC\uC2DC\uAC04']), shift, startMinutes),
+    serious: false
+  };
+}
+
+function getBonusInitialLateFlags_(row, status, shift) {
+  const logicalDate = logicalAttendanceDateFromRow_(row);
+  const startMinutes = bonusShiftStartMinutes_(shift, logicalDate);
+  const info = getBonusInitialClockInInfo_(row, shift);
+  const note = clean_(row['\uBE44\uACE0'], '');
+  if (info.minutes == null) {
+    const lateByStatus = status === '\uC9C0\uAC01';
+    return {
+      late: lateByStatus,
+      h2late: lateByStatus && hasBonusExcessiveLateNote_(note),
+      hasClockIn: false
+    };
+  }
+  const lateMinutes = info.minutes - startMinutes;
+  const late = lateMinutes > 5 || status === '\uC9C0\uAC01';
+  return {
+    late: late,
+    h2late: late && (info.serious || lateMinutes >= 120),
+    hasClockIn: true
+  };
+}
+
+function hasBonusReturnAfterLastEarlyOut_(note) {
+  const text = String(note || '');
+  const pattern = /\uC870\uAE30\s*\uD1F4\uADFC/ig;
+  let match;
+  let lastIndex = -1;
+  while ((match = pattern.exec(text)) !== null) lastIndex = match.index;
+  if (lastIndex < 0) return false;
+  const after = text.slice(lastIndex);
+  return /(?:\uC790\uB3D9\s*\uCD9C\uADFC|\uC778\uC815\s*\uCD9C\uADFC|2\s*\uC2DC\uAC04\s*\uC774\uC0C1\s*\uC9C0\uAC01\s*\uCD9C\uADFC|\uBB34\uB2E8\uACB0\uADFC\s*\uC720\uC608\s*\uC2DC\uAC04\s*\uCD08\uACFC\s*\uD6C4\s*\uCD9C\uADFC|\uB77C\uC774\uBE0C\s*ON\s*\uBCF5\uAD6C|LIVE\s*ON\s*\uBCF5\uAD6C|\uBCF5\uAD6C|\uAD00\uB9AC\uC790\s*\uAC15\uC81C\s*\uD734\uBB34|force\s*off|day\s*off)/i.test(after);
+}
+
+function hasBonusFinalNormalClockOutNote_(note) {
+  const text = String(note || '');
+  if (/\uC870\uAE30\s*\uD1F4\uADFC/i.test(text)) return false;
+  return /(?:\uC815\uC0C1\s*\uD1F4\uADFC|\uC815\uADDC\s*\uD1F4\uADFC\s*\uC2DC\uAC04\s*\uC774\uD6C4|normal\s*clock\s*out|regular\s*clock\s*out)/i.test(text);
+}
+
+function getBonusRankingFlags_(row, status, shift) {
+  if (!status || status === '-') return null;
+  const note = clean_(row['\uBE44\uACE0'], '');
+  const absent = status === '\uACB0\uC11D';
+  const off = status === '\uD734\uBB34';
+  const overtime = status === '\uC5F0\uC7A5\uADFC\uBB34' || hasBonusOvertimeNote_(note);
+  const early = !absent && !off && status === '\uC870\uD1F4' && !hasBonusReturnAfterLastEarlyOut_(note) && !hasBonusFinalNormalClockOutNote_(note);
+  const lateFlags = (!absent && !off) ? getBonusInitialLateFlags_(row, status, shift) : { late: false, h2late: false, hasClockIn: false };
+  const normal = !absent && !off && !lateFlags.late &&
+    (status === '\uC815\uCD9C' || status === '\uC5F0\uC7A5\uADFC\uBB34' || overtime || lateFlags.hasClockIn);
+  return {
+    jung: normal,
+    ji: lateFlags.late,
+    h2late: lateFlags.h2late,
+    gyul: absent,
+    jo: early,
+    yeon: overtime,
+    hyu: off
+  };
+}
+
+function parseBonusClockMinutes_(value) {
+  const text = clean_(value, '');
+  const match = text.match(/(\d{1,2}):(\d{2})(?:\s*([AP]M))?/i);
+  if (!match) return null;
+  let hour = Number(match[1]);
+  const minute = Number(match[2]);
+  const meridiem = (match[3] || '').toUpperCase();
+  if (meridiem === 'PM' && hour < 12) hour += 12;
+  if (meridiem === 'AM' && hour === 12) hour = 0;
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
+  return hour * 60 + minute;
+}
+
+function bonusShiftStartMinutes_(shift, dateValue) {
+  const day = String(dateValue || '').match(/^\d{4}-\d{2}-\d{2}$/)
+    ? new Date(dateValue + 'T00:00:00').getDay()
+    : -1;
+  if (shift === 'NIGHT') return day === 2 ? 19 * 60 : 21 * 60;
+  return 9 * 60;
+}
+
+function writeBonusRankingArchiveSheet_(ss, sheetName, monthKey, rankingRows, archivedAt, tz) {
+  let sheet = ss.getSheetByName(sheetName);
+  if (!sheet) sheet = ss.insertSheet(sheetName);
+  sheet.clear();
+  const archivedAtText = Utilities.formatDate(archivedAt, tz, 'yyyy-MM-dd HH:mm:ss');
+  const values = [[
+    '\uC21C\uC704', '\uC774\uB984', '\uC11C\uBC84', '\uADFC\uBB34\uC870', '\uC810\uC218',
+    '\uC815\uCD9C', '\uC9C0\uAC01', '2H+ \uC9C0\uAC01', '\uACB0\uC11D', '\uC870\uD1F4',
+    '\uC5F0\uC7A5', '\uD734\uBB34', '\uC9D1\uACC4\uC6D4', '\uD655\uC815\uC77C\uC2DC'
+  ]];
+  rankingRows.forEach(function(row, index) {
+    values.push([
+      index + 1, row.name, row.server, row.shift, row.score,
+      row.jung, row.ji, row.h2late, row.gyul, row.jo,
+      row.yeon, row.hyu, monthKey, archivedAtText
+    ]);
+  });
+  sheet.getRange(1, 1, values.length, values[0].length).setValues(values);
+  sheet.getRange(1, 1, 1, values[0].length)
+    .setBackground('#1F2937').setFontColor('#FFFFFF').setFontWeight('bold').setHorizontalAlignment('center');
+  sheet.getRange(2, 1, Math.max(1, values.length - 1), values[0].length).setHorizontalAlignment('center');
+  sheet.getRange(2, 5, Math.max(1, values.length - 1), 8).setNumberFormat('0');
+  sheet.setFrozenRows(1);
+  sheet.autoResizeColumns(1, values[0].length);
 }
 
 function getCurrentWorkerProfiles_() {
@@ -356,17 +719,29 @@ function getCurrentWorkerProfiles_() {
   const values = sheet.getDataRange().getValues();
   if (values.length < 2) return {};
 
-  return values.slice(1).reduce(function(map, row) {
+  const nameCounts = {};
+  const rows = values.slice(1).map(function(row) {
     const name = canonicalName_(row[0]);
-    if (!name || name === 'Unknown') return map;
-    map[name.toLowerCase()] = {
+    if (!name || name === 'Unknown') return null;
+    const profile = {
       name: name,
-      server: clean_(row[1], '').toUpperCase(),
+      server: normalizeServerDisplay_(row[1]),
       shift: clean_(row[2], '').toUpperCase(),
       updatedAt: formatCellForJson_(row[4])
     };
+    profile.key = profile.server + '|' + profile.shift + '|' + name.toLowerCase();
+    nameCounts[name.toLowerCase()] = (nameCounts[name.toLowerCase()] || 0) + 1;
+    return profile;
+  }).filter(Boolean);
+
+  return rows.reduce(function(map, profile) {
+    map[profile.key] = profile;
+    if (nameCounts[profile.name.toLowerCase()] === 1) {
+      map[profile.name.toLowerCase()] = profile;
+    }
+    map.__keys.push(profile.key);
     return map;
-  }, {});
+  }, { __keys: [] });
 }
 
 function setupRawAttendanceSheet_(sheet) {
@@ -435,7 +810,7 @@ function upsertCurrentWorkerProfile_(params) {
   const rowNumber = findCurrentWorkerRow_(sheet, key);
   const rowValues = [
     name,
-    clean_(params.server, '').toUpperCase(),
+    normalizeServerDisplay_(params.server),
     clean_(params.shift, '').toUpperCase(),
     key,
     new Date()
@@ -448,6 +823,46 @@ function upsertCurrentWorkerProfile_(params) {
 
   sheet.appendRow(rowValues);
   return json_({ success: true, mode: 'profile-created', row: sheet.getLastRow(), key: key });
+}
+
+function syncCurrentWorkerProfiles_(params) {
+  const sheet = getCurrentWorkersSheet_();
+  const profiles = Array.isArray(params.profiles) ? params.profiles : [];
+  const unique = {};
+  profiles.forEach(function(profile) {
+    const name = canonicalName_(profile.name || 'Unknown');
+    const server = normalizeServerDisplay_(profile.server);
+    const shift = clean_(profile.shift, '').toUpperCase();
+    if (!name || name === 'Unknown' || !server || !shift) return;
+    const key = server + '|' + shift + '|' + name.toLowerCase();
+    unique[key] = {
+      name: name,
+      server: server,
+      shift: shift,
+      key: key
+    };
+  });
+
+  const now = new Date();
+  const rows = Object.keys(unique).sort().map(function(key) {
+    const profile = unique[key];
+    return [profile.name, profile.server, profile.shift, profile.key, now];
+  });
+
+  const lastRow = Math.max(sheet.getLastRow(), 1);
+  if (lastRow > 1) {
+    sheet.getRange(2, 1, lastRow - 1, CURRENT_WORKERS_HEADERS.length).clearContent();
+  }
+  if (rows.length) {
+    sheet.getRange(2, 1, rows.length, CURRENT_WORKERS_HEADERS.length).setValues(rows);
+  }
+
+  return json_({
+    success: true,
+    mode: 'profiles-synced',
+    count: rows.length,
+    staleRemoved: Math.max(0, lastRow - 1 - rows.length)
+  });
 }
 
 function removeCurrentWorkerProfile_(params) {
@@ -496,6 +911,12 @@ function chooseFinalStatus_(previousStatus, nextStatus, forceStatus) {
   if (forceStatus) return next;
   if (!previous || previous === '-') return next;
   if (!next || next === '-') return previous;
+  if (
+    previous === '\uC870\uD1F4' &&
+    ['\uC815\uCD9C', '\uC9C0\uAC01', '\uC5F0\uC7A5\uADFC\uBB34'].indexOf(next) !== -1
+  ) {
+    return next;
+  }
   return statusRank_(next) >= statusRank_(previous) ? next : previous;
 }
 
@@ -524,6 +945,18 @@ function normalizeStatus_(status) {
   return map[text.toLowerCase()] || text;
 }
 
+function normalizeServerDisplay_(value) {
+  const text = clean_(value, '');
+  const upper = text.toUpperCase();
+  if (upper === 'HEINE' || upper === 'VALACAS' || upper === 'VALAKAS' || text === '\uD558\uC774\uB124') {
+    return '\uBC1C\uB77C\uCE74\uC2A4';
+  }
+  if (upper === 'PAAGRIO' || text === '\uD30C\uC544\uADF8\uB9AC\uC624') {
+    return '\uD30C\uC544\uADF8\uB9AC\uC624';
+  }
+  return text;
+}
+
 function statusRank_(status) {
   const ranks = {
     '\uD734\uBB34': 5,
@@ -539,27 +972,36 @@ function statusRank_(status) {
 function makeRawAttendanceKey_(params) {
   return [
     clean_(params.date).toLowerCase(),
-    clean_(params.server).toUpperCase(),
+    normalizeServerDisplay_(params.server),
     clean_(params.shift).toUpperCase(),
     canonicalName_(params.name || 'Unknown').toLowerCase()
   ].join('|');
 }
 
 function makeCurrentWorkerKey_(params) {
-  return canonicalName_(params.name || 'Unknown').toLowerCase();
+  return [
+    normalizeServerDisplay_(params.server),
+    clean_(params.shift, '').toUpperCase(),
+    canonicalName_(params.name || 'Unknown').toLowerCase()
+  ].join('|');
 }
 
 function canonicalName_(value) {
   const name = clean_(value, 'Unknown')
-    .replace(/\s*[-\u2013\u2014]\s*(?:(?:Great\s*)?(?:Manager|Trainee|Traine)\s+)?(?:[PH]\s*)?(?:Day|Night)\s*Time(?:\s*\([^)]*\))?(?:\s+.*)?$/i, ' ')
-    .replace(/\s*[-\u2013\u2014]\s*(?:(?:Great\s*)?(?:Manager|Trainee|Traine)\s+)?(?:Heine|Paagrio)\s*(?:Day|Night)\s*Time(?:\s*\([^)]*\))?(?:\s+.*)?$/i, ' ')
-    .replace(/\s*[-\u2013\u2014]\s*(?:Great\s*)?(?:Manager|Trainee|Guest)(?:\s+.*)?$/i, ' ')
+    .replace(/\s*[-\u2013\u2014]\s*(?=.*(?:trainee|traine|manager|guest|day\s*time|night\s*time|valacas|valakas|paagrio|heine)).*$/i, ' ')
+    .replace(/\s*[-\u2013\u2014]\s*(?:(?:Great\s*)?(?:Manager|Trainee|Traine)\s+)?(?:[PVH]\s*)?(?:Day|Night)\s*Time(?:\s*\([^)]*\))?(?:\s+.*)?$/i, ' ')
+    .replace(/\s*[-\u2013\u2014]\s*(?:(?:Great\s*)?(?:Manager|Trainee|Traine)\s+)?(?:[PVH]\s*)?(?:Day|Night)\s*Time.*$/i, ' ')
+    .replace(/\s*[-\u2013\u2014]\s*(?:(?:Great\s*)?(?:Manager|Trainee|Traine)\s+)?(?:Valacas|Heine|Paagrio)\s*(?:Day|Night)\s*Time.*$/i, ' ')
+    .replace(/\s*[-\u2013\u2014]\s*(?:[PVH]\s*)?(?:Great\s*)?(?:Manager|Trainee|Traine|Guest).*$/i, ' ')
+    .replace(/\s*[-\u2013\u2014]\s*(?:Great\s*)?(?:Manager|Trainee|Traine|Guest).*$/i, ' ')
     .replace(/\(\s*(?:over\s*time|overtime|ot)\s*\)/gi, ' ')
     .replace(/\b(?:over\s*time|overtime|ot)\b/gi, ' ')
     .replace(/ding\s*[-\u2013\u2014]\s*dong/gi, 'Ding dong')
     .replace(/\s+/g, ' ')
     .trim() || 'Unknown';
   const aliases = {
+    'deia#1024': 'Deia',
+    'deia#7347': 'Deia',
     ding: 'Ding dong',
     'ding-dong': 'Ding dong',
     'ding dong': 'Ding dong',
@@ -629,12 +1071,12 @@ function readGreatTabPayroll_(rows, serverLabel) {
   const playerShare = sumPayrollColumn_(rows, findPayrollRowIndexes_(rows, function(text, row) {
     const a = clean_(row[0], '');
     const b = clean_(row[1], '');
-    return /^0\.65$/i.test(a) || /^0\.65$/i.test(b) || /^player$/i.test(a) || /^player$/i.test(b);
+    return /^0\.(?:65|70)$/i.test(a) || /^0\.(?:65|70)$/i.test(b) || /^player$/i.test(a) || /^player$/i.test(b);
   }), PAYROLL_TOTAL_COLUMN);
   const ownerShare = sumPayrollColumn_(rows, findPayrollRowIndexes_(rows, function(text, row) {
     const a = clean_(row[0], '');
     const b = clean_(row[1], '');
-    return /^0\.35$/i.test(a) || /^0\.35$/i.test(b) || /^owner$/i.test(a) || /^owner$/i.test(b);
+    return /^0\.(?:35|30)$/i.test(a) || /^0\.(?:35|30)$/i.test(b) || /^owner$/i.test(a) || /^owner$/i.test(b);
   }), PAYROLL_TOTAL_COLUMN);
   const totalPeso = sumPayrollColumn_(rows, findPayrollRowIndexes_(rows, function(text) {
     return /expected\s*peso/i.test(text);
@@ -664,8 +1106,8 @@ function ensureRawDataSheet_() {
       '\uCD1D \uD68D\uB4DD \uC544\uB370\uB098',
       '\uCD1D \uAE09\uC5EC',
       '\uC218\uC218\uB8CC 5%',
-      '\uC9C1\uC6D0 65%',
-      '\uC624\uB108 35%',
+      '\uC9C1\uC6D0 70%',
+      '\uC624\uB108 30%',
       '\uCD1D \uD398\uC18C',
       '\uC800\uC7A5\uC790'
     ]]);
@@ -678,7 +1120,7 @@ function syncPayrollFromGreatTabs_(params) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const specs = [
     { tab: PAYROLL_PAAGRIO_TAB, server: '\uD30C\uC544\uADF8\uB9AC\uC624' },
-    { tab: PAYROLL_HEINE_TAB, server: '\uD558\uC774\uB124' }
+    { tab: PAYROLL_HEINE_TAB, server: '\uBC1C\uB77C\uCE74\uC2A4' }
   ];
   const snapshots = [];
 
@@ -746,12 +1188,12 @@ const LEGACY_PAYROLL_SHEETS = [
   '\uC6D4\uAC04 \uAE30\uB85D',
   'Total Summary',
   'Paagrio 3-Day',
-  'Heine 3-Day'
+  'Valacas 3-Day'
 ];
 
 const LEGACY_THREE_DAY_TAB_SPECS = [
   { names: ['\uD30C\uC544\uADF8\uB9AC\uC624 3\uC77C\uC815\uC0B0', 'Paagrio 3-Day'], server: '\uD30C\uC544\uADF8\uB9AC\uC624' },
-  { names: ['\uD558\uC774\uB124 3\uC77C\uC815\uC0B0', 'Heine 3-Day'], server: '\uD558\uC774\uB124' }
+  { names: ['\uD558\uC774\uB124 3\uC77C\uC815\uC0B0', 'Valacas 3-Day'], server: '\uBC1C\uB77C\uCE74\uC2A4' }
 ];
 
 const LEGACY_TOTAL_SUMMARY_SHEETS = ['\uC804\uCCB4 \uC694\uC57D', 'Total Summary'];
@@ -896,7 +1338,7 @@ function formatPayrollTimestamp_(value) {
 function normalizePayrollServerLabel_(value) {
   const text = clean_(value, '').toLowerCase();
   if (text.indexOf('\uD30C') >= 0 || text.indexOf('paagrio') >= 0) return '\uD30C\uC544\uADF8\uB9AC\uC624';
-  if (text.indexOf('\uD558') >= 0 || text.indexOf('heine') >= 0) return '\uD558\uC774\uB124';
+  if (text.indexOf('\uBC1C\uB77C\uCE74\uC2A4') >= 0 || text.indexOf('\uD558') >= 0 || text.indexOf('heine') >= 0 || text.indexOf('valacas') >= 0) return '\uBC1C\uB77C\uCE74\uC2A4';
   return clean_(value, '');
 }
 
@@ -957,8 +1399,8 @@ function setupRawDataSheetTemplate_(ss, clearData) {
     '\uCD1D \uD68D\uB4DD \uC544\uB370\uB098',
     '\uCD1D \uAE09\uC5EC',
     '\uC218\uC218\uB8CC 5%',
-    '\uC9C1\uC6D0 65%',
-    '\uC624\uB108 35%',
+    '\uC9C1\uC6D0 70%',
+    '\uC624\uB108 30%',
     '\uCD1D \uD398\uC18C',
     '\uC800\uC7A5\uC790'
   ]];
@@ -987,7 +1429,7 @@ function readGreatTabSnapshotRows_(periodLabel, savedBy) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const specs = [
     { tab: PAYROLL_PAAGRIO_TAB, server: '\uD30C\uC544\uADF8\uB9AC\uC624' },
-    { tab: PAYROLL_HEINE_TAB, server: '\uD558\uC774\uB124' }
+    { tab: PAYROLL_HEINE_TAB, server: '\uBC1C\uB77C\uCE74\uC2A4' }
   ];
   const tz = Session.getScriptTimeZone() || 'Asia/Manila';
   const timestamp = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd HH:mm:ss');
@@ -1053,7 +1495,7 @@ function greatRange_(tabName, a1) {
   return 'IMPORTRANGE("' + src + '","' + quoteSheet_(tabName) + '!' + a1 + '")';
 }
 
-/** Great 탭: 선수 아데나 열 C, F, I, L, O, R, … (3칸 간격, BONUS/D&C 제외). */
+/** Great 탭의 선수 아데나 열(C, F, I, L, O, R 등 3칸 간격, BONUS/D&C 제외)을 합산한다. */
 function greatTabRowPlayerSum_(tabName) {
   var parts = [];
   for (var col = 2; col <= 90; col += 3) {
@@ -1097,13 +1539,13 @@ function greatTabMetricFormula_(tabName, metric) {
     return '=SUM(ARRAYFORMULA(((' + matchA + ')+(' + matchB + ')>0)*(' + colSum + ')))';
   }
   if (metric === 'playerShare') {
-    matchA = 'REGEXMATCH(TO_TEXT(' + colA + '), "(?i)^0\\\\.65$|^player$")';
-    matchB = 'REGEXMATCH(TO_TEXT(' + colB + '), "(?i)^0\\\\.65$|^player$")';
+    matchA = 'REGEXMATCH(TO_TEXT(' + colA + '), "(?i)^0\\\\.(65|70)$|^player$")';
+    matchB = 'REGEXMATCH(TO_TEXT(' + colB + '), "(?i)^0\\\\.(65|70)$|^player$")';
     return '=SUM(ARRAYFORMULA(((' + matchA + ')+(' + matchB + ')>0)*(' + colSum + ')))';
   }
   if (metric === 'ownerShare') {
-    matchA = 'REGEXMATCH(TO_TEXT(' + colA + '), "(?i)^0\\\\.35$|^owner$")';
-    matchB = 'REGEXMATCH(TO_TEXT(' + colB + '), "(?i)^0\\\\.35$|^owner$")';
+    matchA = 'REGEXMATCH(TO_TEXT(' + colA + '), "(?i)^0\\\\.(35|30)$|^owner$")';
+    matchB = 'REGEXMATCH(TO_TEXT(' + colB + '), "(?i)^0\\\\.(35|30)$|^owner$")';
     return '=SUM(ARRAYFORMULA(((' + matchA + ')+(' + matchB + ')>0)*(' + colSum + ')))';
   }
   if (metric === 'totalPeso') {
@@ -1142,7 +1584,7 @@ function applyLiveThreeDaySummaryFormulas_(daySheet) {
     .setNumberFormat('#,##0').setFontWeight('bold');
 }
 
-/** Great 탭은 3일 지급 후 초기화되므로, 월간 누적은 Raw_Data 저장분만 SUMIF. */
+/** Great 탭은 3일 지급 후 초기화되므로 월간 누적은 Raw_Data 저장분만 SUMIF로 계산한다. */
 function applyMonthlyRawDataFormulas_(monthSheet) {
   const sumPaagrio = [
     '=ROUND(SUMIF(' + RAW_DATA_SHEET_NAME + '!$C:$C, "\uD30C\uC544\uADF8\uB9AC\uC624", ' + RAW_DATA_SHEET_NAME + '!$D:$D), 0)',
@@ -1155,12 +1597,12 @@ function applyMonthlyRawDataFormulas_(monthSheet) {
   monthSheet.getRange(5, 3, 1, 6).setFormulas([sumPaagrio]).setNumberFormat('#,##0').setFontColor('#2563EB').setFontWeight('bold');
 
   const sumHeine = [
-    '=ROUND(SUMIF(' + RAW_DATA_SHEET_NAME + '!$C:$C, "\uD558\uC774\uB124", ' + RAW_DATA_SHEET_NAME + '!$D:$D), 0)',
-    '=ROUND(SUMIF(' + RAW_DATA_SHEET_NAME + '!$C:$C, "\uD558\uC774\uB124", ' + RAW_DATA_SHEET_NAME + '!$E:$E), 0)',
-    '=ROUND(SUMIF(' + RAW_DATA_SHEET_NAME + '!$C:$C, "\uD558\uC774\uB124", ' + RAW_DATA_SHEET_NAME + '!$F:$F), 0)',
-    '=ROUND(SUMIF(' + RAW_DATA_SHEET_NAME + '!$C:$C, "\uD558\uC774\uB124", ' + RAW_DATA_SHEET_NAME + '!$G:$G), 0)',
-    '=ROUND(SUMIF(' + RAW_DATA_SHEET_NAME + '!$C:$C, "\uD558\uC774\uB124", ' + RAW_DATA_SHEET_NAME + '!$H:$H), 0)',
-    '=ROUND(SUMIF(' + RAW_DATA_SHEET_NAME + '!$C:$C, "\uD558\uC774\uB124", ' + RAW_DATA_SHEET_NAME + '!$I:$I), 0)'
+    '=ROUND(SUMIF(' + RAW_DATA_SHEET_NAME + '!$C:$C, "\uBC1C\uB77C\uCE74\uC2A4", ' + RAW_DATA_SHEET_NAME + '!$D:$D), 0)',
+    '=ROUND(SUMIF(' + RAW_DATA_SHEET_NAME + '!$C:$C, "\uBC1C\uB77C\uCE74\uC2A4", ' + RAW_DATA_SHEET_NAME + '!$E:$E), 0)',
+    '=ROUND(SUMIF(' + RAW_DATA_SHEET_NAME + '!$C:$C, "\uBC1C\uB77C\uCE74\uC2A4", ' + RAW_DATA_SHEET_NAME + '!$F:$F), 0)',
+    '=ROUND(SUMIF(' + RAW_DATA_SHEET_NAME + '!$C:$C, "\uBC1C\uB77C\uCE74\uC2A4", ' + RAW_DATA_SHEET_NAME + '!$G:$G), 0)',
+    '=ROUND(SUMIF(' + RAW_DATA_SHEET_NAME + '!$C:$C, "\uBC1C\uB77C\uCE74\uC2A4", ' + RAW_DATA_SHEET_NAME + '!$H:$H), 0)',
+    '=ROUND(SUMIF(' + RAW_DATA_SHEET_NAME + '!$C:$C, "\uBC1C\uB77C\uCE74\uC2A4", ' + RAW_DATA_SHEET_NAME + '!$I:$I), 0)'
   ];
   monthSheet.getRange(6, 3, 1, 6).setFormulas([sumHeine]).setNumberFormat('#,##0').setFontColor('#2563EB').setFontWeight('bold');
 
@@ -1176,7 +1618,7 @@ function applyMonthlyRawDataFormulas_(monthSheet) {
   ]).setBackground('#ECF0F1').setFontColor('#1D4ED8').setFontWeight('bold').setNumberFormat('#,##0');
 }
 
-/** 최근_3일_요약만 Great 실시간. 월간_누적_요약은 Raw_Data 누적 수식 유지. */
+/** 최근_3일_요약은 Great 실시간, 월간_누적_요약은 Raw_Data 누적 수식으로 갱신한다. */
 function enableLiveThreeDaySummary() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let daySheet = ss.getSheetByName(RECENT_THREE_DAY_SUMMARY_SHEET);
@@ -1205,7 +1647,7 @@ function enableLiveThreeDaySummary() {
   };
 }
 
-// 파아그리오/하이네 3일정산 탭 2개 대신 RECENT_THREE_DAY_SUMMARY_SHEET 한 탭에 두 서버를 행으로 표시.
+// Paagrio/Valakas 3일 정산 2개 행을 RECENT_THREE_DAY_SUMMARY_SHEET 아래에 서버별로 표시한다.
 function setupPayrollSummarySheets_(ss) {
   let daySheet = ss.getSheetByName(RECENT_THREE_DAY_SUMMARY_SHEET);
   if (!daySheet) daySheet = ss.insertSheet(RECENT_THREE_DAY_SUMMARY_SHEET);
@@ -1216,7 +1658,7 @@ function setupPayrollSummarySheets_(ss) {
   daySheet.setColumnWidth(2, 140);
   for (let i = 3; i <= 8; i += 1) daySheet.setColumnWidth(i, 120);
 
-  daySheet.getRange('B1:H1').merge().setValue('⏱️ [2회차] 3일 단위 급여 기록 요약')
+  daySheet.getRange('B1:H1').merge().setValue('\uC774\uBC88 \uD68C\uCC28 3\uC77C \uAE09\uC5EC \uAE30\uB85D \uC694\uC57D')
     .setBackground('#E8F4F8').setFontColor('#2C3E50').setFontWeight('bold').setFontSize(14).setVerticalAlignment('middle');
   daySheet.setRowHeight(1, 40);
 
@@ -1224,16 +1666,24 @@ function setupPayrollSummarySheets_(ss) {
     .setValue('\u25B6 \uC11C\uBC84\uBCC4 3\uC77C \uAE09\uC5EC (\uC2E4\uC2DC\uAC04: ' + PAYROLL_PAAGRIO_TAB + ' / ' + PAYROLL_HEINE_TAB + ')')
     .setFontColor('#34495E').setFontWeight('bold');
 
-  daySheet.getRange('B4:H4').setValues([['서버명', '총 획득 아데나', '총 급여', '수수료 5%', '직원 65%', '오너 35%', '총 페소']])
+  daySheet.getRange('B4:H4').setValues([[
+    '\uC11C\uBC84\uBA85',
+    '\uCD1D \uD68D\uB4DD \uC544\uB370\uB098',
+    '\uCD1D \uAE09\uC5EC',
+    '\uC218\uC218\uB8CC 5%',
+    '\uC9C1\uC6D0 70%',
+    '\uC624\uB108 30%',
+    '\uCD1D \uD398\uC18C'
+  ]])
     .setBackground('#34495E').setFontColor('#FFFFFF').setFontWeight('bold').setHorizontalAlignment('center');
   daySheet.getRange('H4').setFontColor('#FDE047');
 
-  daySheet.getRange('B5').setValue('🔥 파아그리오').setBackground('#FDF2F2').setFontColor('#C53030').setFontWeight('bold').setHorizontalAlignment('center');
-  daySheet.getRange('B6').setValue('💧 하이네').setBackground('#EFF6FF').setFontColor('#1D4ED8').setFontWeight('bold').setHorizontalAlignment('center');
+  daySheet.getRange('B5').setValue('\uD83D\uDD25 \uD30C\uC544\uADF8\uB9AC\uC624').setBackground('#FDF2F2').setFontColor('#C53030').setFontWeight('bold').setHorizontalAlignment('center');
+  daySheet.getRange('B6').setValue('\uD83D\uDCA7 \uBC1C\uB77C\uCE74\uC2A4').setBackground('#EFF6FF').setFontColor('#1D4ED8').setFontWeight('bold').setHorizontalAlignment('center');
 
   applyLiveThreeDaySummaryFormulas_(daySheet);
 
-  daySheet.getRange('B8').setValue('💰 3일 총합').setBackground('#ECF0F1').setFontWeight('bold').setHorizontalAlignment('center');
+  daySheet.getRange('B8').setValue('\uD569\uACC4').setBackground('#ECF0F1').setFontWeight('bold').setHorizontalAlignment('center');
   daySheet.getRange('C8:H8').setFormulas([
     ['=SUM(C5:C6)', '=SUM(D5:D6)', '=SUM(E5:E6)', '=SUM(F5:F6)', '=SUM(G5:G6)', '=SUM(H5:H6)']
   ]).setBackground('#ECF0F1').setFontColor('#2563EB').setFontWeight('bold').setNumberFormat('#,##0');
@@ -1251,25 +1701,33 @@ function setupPayrollSummarySheets_(ss) {
   monthSheet.setColumnWidth(2, 140);
   for (let i = 3; i <= 8; i += 1) monthSheet.setColumnWidth(i, 120);
 
-  monthSheet.getRange('B1:H1').merge().setValue('📊 월간/연간 누적 급여 기록 (30일 마감)')
+  monthSheet.getRange('B1:H1').merge().setValue('\uC6D4\uAC04/\uC5F0\uAC04 \uB204\uC801 \uAE09\uC5EC \uAE30\uB85D (30\uC77C \uB9C8\uAC10)')
     .setBackground('#E0E7FF').setFontColor('#2C3E50').setFontWeight('bold').setFontSize(14).setVerticalAlignment('middle');
   monthSheet.setRowHeight(1, 40);
 
-  monthSheet.getRange('B3:H3').setValues([['마감월 / 서버명', '총 획득 아데나', '총 급여', '수수료 5%', '직원 65%', '오너 35%', '총 페소']])
+  monthSheet.getRange('B3:H3').setValues([[
+    '\uB9C8\uAC10\uC6D4 / \uC11C\uBC84\uBA85',
+    '\uCD1D \uD68D\uB4DD \uC544\uB370\uB098',
+    '\uCD1D \uAE09\uC5EC',
+    '\uC218\uC218\uB8CC 5%',
+    '\uC9C1\uC6D0 70%',
+    '\uC624\uB108 30%',
+    '\uCD1D \uD398\uC18C'
+  ]])
     .setBackground('#34495E').setFontColor('#FFFFFF').setFontWeight('bold').setHorizontalAlignment('center');
   monthSheet.getRange('H3').setFontColor('#FDE047');
 
   monthSheet.getRange('B4:H4').merge()
     .setValue('\uD83D\uDFE2 \uC6D4\uAC04 \uB204\uC801 (Raw_Data \u2014 3\uC77C \uB9C8\uAC10 \uC800\uC7A5 \uD569\uACC4)')
     .setBackground('#DCFCE7').setFontColor('#166534').setFontWeight('bold');
-  monthSheet.getRange('B5').setValue('🔥 파아그리오').setBackground('#FDF2F2').setFontColor('#C53030').setFontWeight('bold').setHorizontalAlignment('center');
-  monthSheet.getRange('B6').setValue('💧 하이네').setBackground('#EFF6FF').setFontColor('#1D4ED8').setFontWeight('bold').setHorizontalAlignment('center');
+  monthSheet.getRange('B5').setValue('\uD83D\uDD25 \uD30C\uC544\uADF8\uB9AC\uC624').setBackground('#FDF2F2').setFontColor('#C53030').setFontWeight('bold').setHorizontalAlignment('center');
+  monthSheet.getRange('B6').setValue('\uD83D\uDCA7 \uBC1C\uB77C\uCE74\uC2A4').setBackground('#EFF6FF').setFontColor('#1D4ED8').setFontWeight('bold').setHorizontalAlignment('center');
 
   applyMonthlyRawDataFormulas_(monthSheet);
 
-  monthSheet.getRange('B7').setValue('🏆 현재 총합계').setBackground('#ECF0F1').setFontWeight('bold').setHorizontalAlignment('center');
+  monthSheet.getRange('B7').setValue('\uD604\uC7AC \uCD1D\uD569\uACC4').setBackground('#ECF0F1').setFontWeight('bold').setHorizontalAlignment('center');
   monthSheet.getRange('B9:H9').merge()
-    .setValue('\u26A0\uFE0F Great \uD0ED\uC740 3\uC77C \uC9C0\uAE09 \uD6C4 \uC0AD\uC81C\uB429\uB2C8\uB2E4. \uC0AD\uC81C \uC804\uC5D0 Discord /급여\uAE30\uB85D \uB610\uB294 payroll-sync\uB85C Raw_Data\uC5D0 \uB9C8\uAC10\uC744 \uB0A8\uACA8\uC8FC\uC138\uC694.')
+    .setValue('\u26A0\uFE0F Great \uD0ED\uC740 3\uC77C \uC9C0\uAE09 \uD6C4 \uC0AD\uC81C\uB429\uB2C8\uB2E4. \uC0AD\uC81C \uC804\uC5D0 Discord /\uAE09\uC5EC\uAE30\uB85D \uB610\uB294 payroll-sync\uB85C Raw_Data\uC5D0 \uB9C8\uAC10\uC744 \uB0A8\uACA8\uC8FC\uC138\uC694.')
     .setFontColor('#92400E').setFontSize(9).setWrap(true);
   monthSheet.setRowHeight(9, 48);
 
@@ -1277,9 +1735,9 @@ function setupPayrollSummarySheets_(ss) {
 }
 
 /**
- * 기존 Raw_Data 를 보존한 채 새 급여 레이아웃으로 이관합니다 (월간 기록 탭은 삭제).
- * Paagrio Great / Heine Great 탭은 삭제하지 않습니다.
- * Apps Script 편집기에서 migratePayrollToNewLayout 실행 (최초 1회 권장).
+ * 기존 Raw_Data를 보존한 채 새 급여 레이아웃으로 이관한다.
+ * Paagrio Great / Valakas Great ??? ??젣?섏? ?딆뒿?덈떎.
+ * Apps Script 편집기에서 migratePayrollToNewLayout 실행을 권장한다.
  */
 function migratePayrollToNewLayout(options) {
   options = options || {};
@@ -1326,8 +1784,8 @@ function migratePayrollToNewLayout(options) {
 }
 
 /**
- * 빈 Raw_Data 로 새로 시작할 때만 사용 (기존 기록 삭제됨).
- * 기록은 Raw_Data 에만 저장 (/급여기록). migratePayrollToNewLayout 은 레이아웃 이관용.
+ * 빈 Raw_Data로 새로 시작할 때만 사용한다.
+ * 기록은 Raw_Data에만 저장된다(/급여기록). migratePayrollToNewLayout은 레이아웃 이관용이다.
  */
 function importLegacyThreeDayToRawData_(params) {
   params = params || {};
@@ -1335,7 +1793,7 @@ function importLegacyThreeDayToRawData_(params) {
   if (legacy3DayRows.length < 1) {
     return {
       success: false,
-      error: 'No legacy 3-day data (파아그리오/하이네 3일정산 or 전체 요약 tabs missing or empty)'
+      error: 'No legacy 3-day data (Paagrio/Valakas 3일 정산 또는 전체 요약 tabs missing or empty)'
     };
   }
   const ss = SpreadsheetApp.getActiveSpreadsheet();

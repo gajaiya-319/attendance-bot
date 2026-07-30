@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 
 require('dotenv').config();
 const { google } = require('googleapis');
@@ -15,7 +15,7 @@ async function main() {
     const meta = await sheets.spreadsheets.get({ spreadsheetId: id, fields: 'sheets.properties.title' });
     console.log('tabs:', (meta.data.sheets || []).map(s => s.properties.title).join(' | '));
 
-    for (const tab of ['old sheet', 'Paagrio Great', 'Heine Great', 'Raw_Data']) {
+    for (const tab of ['old sheet', 'Paagrio Great', 'Valakas Great', 'Raw_Data']) {
         try {
             const res = await sheets.spreadsheets.values.get({
                 spreadsheetId: id,
@@ -25,7 +25,7 @@ async function main() {
             console.log(`\n--- ${tab} (${rows.length} rows) ---`);
             rows.forEach((row, index) => {
                 const text = row.slice(0, 3).join(' | ');
-                if (/total|gain|adena|5%|0\.65|0\.35|peso|합계|저장|파아|하이/i.test(text)) {
+                if (/total|gain|adena|5%|0\.(?:65|70)|0\.(?:35|30)|peso|\uCD1D|\uC544\uB370\uB098|\uD398\uC18C/i.test(text)) {
                     console.log(`${index + 1}: ${text}`);
                 }
             });

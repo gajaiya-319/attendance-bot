@@ -23,6 +23,8 @@ const CONFIG = {
         HEINE: 'heine-end'
     },
     END_ADENA_REVIEWER_ROLE_IDS: ['head-manager', 'player-manager'],
+    END_ADENA_SUMMARY_OWNER_ROLE_IDS: ['server-owner'],
+    END_ADENA_SUMMARY_USER_IDS: ['zurin'],
     TIMEZONE: 'Asia/Manila',
     ROLES: {
         DAY: 'day',
@@ -63,11 +65,13 @@ function createMessage({
     };
     const reviewerMembers = {
         owner: { roles: roles([]) },
+        serverOwner: { roles: roles(['server-owner']) },
         manager: {
             roles: roles([]),
             permissions: { has: flag => flag === 'ManageMessages' }
         },
         head: { roles: roles(['head-manager']) },
+        zurin: { roles: roles(['head-manager']) },
         reviewer: { roles: roles([]) }
     };
 
@@ -80,6 +84,7 @@ function createMessage({
         member: authorMember,
         client: { user: { id: 'bot' } },
         guild: {
+            ownerId: 'guild-owner',
             members: {
                 fetch: async id => {
                     calls.push(`fetch:${id}`);
@@ -96,7 +101,15 @@ function createMessage({
     };
 }
 
-function createHandler({ purchaseSheetService, momentOverride = null, retryDelaysMs = [], waitFn = async () => {} }) {
+function createHandler({
+    purchaseSheetService,
+    momentOverride = null,
+    getShiftBounds = null,
+    submissionValidationService = null,
+    onApprovalRecorded = null,
+    retryDelaysMs = [],
+    waitFn = async () => {}
+}) {
     return createEndAdenaReactionHandler({
         MessagePermissionFlags: {
             Administrator: 'Administrator',
@@ -104,7 +117,10 @@ function createHandler({ purchaseSheetService, momentOverride = null, retryDelay
         },
         CONFIG,
         moment: momentOverride || (() => ({ tz: () => ({ date: () => 1 }) })),
+        getShiftBounds,
         purchaseSheetService,
+        submissionValidationService,
+        onApprovalRecorded,
         retryDelaysMs,
         waitFn,
         logger: { log: () => {}, warn: () => {}, error: () => {} }
@@ -121,6 +137,21 @@ assert.deepStrictEqual(parseEndAdenaMessage('GAINED ADENA: 300.701'), {
     amount: 300000,
     requestedName: null
 });
+assert.deepStrictEqual(parseEndAdenaMessage('GAINED ADENA 180,000'), {
+    rawAmount: 180000,
+    amount: 180000,
+    requestedName: null
+});
+assert.deepStrictEqual(parseEndAdenaMessage('GAINED ADENA=180,000'), {
+    rawAmount: 180000,
+    amount: 180000,
+    requestedName: null
+});
+assert.deepStrictEqual(parseEndAdenaMessage('-GAINED ADENA 133,000'), {
+    rawAmount: 133000,
+    amount: 133000,
+    requestedName: null
+});
 assert.deepStrictEqual(parseEndAdenaMessage('NAME: Bellet\n-GAINED ADENA:111,125'), {
     rawAmount: 111125,
     amount: 111000,
@@ -128,7 +159,7 @@ assert.deepStrictEqual(parseEndAdenaMessage('NAME: Bellet\n-GAINED ADENA:111,125
 });
 assert.strictEqual(parseEndAdenaMessage('END ADENA: 150,884'), null);
 assert.strictEqual(getServerForChannel('paagrio-end', CONFIG.END_ADENA_CHANNEL_IDS), 'PAAGRIO');
-assert.strictEqual(getServerForChannel('heine-end', CONFIG.END_ADENA_CHANNEL_IDS), 'HEINE');
+assert.strictEqual(getServerForChannel('heine-end', CONFIG.END_ADENA_CHANNEL_IDS), 'VALAKAS');
 assert.strictEqual(
     getMessageDayOfMonth(
         input => ({
@@ -188,6 +219,163 @@ assert.strictEqual(
         assert.deepStrictEqual(calls, [
             `react:${CONFIG.PURCHASE_PROCESSING_EMOJI}`
         ]);
+    }
+
+    {
+        const calls = [];
+        const message = createMessage({ calls });
+        message.reply = async payload => {
+            calls.push(`reply:${payload.content}`);
+            return {
+                edit: async next => {
+                    calls.push(`edit:${next.content}`);
+                    return this;
+                }
+            };
+        };
+        let valid = false;
+        const handler = createHandler({
+            submissionValidationService: {
+                validate: async () => ({ valid, issues: valid ? [] : [{ code: 'attendance-not-found', severity: 'error' }] }),
+                format: result => `validation:${result.valid}`
+            },
+            purchaseSheetService: {
+                addAdena: async () => {
+                    throw new Error('prevalidation must not write to sheet');
+                }
+            }
+        });
+
+        await handler.messageCreate(message);
+        assert(calls.includes(`react:${CONFIG.PURCHASE_FAILURE_EMOJI}`));
+        assert(calls.includes('reply:validation:false'));
+
+        valid = true;
+        await handler.messageUpdate(null, message);
+        assert(calls.includes(`react:${CONFIG.PURCHASE_PROCESSING_EMOJI}`));
+        assert(calls.includes('edit:validation:true'));
+    }
+
+    {
+        const calls = [];
+        const message = createMessage({ calls });
+        message.reply = async payload => {
+            calls.push(`reply:${payload.content}`);
+            return { edit: async () => null };
+        };
+        const handler = createHandler({
+            submissionValidationService: {
+                validate: async () => ({ valid: false, issues: [{ code: 'server-mismatch', severity: 'error' }] }),
+                format: () => 'validation:blocked'
+            },
+            purchaseSheetService: {
+                addAdena: async () => {
+                    calls.push('sheet:must-not-run');
+                    return { ok: true };
+                }
+            }
+        });
+
+        await handler.reactionAdd({
+            partial: false,
+            emoji: { name: CONFIG.PURCHASE_APPROVAL_EMOJI },
+            message
+        }, { id: 'head', bot: false });
+
+        assert(calls.includes(`react:${CONFIG.PURCHASE_FAILURE_EMOJI}`));
+        assert(calls.includes('reply:validation:blocked'));
+        assert.strictEqual(calls.includes('sheet:must-not-run'), false);
+    }
+
+    {
+        const calls = [];
+        const message = createMessage({ calls });
+        const validationReply = {
+            edit: async payload => {
+                calls.push(`validation-edit:${payload.content}`);
+                return validationReply;
+            },
+            delete: async () => calls.push('validation-delete')
+        };
+        message.reply = async payload => {
+            calls.push(`validation-reply:${payload.content}`);
+            return validationReply;
+        };
+        const handler = createHandler({
+            submissionValidationService: {
+                validate: async () => ({ valid: true, issues: [] }),
+                format: () => 'validation:ready'
+            },
+            purchaseSheetService: {
+                addAdena: async () => ({ ok: true, range: 'Paagrio Great!C4', nextValue: 140000 })
+            }
+        });
+
+        await handler.messageCreate(message);
+        await handler.reactionAdd({
+            partial: false,
+            emoji: { name: CONFIG.PURCHASE_APPROVAL_EMOJI },
+            message
+        }, { id: 'head', bot: false });
+
+        assert(calls.includes('validation-reply:validation:ready'));
+        assert(calls.includes('validation-edit:validation:ready'));
+        assert(calls.includes('validation-delete'));
+    }
+
+    {
+        const calls = [];
+        const approvalReaction = createReaction({
+            emoji: CONFIG.PURCHASE_APPROVAL_EMOJI,
+            calls,
+            users: ['head']
+        });
+        const failureReaction = createReaction({
+            emoji: CONFIG.PURCHASE_FAILURE_EMOJI,
+            calls,
+            users: ['bot']
+        });
+        const message = createMessage({ calls, reactions: [approvalReaction, failureReaction] });
+        message.reply = async () => ({ edit: async () => null });
+        let valid = false;
+        const handler = createHandler({
+            submissionValidationService: {
+                validate: async () => ({ valid, issues: valid ? [] : [{ code: 'name-not-found', severity: 'error' }] }),
+                format: result => `validation:${result.valid}`
+            },
+            purchaseSheetService: {
+                addAdena: async payload => {
+                    calls.push(`sheet:resumed:${payload.userName}`);
+                    return { ok: true, range: 'Paagrio Great!C4', nextValue: 140000 };
+                }
+            }
+        });
+
+        await handler.messageCreate(message);
+        valid = true;
+        await handler.messageUpdate(null, message);
+        assert(calls.includes('fetch:head'));
+        assert(calls.includes('sheet:resumed:BitShelby'));
+    }
+
+    {
+        const calls = [];
+        const successReaction = createReaction({
+            emoji: CONFIG.PURCHASE_SUCCESS_EMOJI,
+            calls
+        });
+        const message = createMessage({ calls, reactions: [successReaction] });
+        const handler = createHandler({
+            purchaseSheetService: {
+                addAdena: async () => {
+                    throw new Error('approved message edit should not write to sheet');
+                }
+            }
+        });
+
+        await handler.messageUpdate(null, message);
+
+        assert.deepStrictEqual(calls, []);
     }
 
     {
@@ -252,6 +440,7 @@ assert.strictEqual(
 
     {
         const calls = [];
+        const approvalEvents = [];
         const message = createMessage({
             calls,
             content: 'NAME: WrongName\n-GAINED ADENA: 140,884',
@@ -265,6 +454,12 @@ assert.strictEqual(
                 assert.strictEqual(input, message.createdAt);
                 return { tz: () => ({ date: () => 31 }) };
             },
+            getShiftBounds: (shift, input) => {
+                assert.strictEqual(shift, 'day');
+                const start = momentTimezone(input).tz(CONFIG.TIMEZONE).startOf('day').hour(9);
+                return { start, end: start.clone().hour(21) };
+            },
+            onApprovalRecorded: async event => approvalEvents.push(event),
             purchaseSheetService: {
                 addAdena: async payload => {
                     calls.push(`sheet:${payload.server}:${payload.shift}:${payload.userName}:${payload.amount}:${payload.dayOfMonth}`);
@@ -280,6 +475,62 @@ assert.strictEqual(
         }, { id: 'head', bot: false });
 
         assert(calls.includes('sheet:PAAGRIO:DAY:BitShelby:140000:31'));
+        assert.strictEqual(approvalEvents.length, 1);
+        assert.strictEqual(approvalEvents[0].audit.reviewerId, 'head');
+        assert.strictEqual(approvalEvents[0].audit.authorId, 'author');
+        assert.match(approvalEvents[0].audit.shiftStartAt, /T01:00:00\.000Z$/);
+        assert.match(approvalEvents[0].audit.shiftEndAt, /T13:00:00\.000Z$/);
+    }
+
+    {
+        const calls = [];
+        let writtenPayload = null;
+        const message = createMessage({
+            calls,
+            createdAt: new Date('2026-07-29T20:31:11.319Z'),
+            member: {
+                displayName: 'Deia - P Day Time',
+                roles: roles(['day'])
+            },
+            content: 'NAME: Deia\n-GAINED ADENA:60,000'
+        });
+        const handler = createHandler({
+            momentOverride: momentTimezone,
+            getShiftBounds: (_shift, input) => {
+                const start = momentTimezone(input).tz(CONFIG.TIMEZONE).startOf('day').hour(9);
+                return { start, end: start.clone().hour(21) };
+            },
+            submissionValidationService: {
+                validate: async () => ({
+                    valid: true,
+                    issues: [],
+                    shiftStartAt: '2026-07-29T01:00:00.000Z',
+                    shiftEndAt: '2026-07-29T13:00:00.000Z',
+                    shiftResolutionSource: 'attendance-session',
+                    attendanceSessionId: 'day:2026-07-29-09-00:overtime',
+                    attendanceSessionType: 'FORCED'
+                })
+            },
+            purchaseSheetService: {
+                addAdena: async payload => {
+                    writtenPayload = payload;
+                    return { ok: true, range: 'Paagrio Great!C4', nextValue: 60000 };
+                }
+            }
+        });
+
+        await handler.reactionAdd({
+            partial: false,
+            emoji: { name: CONFIG.PURCHASE_APPROVAL_EMOJI },
+            message
+        }, { id: 'head', bot: false });
+
+        assert.strictEqual(writtenPayload.dayOfMonth, 29);
+        assert.strictEqual(writtenPayload.audit.shiftStartAt, '2026-07-29T01:00:00.000Z');
+        assert.strictEqual(writtenPayload.audit.shiftEndAt, '2026-07-29T13:00:00.000Z');
+        assert.strictEqual(writtenPayload.audit.shiftResolutionSource, 'attendance-session');
+        assert.strictEqual(writtenPayload.audit.attendanceSessionId, 'day:2026-07-29-09-00:overtime');
+        assert.strictEqual(writtenPayload.audit.attendanceSessionType, 'FORCED');
     }
 
     {
@@ -310,7 +561,7 @@ assert.strictEqual(
             message
         }, { id: 'head', bot: false });
 
-        assert(calls.includes('sheet:HEINE:NIGHT:Bellet:111000:31'));
+        assert(calls.includes('sheet:VALAKAS:NIGHT:Bellet:111000:31'));
     }
 
     {
@@ -341,7 +592,7 @@ assert.strictEqual(
             message
         }, { id: 'head', bot: false });
 
-        assert(calls.includes('sheet:HEINE:NIGHT:Lancyy:120000:1'));
+        assert(calls.includes('sheet:VALAKAS:NIGHT:Lancyy:120000:1'));
     }
 
     {
@@ -419,6 +670,40 @@ assert.strictEqual(
             content: 'NAME: BitShelby\n-GAINED ADENA: 140,884'
         });
         const handler = createHandler({
+            momentOverride: () => ({ tz: () => ({ date: () => 31 }) }),
+            purchaseSheetService: {
+                addAdena: async () => {
+                    throw new Error('explicit Zurin access should use summary write');
+                },
+                addAdenaWithSummary: async payload => {
+                    calls.push(`summary:${payload.server}:${payload.shift}:${payload.userName}:${payload.amount}:${payload.rawAmount}:${payload.dayOfMonth}`);
+                    return {
+                        ok: true,
+                        range: 'Paagrio Great!C4',
+                        summaryRange: 'Paagrio Great!L59',
+                        nextValue: 140000,
+                        summaryNextValue: 140884
+                    };
+                }
+            }
+        });
+
+        await handler.reactionAdd({
+            partial: false,
+            emoji: { name: CONFIG.PURCHASE_APPROVAL_EMOJI },
+            message
+        }, { id: 'zurin', bot: false });
+
+        assert(calls.includes('summary:PAAGRIO:DAY:BitShelby:140000:140884:31'));
+    }
+
+    {
+        const calls = [];
+        const message = createMessage({
+            calls,
+            content: 'NAME: BitShelby\n-GAINED ADENA: 140,884'
+        });
+        const handler = createHandler({
             momentOverride: input => {
                 assert.strictEqual(input, message.createdAt);
                 return { tz: () => ({ date: () => 31 }) };
@@ -441,6 +726,80 @@ assert.strictEqual(
         }, { id: 'head', bot: false });
 
         assert(calls.includes('sheet:PAAGRIO:DAY:BitShelby:140000:31'));
+    }
+
+    {
+        const calls = [];
+        const message = createMessage({
+            calls,
+            content: 'NAME: BitShelby\n-GAINED ADENA: 140,884'
+        });
+        const handler = createHandler({
+            momentOverride: input => {
+                assert.strictEqual(input, message.createdAt);
+                return { tz: () => ({ date: () => 31 }) };
+            },
+            purchaseSheetService: {
+                addAdena: async () => {
+                    throw new Error('guild owner approval should use summary write');
+                },
+                addAdenaWithSummary: async payload => {
+                    calls.push(`summary:${payload.server}:${payload.shift}:${payload.userName}:${payload.amount}:${payload.rawAmount}:${payload.dayOfMonth}`);
+                    return {
+                        ok: true,
+                        range: 'Paagrio Great!C4',
+                        summaryRange: 'Paagrio Great!L59',
+                        nextValue: 140000,
+                        summaryNextValue: 140884
+                    };
+                }
+            }
+        });
+
+        await handler.reactionAdd({
+            partial: false,
+            emoji: { name: CONFIG.PURCHASE_APPROVAL_EMOJI },
+            message
+        }, { id: 'guild-owner', bot: false });
+
+        assert(calls.includes('summary:PAAGRIO:DAY:BitShelby:140000:140884:31'));
+    }
+
+    {
+        const calls = [];
+        const message = createMessage({
+            calls,
+            content: 'NAME: BitShelby\n-GAINED ADENA: 140,884'
+        });
+        const handler = createHandler({
+            momentOverride: input => {
+                assert.strictEqual(input, message.createdAt);
+                return { tz: () => ({ date: () => 31 }) };
+            },
+            purchaseSheetService: {
+                addAdena: async () => {
+                    throw new Error('server owner role approval should use summary write');
+                },
+                addAdenaWithSummary: async payload => {
+                    calls.push(`summary:${payload.server}:${payload.shift}:${payload.userName}:${payload.amount}:${payload.rawAmount}:${payload.dayOfMonth}`);
+                    return {
+                        ok: true,
+                        range: 'Paagrio Great!C4',
+                        summaryRange: 'Paagrio Great!L59',
+                        nextValue: 140000,
+                        summaryNextValue: 140884
+                    };
+                }
+            }
+        });
+
+        await handler.reactionAdd({
+            partial: false,
+            emoji: { name: CONFIG.PURCHASE_APPROVAL_EMOJI },
+            message
+        }, { id: 'serverOwner', bot: false });
+
+        assert(calls.includes('summary:PAAGRIO:DAY:BitShelby:140000:140884:31'));
     }
 
     {
@@ -503,7 +862,7 @@ assert.strictEqual(
             partial: false,
             emoji: { name: CONFIG.PURCHASE_CANCEL_EMOJI },
             message
-        }, { id: 'head', bot: false });
+        }, { id: 'owner', bot: false });
 
         assert(calls.includes('summary:PAAGRIO:DAY:BitShelby:-140000:-140884:1'));
     }
@@ -620,6 +979,39 @@ assert.strictEqual(
         assert(calls.includes('attempt:3:BitShelby'));
         assert.strictEqual(calls.slice(-2)[0], `react:${CONFIG.PURCHASE_APPROVAL_EMOJI}`);
         assert.strictEqual(calls.slice(-1)[0], `react:${CONFIG.PURCHASE_SUCCESS_EMOJI}`);
+    }
+
+    {
+        const calls = [];
+        const approvalReaction = createReaction({
+            emoji: CONFIG.PURCHASE_APPROVAL_EMOJI,
+            calls,
+            users: ['head']
+        });
+        const failureReaction = createReaction({
+            emoji: CONFIG.PURCHASE_FAILURE_EMOJI,
+            calls,
+            users: ['bot']
+        });
+        const message = createMessage({
+            calls,
+            reactions: [approvalReaction, failureReaction],
+            content: 'NAME: BitShelby\n-GAINED ADENA 180,000'
+        });
+        const handler = createHandler({
+            purchaseSheetService: {
+                addAdena: async payload => {
+                    calls.push(`retry-sheet:${payload.server}:${payload.shift}:${payload.userName}:${payload.amount}:${payload.dayOfMonth}`);
+                    return { ok: true, range: 'Paagrio Great!C4', nextValue: 180000 };
+                }
+            }
+        });
+
+        await handler.syncMessageStatus(message, { pendingMessageIds: new Set() });
+
+        assert(calls.includes('fetch:head'));
+        assert(calls.includes('retry-sheet:PAAGRIO:DAY:BitShelby:180000:1'));
+        assert(calls.includes(`react:${CONFIG.PURCHASE_SUCCESS_EMOJI}`));
     }
 
     {

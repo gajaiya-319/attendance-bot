@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 
 require('dotenv').config();
 
@@ -14,7 +14,7 @@ const EXPECTED = [
 async function main() {
     const apply = process.argv.includes('--apply');
     const tabs = process.argv.filter(arg => arg.startsWith('--sheet=')).map(arg => arg.slice('--sheet='.length));
-    const targetTabs = tabs.length > 0 ? tabs : ['Paagrio Great', 'Heine Great'];
+    const targetTabs = tabs.length > 0 ? tabs : ['Paagrio Great', 'Valakas Great'];
 
     const auth = new google.auth.GoogleAuth({
         keyFile: KEY_FILE,

@@ -139,6 +139,42 @@ function createConfig(dir) {
     await withTempDir(async dir => {
         const backupDir = path.join(dir, 'backups');
         await fs.mkdir(backupDir, { recursive: true });
+        const file = 'attendanceData-2026-05-21-22-00-00-quarantined.json';
+        const payload = JSON.stringify({
+            attendanceData: { userA: { id: 'other-id', sessions: {} } },
+            overtimeUsers: {}
+        });
+        await fs.writeFile(path.join(backupDir, file), payload);
+        const first = auditBackups({
+            backupDir,
+            config: createConfig(dir),
+            reviewedFile: false
+        });
+        assert.strictEqual(first.fatalIssueCount, 3, 'unquarantined restore issues are fatal');
+
+        const reviewedFile = path.join(backupDir, 'backup-audit-reviewed.json');
+        await fs.writeFile(reviewedFile, JSON.stringify({
+            issues: first.issues.map(issue => ({
+                file: issue.file,
+                type: issue.type,
+                message: issue.message,
+                sha256: issue.sha256,
+                reason: 'known broken legacy backup',
+                quarantined: true
+            }))
+        }, null, 2));
+
+        const reviewed = auditBackups({
+            backupDir,
+            config: createConfig(dir)
+        });
+        assert.strictEqual(reviewed.fatalIssueCount, 0, 'quarantined restore validation issues are excluded from fatal count');
+        assert.strictEqual(reviewed.reviewedIssueCount, 3, 'quarantined fatal issues remain visible as reviewed');
+    });
+
+    await withTempDir(async dir => {
+        const backupDir = path.join(dir, 'backups');
+        await fs.mkdir(backupDir, { recursive: true });
         const file = 'attendanceData-2026-05-21-22-00-00-review-script.json';
         await fs.writeFile(path.join(backupDir, file), JSON.stringify({
             attendanceData: { userB: { id: 'userB', name: 'User B', checkedIn: true, dayOff: true, sessions: [{ clockInAt: 'x' }] } },

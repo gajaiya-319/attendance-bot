@@ -1,8 +1,6 @@
 'use strict';
 
 function createDayOffMessageEventHandlers({
-    MessagePermissionFlags,
-    reviewerId,
     approvalEmoji,
     cancelEmoji,
     dayOffService,
@@ -15,7 +13,6 @@ function createDayOffMessageEventHandlers({
     cancelDayOffApproval,
     logger = console
 }) {
-    if (!MessagePermissionFlags) throw new TypeError('MessagePermissionFlags must be provided');
     if (!dayOffService || typeof dayOffService.isDayOffChannel !== 'function') {
         throw new TypeError('dayOffService.isDayOffChannel must be a function');
     }
@@ -27,12 +24,8 @@ function createDayOffMessageEventHandlers({
     if (typeof cancelDayOffRequest !== 'function') throw new TypeError('cancelDayOffRequest must be a function');
     if (typeof cancelDayOffApproval !== 'function') throw new TypeError('cancelDayOffApproval must be a function');
 
-    function canReviewDayOff(member, user) {
-        return Boolean(
-            member?.permissions?.has(MessagePermissionFlags.Administrator) ||
-            member?.permissions?.has(MessagePermissionFlags.ManageMessages) ||
-            user.id === reviewerId
-        );
+    function canReviewDayOff(message, user) {
+        return Boolean(message?.guild?.ownerId && user?.id === message.guild.ownerId);
     }
 
     async function resolveReactionMessage(reaction) {
@@ -73,8 +66,9 @@ function createDayOffMessageEventHandlers({
             if (!message || !dayOffService.isDayOffChannel(message)) return;
             if (cleanupLocks.has(message.id)) return;
 
+            if (!canReviewDayOff(message, user)) return;
             const member = await message.guild.members.fetch(user.id).catch(() => null);
-            if (!canReviewDayOff(member, user)) return;
+            if (!member) return;
 
             if (resolved.emoji === approvalEmoji) {
                 await approveDayOffMessage(message, member);
@@ -95,8 +89,9 @@ function createDayOffMessageEventHandlers({
             if (resolved.emoji !== approvalEmoji) return;
             if (cleanupLocks.has(message.id)) return;
 
+            if (!canReviewDayOff(message, user)) return;
             const member = await message.guild.members.fetch(user.id).catch(() => null);
-            if (!canReviewDayOff(member, user)) return;
+            if (!member) return;
 
             await cancelDayOffApproval(message, member);
         } catch (error) {

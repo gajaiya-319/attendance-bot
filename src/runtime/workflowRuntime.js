@@ -18,6 +18,7 @@ function createWorkflowRuntime(deps) {
     let getRankingWorkerShiftRef = () => null;
     let getActiveApprovedDayOffReservationRef = () => null;
     let applyApprovedDayOffReservationRef = async () => false;
+    let appendAdminAuditRef = async () => {};
 
     const clock = createClockWorkflow({
         client: deps.client,
@@ -45,6 +46,9 @@ function createWorkflowRuntime(deps) {
         RAW_ATTENDANCE_STATUS: deps.RAW_ATTENDANCE_STATUS,
         mapRawClockInStatus: deps.mapRawClockInStatus,
         mapRawClockOutStatus: deps.mapRawClockOutStatus,
+        ActionRowBuilder: deps.ActionRowBuilder,
+        ButtonBuilder: deps.ButtonBuilder,
+        ButtonStyle: deps.ButtonStyle,
         logger: deps.logger
     });
 
@@ -88,6 +92,7 @@ function createWorkflowRuntime(deps) {
         renderSummaryBox: deps.renderSummaryBox,
         renderCleanGrid: deps.renderCleanGrid,
         renderStatusList: deps.renderStatusList,
+        renderAttentionSummary: deps.renderAttentionSummary,
         renderOvertimeList: deps.renderOvertimeList,
         formatDuration: deps.formatDuration,
         logger: deps.logger
@@ -111,10 +116,13 @@ function createWorkflowRuntime(deps) {
         getShiftBounds: deps.getShiftBounds,
         getScheduledEndMoment: clock.getScheduledEndMoment,
         isMaintenanceWindow: deps.isMaintenanceWindow,
+        getMaintenanceHandoffWindow: deps.getMaintenanceHandoffWindow,
         isWithinPreShiftWindow: deps.isWithinPreShiftWindow,
         isCurrentShiftRegularWorker: clock.isCurrentShiftRegularWorker,
         canStartPostShiftOvertime: clock.canStartPostShiftOvertime,
         getRestorableOvertimeSession: clock.getRestorableOvertimeSession,
+        getOpenSession: clock.getOpenSession,
+        sumCreditedLiveOffPeriods: deps.attendanceService?.sumCreditedLiveOffPeriods,
         appendAttendanceEvent: clock.appendAttendanceEvent,
         transitionRecordedStatus: clock.transitionRecordedStatus,
         setFinishedPresence: clock.setFinishedPresence,
@@ -127,11 +135,13 @@ function createWorkflowRuntime(deps) {
         handleClockIn: clock.handleClockIn,
         activatePendingManualOvertime: clock.activatePendingManualOvertime,
         restoreOvertimeAfterFinish: clock.restoreOvertimeAfterFinish,
+        resumeAutoTimeoutShift: clock.resumeAutoTimeoutShift,
         notifyDayOffPresence: clock.notifyDayOffPresence,
         notifyAfterFinishPresence: clock.notifyAfterFinishPresence,
         notifyFinishedReturnToVoice: clock.notifyFinishedReturnToVoice,
         notifyStandbyClockInRequired: clock.notifyStandbyClockInRequired,
         startPostShiftOvertime: clock.startPostShiftOvertime,
+        requestPostShiftOvertimeConfirmation: clock.requestPostShiftOvertimeConfirmation,
         recordLiveConfirmation: clock.recordLiveConfirmation,
         recordLiveRecovery: clock.recordLiveRecovery,
         markLiveOffState: clock.markLiveOffState,
@@ -141,6 +151,7 @@ function createWorkflowRuntime(deps) {
         updateWorkingRole: deps.updateWorkingRole,
         canStartOvertimeNow: clock.canStartOvertimeNow,
         startAttendanceSession: clock.startAttendanceSession,
+        appendAdminAudit: (...args) => appendAdminAuditRef(...args),
         logger: deps.logger
     });
 
@@ -184,6 +195,7 @@ function createWorkflowRuntime(deps) {
         appendAttendanceEvent: clock.appendAttendanceEvent,
         writeDayOffLog: text => dayOff.writeDayOffLog(text)
     });
+    appendAdminAuditRef = adminAuditLog.appendAdminAudit;
 
     const membership = createMembershipWorkflow({
         client: deps.client,
@@ -223,6 +235,7 @@ function createWorkflowRuntime(deps) {
         recordLog: clock.recordLog,
         handleClockIn: clock.handleClockIn,
         handleClockOut: clock.handleClockOut,
+        handleClockOutWithoutMember: clock.handleClockOutWithoutMember,
         transitionRecordedStatus: clock.transitionRecordedStatus,
         updateWorkingRole: deps.updateWorkingRole,
         getScheduledEndMoment: clock.getScheduledEndMoment,
@@ -239,7 +252,14 @@ function createWorkflowRuntime(deps) {
         ensureUserData: deps.ensureUserData,
         getOpenSession: clock.getOpenSession,
         startAttendanceSession: clock.startAttendanceSession,
+        startPostShiftOvertime: clock.startPostShiftOvertime,
+        requestPostShiftOvertimeConfirmation: clock.requestPostShiftOvertimeConfirmation,
+        rawAttendanceSheetService: deps.rawAttendanceSheetService,
+        attendanceAutoRepairService: deps.attendanceAutoRepairService,
+        RAW_ATTENDANCE_STATUS: deps.RAW_ATTENDANCE_STATUS,
+        getWorkerProfileForRawSync: deps.getWorkerProfileForRawSync,
         formatDuration: deps.formatDuration,
+        appendAdminAudit: adminAuditLog.appendAdminAudit,
         formatKoreanDateTime: deps.formatKoreanDateTime,
         renderDashboardCore: dashboard.renderDashboardCore,
         logger: deps.logger
@@ -261,8 +281,14 @@ function createWorkflowRuntime(deps) {
         getActiveLiveException: dashboard.getActiveLiveException,
         getMemberShiftRole: clock.getMemberShiftRole,
         getOperationalShift: deps.getOperationalShift,
+        setOvertimeUsers: deps.setOvertimeUsers,
+        saveSystemAsync: deps.saveSystemAsync,
+        transitionRecordedStatus: clock.transitionRecordedStatus,
         opsQueueService: deps.opsQueueService,
         purchaseSheetService: deps.purchaseSheetService,
+        rawAttendanceSheetService: deps.rawAttendanceSheetService,
+        attendanceAutoRepairService: deps.attendanceAutoRepairService,
+        selfHealingSupervisorService: deps.selfHealingSupervisorService,
         retryQueuedItem: deps.retryQueuedItem,
         alertState: deps.alertState,
         logger: deps.logger

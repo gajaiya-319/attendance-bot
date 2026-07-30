@@ -4,7 +4,7 @@ const { createDayOffMessageEventHandlers } = require('../src/events/dayOffMessag
 function createHandlers(overrides = {}) {
     const calls = [];
     const member = {
-        id: 'reviewer',
+        id: 'owner-user',
         permissions: {
             has: flag => flag === 'ManageMessages'
         }
@@ -14,6 +14,7 @@ function createHandlers(overrides = {}) {
         member: { id: 'author-member' },
         author: { bot: false },
         guild: {
+            ownerId: overrides.ownerId || 'owner-user',
             members: {
                 fetch: async id => {
                     calls.push(`fetch:${id}`);
@@ -23,11 +24,6 @@ function createHandlers(overrides = {}) {
         }
     };
     const handlers = createDayOffMessageEventHandlers({
-        MessagePermissionFlags: {
-            Administrator: 'Administrator',
-            ManageMessages: 'ManageMessages'
-        },
-        reviewerId: 'reviewer-user',
         approvalEmoji: '✅',
         cancelEmoji: '❌',
         dayOffService: {
@@ -92,28 +88,37 @@ function reactionFor(message, options = {}) {
     assert.deepStrictEqual(updateCalls, ['process:msg1']);
 
     const { handlers: addHandlers, calls: addCalls, message: addMessage } = createHandlers();
-    await addHandlers.reactionAdd(reactionFor(addMessage), { id: 'user1', bot: false });
+    await addHandlers.reactionAdd(reactionFor(addMessage), { id: 'owner-user', bot: false });
     assert.deepStrictEqual(addCalls, [
-        'fetch:user1',
-        'approve:msg1:reviewer'
+        'fetch:owner-user',
+        'approve:msg1:owner-user'
     ]);
 
     const { handlers: cancelRequestHandlers, calls: cancelRequestCalls, message: cancelRequestMessage } = createHandlers();
-    await cancelRequestHandlers.reactionAdd(reactionFor(cancelRequestMessage, { emoji: '❌' }), { id: 'user1', bot: false });
+    await cancelRequestHandlers.reactionAdd(reactionFor(cancelRequestMessage, { emoji: '❌' }), { id: 'owner-user', bot: false });
     assert.deepStrictEqual(cancelRequestCalls, [
-        'fetch:user1',
-        'request-cancel:msg1:reviewer'
+        'fetch:owner-user',
+        'request-cancel:msg1:owner-user'
     ]);
+
+    const { handlers: managerHandlers, calls: managerCalls, message: managerMessage } = createHandlers({
+        reviewerMember: {
+            id: 'manager-user',
+            permissions: { has: () => true }
+        }
+    });
+    await managerHandlers.reactionAdd(reactionFor(managerMessage), { id: 'manager-user', bot: false });
+    assert.deepStrictEqual(managerCalls, []);
 
     const { handlers: lockedHandlers, calls: lockedCalls, message: lockedMessage } = createHandlers({ lockedIds: ['msg1'] });
     await lockedHandlers.reactionAdd(reactionFor(lockedMessage), { id: 'user1', bot: false });
     assert.deepStrictEqual(lockedCalls, []);
 
     const { handlers: removeHandlers, calls: removeCalls, message: removeMessage } = createHandlers();
-    await removeHandlers.reactionRemove(reactionFor(removeMessage, { messagePartial: true }), { id: 'reviewer-user', bot: false });
+    await removeHandlers.reactionRemove(reactionFor(removeMessage, { messagePartial: true }), { id: 'owner-user', bot: false });
     assert.deepStrictEqual(removeCalls, [
-        'fetch:reviewer-user',
-        'cancel:msg1:reviewer'
+        'fetch:owner-user',
+        'cancel:msg1:owner-user'
     ]);
 
     const { handlers: cancelRemoveHandlers, calls: cancelRemoveCalls, message: cancelRemoveMessage } = createHandlers();
@@ -128,7 +133,7 @@ function reactionFor(message, options = {}) {
     await botHandlers.reactionAdd(reactionFor(botMessage), { id: 'bot', bot: true });
     assert.deepStrictEqual(botCalls, []);
 
-    assert.throws(() => createDayOffMessageEventHandlers({}), /MessagePermissionFlags/);
+    assert.throws(() => createDayOffMessageEventHandlers({}), /dayOffService/);
 
     console.log('dayoff-message-event-handlers tests passed');
 })().catch(error => {

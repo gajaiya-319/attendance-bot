@@ -79,6 +79,7 @@ function createAttendanceBotApp(options = {}) {
         buildShiftBoundsForBusinessDate,
         getOperationalShift,
         getActiveMaintenanceWindow,
+        getMaintenanceHandoffWindow,
         getRecentMaintenanceEnd: getTimeLogicRecentMaintenanceEnd,
         isMaintenanceWindow,
         getDayOffLogicalDateForShift,
@@ -102,6 +103,7 @@ function createAttendanceBotApp(options = {}) {
             GatewayIntentBits.Guilds,
             GatewayIntentBits.GuildMembers,
             GatewayIntentBits.GuildVoiceStates,
+            ...(CONFIG.ENABLE_PRESENCE_INTENT ? [GatewayIntentBits.GuildPresences] : []),
             GatewayIntentBits.GuildMessages,
             GatewayIntentBits.GuildMessageReactions,
             GatewayIntentBits.MessageContent
@@ -118,10 +120,12 @@ function createAttendanceBotApp(options = {}) {
     if (!global.__attendanceBotProcessHooks) {
         global.__attendanceBotProcessHooks = true;
         process.on('beforeExit', code => {
-            console.warn(`[PROCESS WARN] beforeExit fired with code=${code}. Keeping attendance bot alive.`);
+            const log = code === 0 ? console.log : console.warn;
+            log(`[PROCESS ${code === 0 ? 'INFO' : 'WARN'}] beforeExit fired with code=${code}. Keeping attendance bot alive.`);
         });
         process.on('exit', code => {
-            console.warn(`[PROCESS EXIT] code=${code}`);
+            const log = code === 0 ? console.log : console.error;
+            log(`[PROCESS EXIT] code=${code}`);
             clearInterval(mainKeepAliveTimer);
         });
     }
@@ -154,14 +158,6 @@ function createAttendanceBotApp(options = {}) {
         refreshGuildMembers,
         writeRuntimeHealthFile
     } = botState;
-
-    const report = createReportContext({
-        workflowApi,
-        botState,
-        CONFIG,
-        moment,
-        getShiftBounds
-    });
 
     const JOKES = {
         IN: ['출근 처리되었습니다. 오늘도 화이팅!'],
@@ -198,6 +194,15 @@ function createAttendanceBotApp(options = {}) {
         isWithinPreShiftWindow,
         padWidth: deps.padWidth,
         truncateWidth: deps.truncateWidth
+    });
+
+    const report = createReportContext({
+        workflowApi,
+        botState,
+        CONFIG,
+        moment,
+        getShiftBounds,
+        attendanceService: services.attendanceService
     });
 
     const commands = createCommandRegistry({
@@ -296,6 +301,8 @@ function createAttendanceBotApp(options = {}) {
             attendanceService: services.attendanceService,
             roleService: services.roleService,
             rawAttendanceSheetService: services.rawAttendanceSheetService,
+            attendanceAutoRepairService: services.attendanceAutoRepairService,
+            selfHealingSupervisorService: services.selfHealingSupervisorService,
             dashboardStateUtils: services.dashboardStateUtils,
             getDashboardShift,
             getShiftBounds,
@@ -314,6 +321,7 @@ function createAttendanceBotApp(options = {}) {
             renderSummaryBox: report.renderSummaryBox,
             renderCleanGrid: report.renderCleanGrid,
             renderStatusList: report.renderStatusList,
+            renderAttentionSummary: report.renderAttentionSummary,
             renderOvertimeList: report.renderOvertimeList,
             isAssignedWorker: services.isAssignedWorker,
             hasManagedAttendanceRole: services.hasManagedAttendanceRole,
@@ -322,6 +330,7 @@ function createAttendanceBotApp(options = {}) {
             getStartupBuildInfo: botState.getStartupBuildInfo,
             readRuntimeHealthFile: botState.readRuntimeHealthFile,
             getActiveMaintenanceWindow,
+            getMaintenanceHandoffWindow,
             isMaintenanceWindow,
             isWithinPreShiftWindow,
             getTimeLogicRecentMaintenanceEnd,
@@ -347,6 +356,7 @@ function createAttendanceBotApp(options = {}) {
             MessageFlags,
             CONFIG,
             moment,
+            getShiftBounds,
             client,
             cron,
             REST,
@@ -359,6 +369,9 @@ function createAttendanceBotApp(options = {}) {
             markMemberActivity: coreHelpers.markMemberActivity,
             saveSystemAsync,
             purchaseSheetService: services.purchaseSheetService,
+            endAdenaSubmissionValidationService: services.endAdenaSubmissionValidationService,
+            endAdenaReconciliationService: services.endAdenaReconciliationService,
+            endAdenaFreshnessService: services.endAdenaFreshnessService,
             opsQueueService,
             voiceStateUpdateHandler: commands.voiceStateUpdateHandler,
             guildMemberEventHandlers: commands.guildMemberEventHandlers,
@@ -383,7 +396,10 @@ function createAttendanceBotApp(options = {}) {
             loadSystem,
             createScheduledBackupIfDue,
             syncCurrentWorkerProfiles: services.syncCurrentWorkerProfiles,
+            rawAttendanceSheetService: services.rawAttendanceSheetService,
+            backgroundJobQueueService: services.backgroundJobQueueService,
             payrollLiveSummarySyncService: services.payrollLiveSummarySyncService,
+            payrollIntegrityAuditService: services.payrollIntegrityAuditService,
             payrollArchiveService: services.payrollArchiveService,
             payrollOperationLogService: services.payrollOperationLogService,
             botState

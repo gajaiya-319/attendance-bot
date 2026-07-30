@@ -5,6 +5,7 @@ const {
     createAttendanceService,
     createRoleService,
     createRawAttendanceSheetService,
+    createBackgroundJobQueueService,
     createDayOffService,
     createDayOffRequestInteractionHandler,
     createAdminService,
@@ -13,6 +14,13 @@ const {
     createPurchaseSheetService,
     createPayrollLiveSummarySyncService,
     createPayrollArchiveService,
+    createPayrollIntegrityAuditService,
+    createEndAdenaReconciliationService,
+    createEndAdenaFreshnessService,
+    createEndAdenaSubmissionValidationService,
+    createAttendanceEventLedger,
+    createAttendanceAutoRepairService,
+    createSelfHealingSupervisorService,
     EmbedBuilder,
     ActionRowBuilder,
     ButtonBuilder,
@@ -40,6 +48,15 @@ function createServiceLayer(ctx) {
         truncateWidth
     } = ctx;
 
+    const backgroundJobQueueService = createBackgroundJobQueueService({
+        logger: console,
+        onStats: stats => botState.writeRuntimeHealthFile('running', { backgroundQueue: stats })
+    });
+
+    const selfHealingSupervisorService = createSelfHealingSupervisorService({
+        logger: console
+    });
+
     const dashboardStateUtils = createDashboardStateUtils({
         CONFIG,
         moment,
@@ -58,7 +75,22 @@ function createServiceLayer(ctx) {
         getOvertimeUsers: () => botState.overtimeUsers,
         determineShift,
         getShiftSessionKey,
-        getShiftBounds
+        getShiftBounds,
+        appendSystemEvent: event => botState.attendanceEventLedger.append(event)
+    });
+
+    botState.attendanceEventLedger = createAttendanceEventLedger({
+        state: botState,
+        moment,
+        timezone: CONFIG.TIMEZONE,
+        maxEvents: CONFIG.ATTENDANCE_EVENT_LOG_MAX || 10000
+    });
+
+    const attendanceAutoRepairService = createAttendanceAutoRepairService({
+        state: botState,
+        CONFIG,
+        moment,
+        logger: console
     });
 
     const roleService = createRoleService({ CONFIG });
@@ -68,12 +100,13 @@ function createServiceLayer(ctx) {
         keyFile: CONFIG.PURCHASE_GOOGLE_KEY_FILE,
         spreadsheetId: CONFIG.RAW_ATTENDANCE_SPREADSHEET_ID || CONFIG.PAYROLL_ARCHIVE_SPREADSHEET_ID,
         webAppUrl: null,
+        pendingFilePath: './logs/raw-attendance-pending.json',
+        repairAuditFilePath: './logs/raw-attendance-repair.jsonl',
         logger: console
     });
 
     function getWorkerProfileForRawSync(member) {
-        return roleService.getWorkerRoleProfileFromMember(member) ||
-            roleService.getWorkerRoleProfileFromNickname(member?.displayName || member?.user?.username);
+        return roleService.getWorkerRoleProfileFromMember(member);
     }
 
     async function syncCurrentWorkerProfile(member) {
@@ -89,6 +122,12 @@ function createServiceLayer(ctx) {
             server: profile.server,
             shift: profile.shift
         });
+    }
+
+    async function removeCurrentWorkerProfile(member) {
+        if (!member || member.user?.bot) return { ok: false, skipped: true, reason: 'missing-member' };
+        const name = roleService.getWorkerNicknameBase(member.displayName || member.user?.username || 'Unknown');
+        return rawAttendanceSheetService.removeWorkerProfile({ name });
     }
 
     async function syncCurrentWorkerProfiles(guild) {
@@ -173,6 +212,7 @@ function createServiceLayer(ctx) {
         spreadsheetId: CONFIG.PAYROLL_ARCHIVE_SPREADSHEET_ID,
         greatSpreadsheetId: CONFIG.PURCHASE_SPREADSHEET_ID,
         serverTabs: CONFIG.PURCHASE_SERVER_TABS,
+        serverSheetIds: CONFIG.PURCHASE_SERVER_SHEET_IDS,
         operationLog: payrollOperationLogService,
         logger: console
     });
@@ -183,14 +223,53 @@ function createServiceLayer(ctx) {
         logger: console
     });
 
+    const payrollIntegrityAuditService = createPayrollIntegrityAuditService({
+        payrollOperationLogService,
+        auditRunner: options => require('../../scripts/audit-payroll-rawdata-vs-great').runPayrollRawAudit(options),
+        client,
+        CONFIG,
+        logger: console
+    });
+
     const purchaseSheetService = createPurchaseSheetService({
         google,
         keyFile: CONFIG.PURCHASE_GOOGLE_KEY_FILE,
         spreadsheetId: CONFIG.PURCHASE_SPREADSHEET_ID,
         serverTabs: CONFIG.PURCHASE_SERVER_TABS,
+        serverSheetIds: CONFIG.PURCHASE_SERVER_SHEET_IDS,
         sectionLabels: CONFIG.PURCHASE_SECTION_LABELS,
         sheetNameAliases: CONFIG.SHEET_NAME_ALIASES,
         operationLog: payrollOperationLogService
+    });
+
+    const endAdenaReconciliationService = createEndAdenaReconciliationService({
+        CONFIG,
+        moment,
+        client,
+        getAttendanceData: () => botState.attendanceData,
+        payrollOperationLogService,
+        purchaseSheetService,
+        logger: console
+    });
+
+    const endAdenaSubmissionValidationService = createEndAdenaSubmissionValidationService({
+        CONFIG,
+        moment,
+        getShiftBounds,
+        getAttendanceData: () => botState.attendanceData,
+        purchaseSheetService,
+        payrollOperationLogService,
+        logger: console
+    });
+
+    const endAdenaFreshnessService = createEndAdenaFreshnessService({
+        CONFIG,
+        moment,
+        getShiftBounds,
+        payrollOperationLogService,
+        endAdenaReconciliationService,
+        client,
+        logger: console
     });
 
     return {
@@ -200,6 +279,7 @@ function createServiceLayer(ctx) {
         rawAttendanceSheetService,
         getWorkerProfileForRawSync,
         syncCurrentWorkerProfile,
+        removeCurrentWorkerProfile,
         syncCurrentWorkerProfiles,
         dayOffService,
         dayOffRequestInteractions,
@@ -213,7 +293,14 @@ function createServiceLayer(ctx) {
         payrollOperationLogService,
         payrollArchiveService,
         payrollLiveSummarySyncService,
-        purchaseSheetService
+        payrollIntegrityAuditService,
+        purchaseSheetService,
+        endAdenaSubmissionValidationService,
+        endAdenaReconciliationService,
+        endAdenaFreshnessService,
+        attendanceAutoRepairService,
+        backgroundJobQueueService,
+        selfHealingSupervisorService
     };
 }
 

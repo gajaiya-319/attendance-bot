@@ -37,6 +37,8 @@ function wireWorkflowRuntimeForApp(ctx) {
         attendanceService,
         roleService,
         rawAttendanceSheetService,
+        attendanceAutoRepairService,
+        selfHealingSupervisorService,
         dashboardStateUtils,
         getDashboardShift,
         getShiftBounds,
@@ -55,6 +57,7 @@ function wireWorkflowRuntimeForApp(ctx) {
         renderSummaryBox,
         renderCleanGrid,
         renderStatusList,
+        renderAttentionSummary,
         renderOvertimeList,
         isAssignedWorker,
         hasManagedAttendanceRole,
@@ -103,6 +106,8 @@ function wireWorkflowRuntimeForApp(ctx) {
         attendanceService,
         roleService,
         rawAttendanceSheetService,
+        attendanceAutoRepairService,
+        selfHealingSupervisorService,
         dashboardStateUtils,
         getDashboardShift,
         getShiftBounds,
@@ -142,6 +147,7 @@ function wireWorkflowRuntimeForApp(ctx) {
         renderSummaryBox,
         renderCleanGrid,
         renderStatusList,
+        renderAttentionSummary,
         renderOvertimeList,
         collectStatusTransitionWarnings,
         isAssignedWorker,
@@ -213,6 +219,24 @@ function wireWorkflowRuntimeForApp(ctx) {
             },
             set lastOpsQueueAutoResultAlertAt(value) {
                 botState.lastOpsQueueAutoResultAlertAt = value;
+            },
+            get lastRawAttendanceSelfRepairAt() {
+                return botState.lastRawAttendanceSelfRepairAt;
+            },
+            set lastRawAttendanceSelfRepairAt(value) {
+                botState.lastRawAttendanceSelfRepairAt = value;
+            },
+            get lastRawAttendanceSelfRepairSignature() {
+                return botState.lastRawAttendanceSelfRepairSignature;
+            },
+            set lastRawAttendanceSelfRepairSignature(value) {
+                botState.lastRawAttendanceSelfRepairSignature = value;
+            },
+            get lastRawAttendanceSelfRepairAlertAt() {
+                return botState.lastRawAttendanceSelfRepairAlertAt;
+            },
+            set lastRawAttendanceSelfRepairAlertAt(value) {
+                botState.lastRawAttendanceSelfRepairAlertAt = value;
             }
         },
         logger: console

@@ -25,7 +25,10 @@ function createSlashCommands(ctx) {
         CONFIG,
         MessageFlags,
         PermissionFlagsBits,
-        EmbedBuilder
+        EmbedBuilder,
+        ActionRowBuilder,
+        ButtonBuilder,
+        ButtonStyle
     } = ctx;
 
     const {
@@ -43,7 +46,8 @@ function createSlashCommands(ctx) {
         createOpsQueueCommands,
         createOpsSafetyCommands,
         createPayrollAuditCommand,
-        createMaintenanceCommands
+        createMaintenanceCommands,
+        createEndAdenaReviewCommand
     } = deps;
 
     const {
@@ -221,6 +225,21 @@ function createSlashCommands(ctx) {
         syncVoiceStates: (...args) => workflowApi.syncVoiceStates(...args)
     });
 
+    const endAdenaReviewCommand = createEndAdenaReviewCommand({
+        MessageFlags,
+        ActionRowBuilder,
+        ButtonBuilder,
+        ButtonStyle,
+        moment: ctx.moment,
+        timezone: CONFIG.TIMEZONE,
+        getNow: () => ctx.moment().tz(CONFIG.TIMEZONE),
+        getShiftBounds: ctx.getShiftBounds,
+        payrollOperationLogService,
+        endAdenaReconciliationService: services.endAdenaReconciliationService,
+        canRun: member => Boolean(member?.permissions?.has(PermissionFlagsBits.Administrator) || isOwnerId(member?.id || member?.user?.id)),
+        writeAdminActionLog: (...args) => workflowApi.writeAdminActionLog(...args)
+    });
+
     return {
         myInfoCommand,
         diagnosticsCommand,
@@ -237,7 +256,8 @@ function createSlashCommands(ctx) {
         opsQueueCommands,
         opsSafetyCommands,
         payrollAuditCommand,
-        maintenanceCommands
+        maintenanceCommands,
+        endAdenaReviewCommand
     };
 }
 

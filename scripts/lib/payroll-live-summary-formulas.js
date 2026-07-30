@@ -1,13 +1,13 @@
-'use strict';
+﻿'use strict';
 
 const { google } = require('googleapis');
 const { CONFIG } = require('../../src/config/constants');
 const { playerAdenaColumnLetters, parseGreatTabPayrollRows, SERVER_LABELS } = require('../../src/utils/payrollGreatTabParser');
 
 const PAAGRIO_TAB = 'Paagrio Great';
-const HEINE_TAB = 'Heine Great';
+const HEINE_TAB = 'Valakas Great';
 const MIRROR_PAAGRIO = '_Great_Paagrio_Mirror';
-const MIRROR_HEINE = '_Great_Heine_Mirror';
+const MIRROR_HEINE = '_Great_Valacas_Mirror';
 
 function quoteSheet(tabName) {
     return `'${String(tabName).replace(/'/g, "''")}'`;
@@ -56,10 +56,10 @@ function buildMirrorMetricFormula(mirrorTab, metric, columnLetters) {
         return buildHorizontalGreatMetricFormula(mirrorTab, '(?i)^5%$|tx\\s*fee', columnLetters);
     }
     if (metric === 'playerShare') {
-        return buildHorizontalGreatMetricFormula(mirrorTab, '(?i)^0\\.65$|^player$', columnLetters);
+        return buildHorizontalGreatMetricFormula(mirrorTab, '(?i)^0\\.(65|70)$|^player$', columnLetters);
     }
     if (metric === 'ownerShare') {
-        return buildHorizontalGreatMetricFormula(mirrorTab, '(?i)^0\\.35$|^owner$', columnLetters);
+        return buildHorizontalGreatMetricFormula(mirrorTab, '(?i)^0\\.(35|30)$|^owner$', columnLetters);
     }
     if (metric === 'totalPeso') {
         return buildHorizontalGreatMetricFormula(mirrorTab, '(?i)expected\\s*peso', columnLetters);

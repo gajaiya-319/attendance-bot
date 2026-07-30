@@ -11,6 +11,12 @@ function createDashboardStateUtils(deps) {
         getActiveLiveException,
         getOvertimeUsers
     } = deps;
+    const dashboardNameAliases = {
+        'deia#1024': 'Deia',
+        'deia#7347': 'Deia'
+    };
+    const dedupedDashboardIdentityKeys = new Set(['deia']);
+    const dashboardDayOffIdentityKeys = new Set(['deia']);
 
     function overtimeUsers() {
         return typeof getOvertimeUsers === 'function' ? getOvertimeUsers() : [];
@@ -56,7 +62,7 @@ function createDashboardStateUtils(deps) {
         );
         const finishedAt = user?.checkOutRaw || user?.attendanceStatusChangedAt;
         const finishedTooLong = Boolean(
-            user?.isFinished &&
+            (user?.isFinished || user?.attendanceStatus === 'FINISHED') &&
             !user?.checkedIn &&
             !user?.disconnected &&
             finishedAt &&
@@ -97,7 +103,11 @@ function createDashboardStateUtils(deps) {
     }
 
     function getDashboardBaseName(member) {
-        return (member?.displayName || member?.user?.username || 'Unknown').split('-')[0].trim() || 'Unknown';
+        const base = (member?.displayName || member?.user?.username || 'Unknown')
+            .replace(/#\d{3,}$/u, '')
+            .split('-')[0]
+            .trim() || 'Unknown';
+        return dashboardNameAliases[base.toLowerCase()] || base;
     }
 
     function buildDashboardNameCounts(members = []) {
@@ -117,6 +127,115 @@ function createDashboardStateUtils(deps) {
             : baseName;
     }
 
+    function getDashboardUserBaseName(user) {
+        const raw = String(user?.dashboardName || user?.name || 'Unknown');
+        const base = raw.split('-')[0].trim() || 'Unknown';
+        return dashboardNameAliases[base.toLowerCase()] || base.replace(/#\d{3,}$/u, '');
+    }
+
+    function getDashboardIdentityKey(user) {
+        return getDashboardUserBaseName(user)
+            .toLowerCase()
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    function isCurrentDashboardWorker(user) {
+        if (!user || user.dayOff || user.fState === 'OUT_OF_SCOPE') return false;
+        if (user.checkedIn && !user.isFinished) return true;
+        return ['ACTIVE', 'LATE', 'LIVE_OFF', 'LIVE_EXCEPTION', 'DISCONNECTED', 'OVERTIME'].includes(user.fState);
+    }
+
+    function isShadowedFinishedDuplicate(user, activeIdentityKeys) {
+        if (!user?.id || !activeIdentityKeys?.size) return false;
+        if (!(user.fState === 'FINISHED' || user.isFinished || user.attendanceStatus === 'FINISHED')) return false;
+        if (isCurrentDashboardWorker(user)) return false;
+        const key = getDashboardIdentityKey(user);
+        return Boolean(key && activeIdentityKeys.has(key));
+    }
+
+    function dashboardDuplicatePriority(user) {
+        if (isCurrentDashboardWorker(user)) return 100;
+        if (user?.dashboardDayOffOverride) return 80;
+        if (user?.dayOff || user?.fState === 'LEAVE' || user?.attendanceStatus === 'DAY_OFF') return 90;
+        if (user?.fState === 'ABSENT') return 50;
+        if (user?.fState === 'WAITING') return 40;
+        if (user?.fState === 'FINISHED' || user?.isFinished || user?.attendanceStatus === 'FINISHED') return 10;
+        return 0;
+    }
+
+    function filterKnownAliasDuplicates(users = []) {
+        const winners = new Map();
+        const passthrough = [];
+        for (const user of users) {
+            const key = getDashboardIdentityKey(user);
+            if (!dedupedDashboardIdentityKeys.has(key)) {
+                passthrough.push(user);
+                continue;
+            }
+            const winner = winners.get(key);
+            if (!winner || dashboardDuplicatePriority(user) > dashboardDuplicatePriority(winner)) {
+                winners.set(key, user);
+            }
+        }
+        const winnerSet = new Set(winners.values());
+        return users.filter(user => passthrough.includes(user) || winnerSet.has(user));
+    }
+
+    function applyDashboardDayOffOverrides(users = []) {
+        return users.map(user => {
+            const key = getDashboardIdentityKey(user);
+            const shouldApplyOverride = dashboardDayOffIdentityKeys.has(key) &&
+                !isCurrentDashboardWorker(user) &&
+                !user.dayOff &&
+                user.attendanceStatus !== 'DAY_OFF' &&
+                user.fState !== 'LEAVE' &&
+                ['ABSENT', 'WAITING', 'FINISHED'].includes(user.fState || '');
+            if (!shouldApplyOverride) return user;
+
+            // The dashboard needs a display-only override.  Do not mutate the
+            // persisted attendance record while rendering a dashboard.
+            return {
+                ...user,
+                dayOff: true,
+                attendanceStatus: 'DAY_OFF',
+                fState: 'LEAVE',
+                dashboardDayOffOverride: true
+            };
+        });
+    }
+
+    function refreshVisibleDashboardNames(users = []) {
+        const counts = new Map();
+        for (const user of users) {
+            const key = getDashboardIdentityKey(user);
+            counts.set(key, (counts.get(key) || 0) + 1);
+        }
+        for (const user of users) {
+            const baseName = getDashboardUserBaseName(user);
+            const key = getDashboardIdentityKey(user);
+            user.dashboardName = counts.get(key) > 1
+                ? `${baseName}#${String(user.id || '').slice(-4)}`
+                : baseName;
+        }
+        return users;
+    }
+
+    function filterShadowedDashboardUsers(visibleUsers = []) {
+        const dayOffAdjustedUsers = applyDashboardDayOffOverrides(visibleUsers);
+        const activeIdentityKeys = new Set(
+            dayOffAdjustedUsers
+                .filter(isCurrentDashboardWorker)
+                .map(getDashboardIdentityKey)
+                .filter(Boolean)
+        );
+        return refreshVisibleDashboardNames(
+            filterKnownAliasDuplicates(
+                dayOffAdjustedUsers.filter(user => !isShadowedFinishedDuplicate(user, activeIdentityKeys))
+            )
+        );
+    }
+
     function buildCurrentRoleMemberIds(members = [], roleId, dashboardMaintenance = false) {
         const ids = new Set();
         if (dashboardMaintenance) return ids;
@@ -128,6 +247,10 @@ function createDashboardStateUtils(deps) {
             if (matchesCurrentRole || isSharedSeat) ids.add(member.id);
         }
         return ids;
+    }
+
+    function isAbsentAfterGrace(bounds, now) {
+        return Boolean(bounds?.start && now.isSameOrAfter(bounds.start) && now.diff(bounds.start, 'minutes') >= 120);
     }
 
     function getLegacyDashboardState(user, context) {
@@ -150,8 +273,9 @@ function createDashboardStateUtils(deps) {
         if (user.checkedIn && !isStreaming) return 'LIVE_OFF';
         if ((hasLiveOffVoice || (isVoiceConnected && !isStreaming)) && user.checkedIn) return isPreShift ? 'WAITING' : 'LIVE_OFF';
         if (user.checkedIn) return user.status === 'late' ? 'LATE' : 'ACTIVE';
+        if (isAbsentAfterGrace(bounds, now)) return 'ABSENT';
         if (isVoiceConnected && !isStreaming) return 'WAITING';
-        return now.isAfter(bounds.start) && now.diff(bounds.start, 'minutes') > 120 ? 'ABSENT' : 'WAITING';
+        return 'WAITING';
     }
 
     function getHybridDashboardState(user, context) {
@@ -170,7 +294,7 @@ function createDashboardStateUtils(deps) {
         const isOT = overtimeUsers().some(ot => ot.id === user.id);
         const finishedAt = user.checkOutRaw || user.attendanceStatusChangedAt || null;
         const finishedVisibleExpired = Boolean(
-            user.isFinished &&
+            (user.isFinished || attendanceStatus === 'FINISHED') &&
             finishedAt &&
             now.diff(moment(finishedAt).tz(CONFIG.TIMEZONE), 'minutes') > CONFIG.FINISHED_VISIBLE_AFTER_MINS
         );
@@ -188,8 +312,9 @@ function createDashboardStateUtils(deps) {
         }
         const finishedBeforeCurrentShift = Boolean(finishedAt && bounds?.start && moment(finishedAt).tz(CONFIG.TIMEZONE).isBefore(bounds.start));
         if (finishedVisibleExpired && isWithinCurrentShiftBounds && finishedBeforeCurrentShift && !user.checkedIn && !isOT) {
+            if (isAbsentAfterGrace(bounds, now)) return 'ABSENT';
             if (isVoiceConnected && !isStreaming) return 'WAITING';
-            return now.diff(bounds.start, 'minutes') > 120 ? 'ABSENT' : 'WAITING';
+            return 'WAITING';
         }
         if (attendanceStatus === 'FINISHED' || user.isFinished) return 'FINISHED';
         if (voiceStatus === 'DISCONNECTED' || user.disconnected) return 'DISCONNECTED';
@@ -204,6 +329,7 @@ function createDashboardStateUtils(deps) {
 
         if (attendanceStatus === 'OVERTIME' || attendanceStatus === 'WORKING') {
             if (isStreaming) return user.status === 'late' ? 'LATE' : 'ACTIVE';
+            if (!isVoiceConnected) return 'DISCONNECTED';
             if (voiceStatus === 'LIVE_OFF') return 'LIVE_OFF';
             if (voiceStatus === 'LIVE_ON') return user.status === 'late' ? 'LATE' : 'ACTIVE';
             if (voiceStatus === 'OFFLINE') return user.checkedIn ? legacy : 'WAITING';
@@ -393,7 +519,11 @@ function createDashboardStateUtils(deps) {
         getDashboardBaseName,
         buildDashboardNameCounts,
         getDashboardDisplayName,
+        getDashboardUserBaseName,
+        getDashboardIdentityKey,
+        filterShadowedDashboardUsers,
         buildCurrentRoleMemberIds,
+        isAbsentAfterGrace,
         getLegacyDashboardState,
         getHybridDashboardState,
         buildExclusiveDashboardGroups,

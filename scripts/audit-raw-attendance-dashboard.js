@@ -57,6 +57,14 @@ function rowValue(row, key) {
     return normalize(row?.[key]);
 }
 
+function normalizeServer(value) {
+    const text = normalize(value);
+    const upper = text.toUpperCase();
+    if (upper === 'HEINE' || upper === 'VALACAS' || upper === 'VALAKAS' || text === '\uBC1C\uB77C\uCE74\uC2A4' || text === '\uD558\uC774\uB124') return 'HEINE';
+    if (upper === 'PAAGRIO' || text === '\uD30C\uC544\uADF8\uB9AC\uC624') return 'PAAGRIO';
+    return upper;
+}
+
 function parseArgs(argv = []) {
     const options = {
         live: false,
@@ -80,7 +88,7 @@ function auditRows(rows = []) {
     rows.forEach((row, index) => {
         const rowNumber = index + 2;
         const date = rowValue(row, RAW_COLUMNS.date);
-        const server = rowValue(row, RAW_COLUMNS.server).toUpperCase();
+        const server = normalizeServer(rowValue(row, RAW_COLUMNS.server));
         const shift = rowValue(row, RAW_COLUMNS.shift).toUpperCase();
         const name = rowValue(row, RAW_COLUMNS.name);
         const status = rowValue(row, RAW_COLUMNS.status);
@@ -157,23 +165,44 @@ function runStaticAudit() {
     const constants = read(constantsFile);
 
     assertIncludes(code, "params.api === 'raw'", 'raw-attendance-apps-script.js');
-    assertIncludes(code, "createHtmlOutputFromFile('AttendanceDashboard')", 'raw-attendance-apps-script.js');
+    assertIncludes(code, "createTemplateFromFile('AttendanceDashboard')", 'raw-attendance-apps-script.js');
     assertIncludes(code, 'function getRawAttendanceRows()', 'raw-attendance-apps-script.js');
+    assertIncludes(code, 'autoArchivePreviousMonthBonusRanking_();', 'raw-attendance-apps-script.js');
+    assertIncludes(code, "const BONUS_RANKING_ARCHIVE_PREFIX = 'Bonus_Ranking_'", 'raw-attendance-apps-script.js');
+    assertIncludes(code, 'function buildBonusRankingRowsForMonth_', 'raw-attendance-apps-script.js');
+    assertIncludes(code, 'function writeBonusRankingArchiveSheet_', 'raw-attendance-apps-script.js');
     assertIncludes(code, 'const attendanceCells = row.slice(0, RAW_ATTENDANCE_HEADERS.length)', 'raw-attendance-apps-script.js');
     assertIncludes(code, 'if (!hasIdentity && !hasAttendanceScope && !hasAttendanceFact) return null', 'raw-attendance-apps-script.js');
 
     assertIncludes(constants, currentWebAppBase, 'constants.js');
     assertNotIncludes(constants, retiredWebAppBase, 'constants.js');
     assertIncludes(html, `const API_URL = '${currentWebAppBase}?api=raw';`, 'AttendanceDashboard.html');
+    assertIncludes(html, "const LANG = '<?= lang ?>' === 'en' ? 'en' : 'ko';", 'AttendanceDashboard.html');
     assertIncludes(html, "if (window.google && google.script && google.script.run)", 'AttendanceDashboard.html');
     assertIncludes(html, 'google.script.run', 'AttendanceDashboard.html');
     assertIncludes(html, "fetch(API_URL + '&t=' + Date.now()", 'AttendanceDashboard.html');
     assertIncludes(html, 'function showLoadError(error)', 'AttendanceDashboard.html');
     assertIncludes(html, "let currentSort = 'ATT'", 'AttendanceDashboard.html');
-    assertIncludes(html, "else if (status === '\\uc5f0\\uc7a5\\uadfc\\ubb34')", 'AttendanceDashboard.html');
+    assertIncludes(html, 'function getRankFlags(row, status, note, shift)', 'AttendanceDashboard.html');
+    assertIncludes(html, 'function addRankFlags(item, dayFlags, flags)', 'AttendanceDashboard.html');
+    assertIncludes(html, 'function calculateRankScore(item)', 'AttendanceDashboard.html');
+    assertIncludes(html, 'function isFinalEarlyOutRow(status, note)', 'AttendanceDashboard.html');
+    assertIncludes(html, '!hasReturnAfterLastEarlyOut(note) && !hasFinalNormalClockOutNote(note)', 'AttendanceDashboard.html');
     assertIncludes(html, 'const attended = d.jung + d.ji + d.jo', 'AttendanceDashboard.html');
     assertIncludes(html, 'tBase += d.jung + d.ji + d.jo + d.gyul', 'AttendanceDashboard.html');
     assertIncludes(html, 'const base = attended + d.gyul', 'AttendanceDashboard.html');
+    assertIncludes(html, 'const dayStatusMap = {}', 'AttendanceDashboard.html');
+    assertIncludes(html, 'addRankFlags(userMap[key], dayStatusMap[dayKey], getRankFlags(row, status, note, shift));', 'AttendanceDashboard.html');
+    assertIncludes(html, 'addRankFlags(map[key], dayStatusMap[dayKey], getRankFlags(row, status, note, shift));', 'AttendanceDashboard.html');
+    assertIncludes(html, 'if (flags.jung && !dayFlags.jung) { item.jung += 1; dayFlags.jung = true; }', 'AttendanceDashboard.html');
+    assertIncludes(html, 'if (flags.ji && !dayFlags.ji) { item.ji += 1; dayFlags.ji = true; }', 'AttendanceDashboard.html');
+    assertIncludes(html, 'if (flags.h2late && !dayFlags.h2late) { item.h2late += 1; dayFlags.h2late = true; }', 'AttendanceDashboard.html');
+    assertIncludes(html, 'if (flags.jo && !dayFlags.jo) { item.jo += 1; dayFlags.jo = true; }', 'AttendanceDashboard.html');
+    assertIncludes(html, 'if (flags.yeon && !dayFlags.yeon) { item.yeon += 1; dayFlags.yeon = true; }', 'AttendanceDashboard.html');
+    assertIncludes(html, 'lateMinutes > 5', 'AttendanceDashboard.html');
+    assertIncludes(html, 'lateMinutes >= 120', 'AttendanceDashboard.html');
+    assertIncludes(html, 'LIVE OFF/DC', 'AttendanceDashboard.html');
+    assertIncludes(html, '&#47021;&#53433;&#51216;&#49688;', 'AttendanceDashboard.html');
     assertIncludes(html, 'b.attRate - a.attRate', 'AttendanceDashboard.html');
     assertIncludes(html, 'b.jung - a.jung', 'AttendanceDashboard.html');
     assertIncludes(html, 'class="control-row filter-row"', 'AttendanceDashboard.html');

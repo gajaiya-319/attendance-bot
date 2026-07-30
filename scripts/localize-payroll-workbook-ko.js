@@ -10,9 +10,9 @@ const KEY_FILE = process.env.GOOGLE_APPLICATION_CREDENTIALS || 'sheet-bot-key.js
 const RENAME = {
     'Total Summary': '전체 요약',
     'Paagrio 3-Day': '파아그리오 3일정산',
-    'Heine 3-Day': '하이네 3일정산',
+    'Valacas 3-Day': 'Valacas 3일정산',
     'Paagrio Raw': '파아그리오 원본',
-    'Heine Raw': '하이네 원본'
+    'Valacas Raw': 'Valacas 원본'
 };
 
 function col(index) {
@@ -41,8 +41,8 @@ function periodRow(rawTab, label, server, row, dayRows, nightRows, daySalaryRows
         `=${sumPlayerColumns(rawTab, dayRows[0], dayRows[1])}+${sumPlayerColumns(rawTab, nightRows[0], nightRows[1])}`,
         `=${sumPlayerColumns(rawTab, daySalaryRows[0], daySalaryRows[1])}+${sumPlayerColumns(rawTab, nightSalaryRows[0], nightSalaryRows[1])}`,
         `=D${row}*0.05`,
-        `=D${row}*0.65`,
-        `=D${row}*0.35`,
+        `=D${row}*0.70`,
+        `=D${row}*0.30`,
         `=F${row}*0.04`
     ];
 }
@@ -51,7 +51,7 @@ function serverValues(title, rawTab) {
     return [
         [`${title} 3일 급여 정산`],
         ['원본 시트 ID', '1oScjqyvV0EHZffLYxZL4fI_pLVr7R2ABvLv7n-_gJTk'],
-        ['기간', '서버', '총 획득 아데나', '총 급여', '수수료 5%', '직원 65%', '오너 35%', '총 페소'],
+        ['기간', '서버', '총 획득 아데나', '총 급여', '수수료 5%', '직원 70%', '오너 30%', '총 페소'],
         periodRow(rawTab, '1~3일', title, 4, [8, 10], [34, 36], [16, 18], [42, 44]),
         periodRow(rawTab, '4~6일', title, 5, [11, 13], [37, 39], [19, 21], [45, 47]),
         ['전체 합계', title, '=SUM(C4:C5)', '=SUM(D4:D5)', '=SUM(E4:E5)', '=SUM(F4:F5)', '=SUM(G4:G5)', '=SUM(H4:H5)']
@@ -103,9 +103,9 @@ async function main() {
                     values: [
                         ['3일 단위 급여 전체 요약'],
                         ['원본 시트 ID', '1oScjqyvV0EHZffLYxZL4fI_pLVr7R2ABvLv7n-_gJTk'],
-                        ['서버', '총 획득 아데나', '총 급여', '수수료 5%', '직원 65%', '오너 35%', '총 페소', '비고'],
+                        ['서버', '총 획득 아데나', '총 급여', '수수료 5%', '직원 70%', '오너 30%', '총 페소', '비고'],
                         ['파아그리오', "='파아그리오 3일정산'!C6", "='파아그리오 3일정산'!D6", "='파아그리오 3일정산'!E6", "='파아그리오 3일정산'!F6", "='파아그리오 3일정산'!G6", "='파아그리오 3일정산'!H6", ''],
-                        ['하이네', "='하이네 3일정산'!C6", "='하이네 3일정산'!D6", "='하이네 3일정산'!E6", "='하이네 3일정산'!F6", "='하이네 3일정산'!G6", "='하이네 3일정산'!H6", ''],
+                        ['Valacas', "='Valacas 3일정산'!C6", "='Valacas 3일정산'!D6", "='Valacas 3일정산'!E6", "='Valacas 3일정산'!F6", "='Valacas 3일정산'!G6", "='Valacas 3일정산'!H6", ''],
                         ['전체 합계', '=SUM(B4:B5)', '=SUM(C4:C5)', '=SUM(D4:D5)', '=SUM(E4:E5)', '=SUM(F4:F5)', '=SUM(G4:G5)', ''],
                         ['안내', '', '', '', '', '', '', '값이 #REF!로 보이면 숨김 원본 탭에서 액세스 허용을 한 번 눌러주세요.']
                     ]
@@ -115,16 +115,16 @@ async function main() {
                     values: serverValues('파아그리오', '파아그리오 원본')
                 },
                 {
-                    range: "'하이네 3일정산'!A1:H6",
-                    values: serverValues('하이네', '하이네 원본')
+                    range: "'Valacas 3일정산'!A1:H6",
+                    values: serverValues('Valacas', 'Valacas 원본')
                 },
                 {
                     range: "'파아그리오 원본'!A1",
                     values: [['=IMPORTRANGE("1oScjqyvV0EHZffLYxZL4fI_pLVr7R2ABvLv7n-_gJTk","\'Paagrio Great\'!A1:AF80")']]
                 },
                 {
-                    range: "'하이네 원본'!A1",
-                    values: [['=IMPORTRANGE("1oScjqyvV0EHZffLYxZL4fI_pLVr7R2ABvLv7n-_gJTk","\'Heine Great\'!A1:AF80")']]
+                    range: "'Valacas 원본'!A1",
+                    values: [['=IMPORTRANGE("1oScjqyvV0EHZffLYxZL4fI_pLVr7R2ABvLv7n-_gJTk","\'Valacas Great\'!A1:AF80")']]
                 }
             ]
         }

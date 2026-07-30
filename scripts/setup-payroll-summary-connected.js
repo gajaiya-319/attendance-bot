@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Connect 급여토탈관리 최근_3일_요약 → Work list Paagrio/Heine Great (IMPORTRANGE + local formulas).
+ * Connect payroll summary recent 3-day view to Work list Paagrio/Valacas Great (IMPORTRANGE + local formulas).
  *
  *   node scripts/setup-payroll-summary-connected.js
  */

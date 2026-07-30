@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 
 require('dotenv').config();
 const { google } = require('googleapis');
@@ -16,7 +16,7 @@ async function main() {
         keyFile: key,
         scopes: ['https://www.googleapis.com/auth/spreadsheets']
     }) });
-    for (const tab of ['Paagrio Great', 'Heine Great']) {
+    for (const tab of ['Paagrio Great', 'Valakas Great']) {
         const res = await sheets.spreadsheets.values.get({
             spreadsheetId: id,
             range: `'${tab}'!A1:ZZ120`,

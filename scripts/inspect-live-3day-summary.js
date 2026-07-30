@@ -6,9 +6,9 @@ const { google } = require('googleapis');
 const { CONFIG } = require('../src/config/constants');
 const { parseGreatTabPayrollRows, SERVER_LABELS } = require('../src/utils/payrollGreatTabParser');
 
-const RECENT = '최근_3일_요약';
+const RECENT = '\uCD5C\uADFC_3\uC77C_\uC694\uC57D';
 const PAAGRIO = process.env.PURCHASE_PAAGRIO_TAB_NAME || 'Paagrio Great';
-const HEINE = process.env.PURCHASE_HEINE_TAB_NAME || 'Heine Great';
+const HEINE = process.env.PURCHASE_VALACAS_TAB_NAME || process.env.PURCHASE_HEINE_TAB_NAME || 'Valakas Great';
 
 function payrollId() {
     return process.env.PAYROLL_SUMMARY_SPREADSHEET_ID
@@ -47,12 +47,12 @@ async function main() {
         }),
         sheets.spreadsheets.values.get({
             spreadsheetId: gid,
-            range: `'${PAAGRIO}'!A1:M120`,
+            range: `'${PAAGRIO}'!A1:ZZ120`,
             valueRenderOption: 'UNFORMATTED_VALUE'
         }),
         sheets.spreadsheets.values.get({
             spreadsheetId: gid,
-            range: `'${HEINE}'!A1:M120`,
+            range: `'${HEINE}'!A1:ZZ120`,
             valueRenderOption: 'UNFORMATTED_VALUE'
         })
     ]);

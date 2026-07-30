@@ -26,7 +26,8 @@ function createSystemStateBridge({
             panelInfo: state.panelInfo || current.panelInfo,
             announceData: state.announceData || current.announceData,
             dayOffReservations: state.dayOffReservations || {},
-            liveExceptions: state.liveExceptions || {}
+            liveExceptions: state.liveExceptions || {},
+            attendanceEventLog: Array.isArray(state.attendanceEventLog) ? state.attendanceEventLog : []
         });
     }
 

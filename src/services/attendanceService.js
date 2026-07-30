@@ -1,6 +1,10 @@
 'use strict';
 
 const { evaluateStatusTransition } = require('./stateTransitionPolicy');
+const {
+    incrementMonthlyAttendanceStat,
+    markMonthlyOvertimeAward
+} = require('../utils/monthlyAttendanceStats');
 
 function createAttendanceService(deps) {
     const {
@@ -10,7 +14,8 @@ function createAttendanceService(deps) {
         getOvertimeUsers,
         determineShift,
         getShiftSessionKey,
-        getShiftBounds
+        getShiftBounds,
+        appendSystemEvent = null
     } = deps;
 
     function ensureUserData(member, shift = null) {
@@ -36,6 +41,7 @@ function createAttendanceService(deps) {
                 points: 0,
                 totalNormal: 0,
                 totalLate: 0,
+                totalExcessiveLate: 0,
                 totalAbsent: 0,
                 totalEarly: 0,
                 totalOT: 0,
@@ -45,8 +51,15 @@ function createAttendanceService(deps) {
                 liveOffStartedAt: null,
                 lastLiveOnAt: null,
                 lastLiveOffAt: null,
+                postShiftOtInterruptedAt: null,
+                postShiftOtInterruptedReason: null,
                 preShiftLiveAt: null,
+                preShiftVoiceAt: null,
+                preShiftVoiceMode: null,
+                preShiftVoiceWindowStartAt: null,
+                preShiftVoiceWindowEndAt: null,
                 pendingClockOut: null,
+                pendingAutoOTConfirm: null,
                 attendanceEvents: [],
                 statusTransitionSeq: 0,
                 statusTransitionWarnings: [],
@@ -74,6 +87,10 @@ function createAttendanceService(deps) {
                 reversibleEarlyPenaltyPoints: null,
                 liveOffWarnedFor: null,
                 liveOffWarningMarks: [],
+                absentWarningMarks: [],
+                lastAbsentWarningAt: null,
+                excessiveLateCountedThisShift: false,
+                monthlyStats: null,
                 finishedLiveOffReminderMarks: [],
                 lastFinishedReturnPromptKey: null,
                 lastActivityAt: null,
@@ -97,8 +114,15 @@ function createAttendanceService(deps) {
         if (!Object.prototype.hasOwnProperty.call(user, 'liveOffStartedAt')) user.liveOffStartedAt = null;
         if (!Object.prototype.hasOwnProperty.call(user, 'lastLiveOnAt')) user.lastLiveOnAt = null;
         if (!Object.prototype.hasOwnProperty.call(user, 'lastLiveOffAt')) user.lastLiveOffAt = null;
+        if (!Object.prototype.hasOwnProperty.call(user, 'postShiftOtInterruptedAt')) user.postShiftOtInterruptedAt = null;
+        if (!Object.prototype.hasOwnProperty.call(user, 'postShiftOtInterruptedReason')) user.postShiftOtInterruptedReason = null;
         if (!Object.prototype.hasOwnProperty.call(user, 'preShiftLiveAt')) user.preShiftLiveAt = null;
+        if (!Object.prototype.hasOwnProperty.call(user, 'preShiftVoiceAt')) user.preShiftVoiceAt = null;
+        if (!Object.prototype.hasOwnProperty.call(user, 'preShiftVoiceMode')) user.preShiftVoiceMode = null;
+        if (!Object.prototype.hasOwnProperty.call(user, 'preShiftVoiceWindowStartAt')) user.preShiftVoiceWindowStartAt = null;
+        if (!Object.prototype.hasOwnProperty.call(user, 'preShiftVoiceWindowEndAt')) user.preShiftVoiceWindowEndAt = null;
         if (!Object.prototype.hasOwnProperty.call(user, 'pendingClockOut')) user.pendingClockOut = null;
+        if (!Object.prototype.hasOwnProperty.call(user, 'pendingAutoOTConfirm')) user.pendingAutoOTConfirm = null;
         if (!Array.isArray(user.attendanceEvents)) user.attendanceEvents = [];
         if (!Object.prototype.hasOwnProperty.call(user, 'statusTransitionSeq')) user.statusTransitionSeq = 0;
         if (!Array.isArray(user.statusTransitionWarnings)) user.statusTransitionWarnings = [];
@@ -125,6 +149,11 @@ function createAttendanceService(deps) {
         if (!Object.prototype.hasOwnProperty.call(user, 'reversibleEarlyPenaltyAppliedAt')) user.reversibleEarlyPenaltyAppliedAt = null;
         if (!Object.prototype.hasOwnProperty.call(user, 'reversibleEarlyPenaltyPoints')) user.reversibleEarlyPenaltyPoints = null;
         if (!Array.isArray(user.liveOffWarningMarks)) user.liveOffWarningMarks = [];
+        if (!Array.isArray(user.absentWarningMarks)) user.absentWarningMarks = [];
+        if (!Object.prototype.hasOwnProperty.call(user, 'lastAbsentWarningAt')) user.lastAbsentWarningAt = null;
+        if (!Object.prototype.hasOwnProperty.call(user, 'totalExcessiveLate')) user.totalExcessiveLate = 0;
+        if (!Object.prototype.hasOwnProperty.call(user, 'excessiveLateCountedThisShift')) user.excessiveLateCountedThisShift = false;
+        if (!Object.prototype.hasOwnProperty.call(user, 'monthlyStats')) user.monthlyStats = null;
         if (!Array.isArray(user.finishedLiveOffReminderMarks)) user.finishedLiveOffReminderMarks = [];
         if (!Object.prototype.hasOwnProperty.call(user, 'lastFinishedReturnPromptKey')) user.lastFinishedReturnPromptKey = null;
         if (!Object.prototype.hasOwnProperty.call(user, 'lastActivityAt')) user.lastActivityAt = null;
@@ -244,6 +273,22 @@ function createAttendanceService(deps) {
         return session;
     }
 
+    function getLatestAutoTimeoutSession(user, now, sources = ['dc-timeout', 'live-off-timeout']) {
+        if (!user || !Array.isArray(user.sessions)) return null;
+        const ref = moment(now).tz(CONFIG.TIMEZONE);
+        return user.sessions
+            .filter(session => {
+                if (!session?.clockOutAt || !sources.includes(session.clockOutSource)) return false;
+                const scheduledEnd = session.scheduledEndAt ? moment(session.scheduledEndAt).tz(CONFIG.TIMEZONE) : null;
+                return Boolean(scheduledEnd?.isValid?.() && ref.isBefore(scheduledEnd));
+            })
+            .sort((a, b) => {
+                const aAt = moment(a.clockOutAt).tz(CONFIG.TIMEZONE).valueOf();
+                const bAt = moment(b.clockOutAt).tz(CONFIG.TIMEZONE).valueOf();
+                return bAt - aAt;
+            })[0] || null;
+    }
+
     function startSessionPeriod(periods, startedAt, reason = null) {
         if (!Array.isArray(periods)) return;
         if (periods.some(p => !p.endedAt)) return;
@@ -264,15 +309,52 @@ function createAttendanceService(deps) {
         open.minutes = Math.max(0, end.diff(moment(open.startedAt).tz(CONFIG.TIMEZONE), 'minutes'));
     }
 
+    function extendLastTimeoutPeriod(session, periodKey, recoveredAt) {
+        if (!session) return null;
+        if (!Array.isArray(session[periodKey])) session[periodKey] = [];
+        const recovered = moment(recoveredAt).tz(CONFIG.TIMEZONE);
+        const timeoutAt = session.clockOutAt ? moment(session.clockOutAt).tz(CONFIG.TIMEZONE) : recovered;
+        let period = session[periodKey].slice().reverse().find(candidate => {
+            if (!candidate?.startedAt) return false;
+            if (!candidate.endedAt) return true;
+            const ended = moment(candidate.endedAt).tz(CONFIG.TIMEZONE);
+            return Math.abs(ended.diff(timeoutAt, 'minutes')) <= 1;
+        });
+        if (!period) {
+            period = {
+                startedAt: timeoutAt.toISOString(),
+                endedAt: null,
+                minutes: 0,
+                reason: session.clockOutSource || periodKey
+            };
+            session[periodKey].push(period);
+        }
+        period.endedAt = recovered.toISOString();
+        period.minutes = Math.max(0, recovered.diff(moment(period.startedAt).tz(CONFIG.TIMEZONE), 'minutes'));
+        return period;
+    }
+
+    function getPeriodMinutes(period, fallbackEnd) {
+        if (!period?.startedAt) return 0;
+        const end = moment(fallbackEnd).tz(CONFIG.TIMEZONE);
+        const started = moment(period.startedAt).tz(CONFIG.TIMEZONE);
+        const ended = period.endedAt ? moment(period.endedAt).tz(CONFIG.TIMEZONE) : end;
+        return Math.max(0, ended.diff(started, 'minutes'));
+    }
+
     function sumSessionPeriods(periods, fallbackEnd) {
         if (!Array.isArray(periods)) return 0;
-        const end = moment(fallbackEnd).tz(CONFIG.TIMEZONE);
         return periods.reduce((total, period) => {
-            if (!period?.startedAt) return total;
-            const started = moment(period.startedAt).tz(CONFIG.TIMEZONE);
-            const ended = period.endedAt ? moment(period.endedAt).tz(CONFIG.TIMEZONE) : end;
-            const minutes = Math.max(0, ended.diff(started, 'minutes'));
-            return total + minutes;
+            return total + getPeriodMinutes(period, fallbackEnd);
+        }, 0);
+    }
+
+    function sumCreditedLiveOffPeriods(periods, fallbackEnd) {
+        if (!Array.isArray(periods)) return 0;
+        const ignoreMins = Math.max(0, Number(CONFIG.LIVE_OFF_IGNORE_MINS || 0));
+        return periods.reduce((total, period) => {
+            const minutes = getPeriodMinutes(period, fallbackEnd);
+            return total + (minutes > ignoreMins ? minutes : 0);
         }, 0);
     }
 
@@ -290,7 +372,7 @@ function createAttendanceService(deps) {
             : moment(now).tz(CONFIG.TIMEZONE);
         const start = moment(session.clockInAt).tz(CONFIG.TIMEZONE);
         const grossMinutes = Math.max(0, end.diff(start, 'minutes'));
-        const liveOffMinutes = Math.min(grossMinutes, sumSessionPeriods(session.liveOffPeriods, end));
+        const liveOffMinutes = Math.min(grossMinutes, sumCreditedLiveOffPeriods(session.liveOffPeriods, end));
         const dcMinutes = Math.min(grossMinutes, sumSessionPeriods(session.dcPeriods, end));
         const creditedMinutes = Math.max(0, grossMinutes - liveOffMinutes - dcMinutes);
         return {
@@ -316,18 +398,38 @@ function createAttendanceService(deps) {
         };
     }
 
+    function getOvertimeSourceSession(user, at) {
+        if (!user || !Array.isArray(user.sessions)) return null;
+        const ref = moment(at).tz(CONFIG.TIMEZONE);
+        return user.sessions
+            .filter(session => {
+                if (!session?.scheduledEndAt || !session?.clockInAt || !session?.clockOutAt) return false;
+                const scheduledEnd = moment(session.scheduledEndAt).tz(CONFIG.TIMEZONE);
+                if (!scheduledEnd.isValid() || scheduledEnd.isAfter(ref.clone().add(1, 'minute'))) return false;
+                return ref.diff(scheduledEnd, 'hours', true) <= Number(CONFIG.PURGE_MANUAL_OT || 40);
+            })
+            .sort((a, b) => {
+                const aEnd = moment(a.scheduledEndAt).tz(CONFIG.TIMEZONE).valueOf();
+                const bEnd = moment(b.scheduledEndAt).tz(CONFIG.TIMEZONE).valueOf();
+                return bEnd - aEnd;
+            })[0] || null;
+    }
+
     function addOvertimeUser(user, type = 'AUTO', startedAt = null) {
         if (!user) return false;
         const overtimeUsers = getOvertimeUsers();
         const otStartedAt = startedAt
             ? moment(startedAt).tz(CONFIG.TIMEZONE)
             : moment().tz(CONFIG.TIMEZONE);
+        const session = getOpenSession(user);
+        const shiftSessionKey = session?.sessionKey || (user.shift ? getShiftSessionKey(user.shift, otStartedAt) : null);
         const existing = overtimeUsers.find(o => o.id === user.id);
         if (existing) {
             existing.name = user.name || existing.name;
             if (type === 'FORCED') existing.type = 'FORCED';
             existing.shift = user.shift || existing.shift || null;
             existing.startedAt = existing.startedAt || otStartedAt.toISOString();
+            existing.shiftSessionKey = shiftSessionKey || existing.shiftSessionKey || null;
             return false;
         }
         overtimeUsers.push({
@@ -335,10 +437,9 @@ function createAttendanceService(deps) {
             name: user.name,
             type,
             shift: user.shift || null,
-            shiftSessionKey: user.shift ? getShiftSessionKey(user.shift, moment().tz(CONFIG.TIMEZONE)) : null,
+            shiftSessionKey,
             startedAt: otStartedAt.toISOString()
         });
-        const session = getOpenSession(user);
         if (session) {
             session.otType = type;
             session.otStartedAt = otStartedAt.toISOString();
@@ -360,15 +461,42 @@ function createAttendanceService(deps) {
         }
         user.lastEventKey = key;
         user.lastEventAt = eventAt.toISOString();
-        user.attendanceEvents.push({
+        const event = {
             at: eventAt.toISOString(),
             type,
             source,
             meta
-        });
+        };
+        user.attendanceEvents.push(event);
         if (user.attendanceEvents.length > 100) {
             user.attendanceEvents = user.attendanceEvents.slice(-100);
         }
+        if (typeof appendSystemEvent === 'function') {
+            appendSystemEvent({
+                ...event,
+                userId: user.id || null,
+                userName: user.name || null,
+                shift: user.shift || null,
+                attendanceStatus: user.attendanceStatus || null,
+                voiceStatus: user.voiceStatus || null,
+                sessionId: meta?.sessionId || user.activeSessionId || null
+            });
+        }
+        return true;
+    }
+
+    function countExcessiveLateOnce(user, at) {
+        if (!user || user.excessiveLateCountedThisShift) return false;
+        user.totalExcessiveLate = (user.totalExcessiveLate || 0) + 1;
+        user.points = (user.points || 0) + (CONFIG.POINTS.EXCESSIVE_LATE || 0);
+        incrementMonthlyAttendanceStat(user, {
+            moment,
+            at,
+            timezone: CONFIG.TIMEZONE,
+            field: 'totalExcessiveLate',
+            pointsDelta: CONFIG.POINTS.EXCESSIVE_LATE || 0
+        });
+        user.excessiveLateCountedThisShift = true;
         return true;
     }
 
@@ -442,14 +570,16 @@ function createAttendanceService(deps) {
 
     function applyClockInCore(user, member, shift, now, clockInRule, isAuto = false) {
         const source = isAuto ? 'live_on' : 'button_or_command';
-        appendAttendanceEvent(user, 'clock_in_attempt', now, source, { shift });
 
         if (!clockInRule.ok) {
             user.shift = shift;
             user.preShiftLiveAt = now.toISOString();
             const waitLogKey = `${shift}:${clockInRule.bounds.start.format('YYYY-MM-DD HH:mm')}:too-early`;
             const shouldLogPreShiftWait = user.lastPreShiftWaitLogKey !== waitLogKey;
-            if (shouldLogPreShiftWait) user.lastPreShiftWaitLogKey = waitLogKey;
+            if (shouldLogPreShiftWait) {
+                user.lastPreShiftWaitLogKey = waitLogKey;
+                appendAttendanceEvent(user, 'clock_in_attempt', now, source, { shift, result: 'waiting' });
+            }
             return {
                 ok: false,
                 user,
@@ -458,8 +588,58 @@ function createAttendanceService(deps) {
                 preShiftStart: clockInRule.bounds.start
             };
         }
+        appendAttendanceEvent(user, 'clock_in_attempt', now, source, { shift, result: 'accepted' });
 
-        const recognizedAt = clockInRule.recognizedAt;
+        let recognizedAt = clockInRule.recognizedAt;
+        const bounds = clockInRule.bounds || getShiftBounds(shift, now);
+        const previousPreShiftLiveAt = user.preShiftLiveAt ? moment(user.preShiftLiveAt).tz(CONFIG.TIMEZONE) : null;
+        const previousPreShiftVoiceAt = user.preShiftVoiceAt ? moment(user.preShiftVoiceAt).tz(CONFIG.TIMEZONE) : null;
+        const preShiftVoiceMode = user.preShiftVoiceMode === 'maintenance' ? 'maintenance' : 'regular';
+        const preShiftVoiceWindowStartAt = user.preShiftVoiceWindowStartAt ? moment(user.preShiftVoiceWindowStartAt).tz(CONFIG.TIMEZONE) : null;
+        const preShiftVoiceWindowEndAt = user.preShiftVoiceWindowEndAt ? moment(user.preShiftVoiceWindowEndAt).tz(CONFIG.TIMEZONE) : null;
+        const preShiftMemoryMins = Math.max(
+            Number(CONFIG.PRE_SHIFT_LIVE_MEMORY_MINS || 30),
+            Number(CONFIG.PRE_SHIFT_LIVE_BUFFER_MINS || 0)
+        );
+        const reconnectGraceMins = Math.max(0, Number(CONFIG.PRE_SHIFT_RECONNECT_GRACE_MINS || CONFIG.GRACE_PERIOD_MINS || 10));
+        const canRecognizePreShiftReconnect = Boolean(
+            !clockInRule.preShift &&
+            previousPreShiftLiveAt?.isValid?.() &&
+            bounds?.start &&
+            previousPreShiftLiveAt.isBefore(bounds.start) &&
+            previousPreShiftLiveAt.isSameOrAfter(bounds.start.clone().subtract(preShiftMemoryMins, 'minutes')) &&
+            moment(now).tz(CONFIG.TIMEZONE).diff(bounds.start, 'minutes') <= reconnectGraceMins
+        );
+        const voiceGraceMins = Math.max(0, Number(CONFIG.PRE_SHIFT_VOICE_LIVE_GRACE_MINS || CONFIG.PRE_SHIFT_RECONNECT_GRACE_MINS || CONFIG.GRACE_PERIOD_MINS || 10));
+        const voiceMemoryMins = Math.max(voiceGraceMins, Number(CONFIG.PRE_SHIFT_VOICE_MEMORY_MINS || 7 * 60));
+        const hasMaintenanceVoiceWindow = Boolean(
+            preShiftVoiceMode === 'maintenance' &&
+            preShiftVoiceWindowStartAt?.isValid?.() &&
+            preShiftVoiceWindowEndAt?.isValid?.() &&
+            bounds?.start &&
+            preShiftVoiceWindowEndAt.isSame(bounds.start)
+        );
+        const preShiftVoiceAllowedStart = preShiftVoiceMode === 'maintenance'
+            ? (hasMaintenanceVoiceWindow ? preShiftVoiceWindowStartAt : null)
+            : bounds?.start?.clone?.().subtract(voiceMemoryMins, 'minutes');
+        const preShiftVoiceAllowedEnd = preShiftVoiceMode === 'maintenance'
+            ? (hasMaintenanceVoiceWindow ? preShiftVoiceWindowEndAt : null)
+            : bounds?.start;
+        const canRecognizePreShiftVoiceGrace = Boolean(
+            !clockInRule.preShift &&
+            previousPreShiftVoiceAt?.isValid?.() &&
+            bounds?.start &&
+            previousPreShiftVoiceAt.isBefore(bounds.start) &&
+            preShiftVoiceAllowedStart?.isValid?.() &&
+            preShiftVoiceAllowedEnd?.isValid?.() &&
+            previousPreShiftVoiceAt.isSameOrAfter(preShiftVoiceAllowedStart) &&
+            previousPreShiftVoiceAt.isBefore(preShiftVoiceAllowedEnd) &&
+            moment(now).tz(CONFIG.TIMEZONE).diff(bounds.start, 'minutes') <= voiceGraceMins
+        );
+        if (canRecognizePreShiftReconnect || canRecognizePreShiftVoiceGrace) {
+            recognizedAt = bounds.start.clone();
+        }
+        const wasFinalAbsent = user.status === 'absent' || user.attendanceStatus === 'ABSENT';
         const overtimeUsers = getOvertimeUsers();
         const overtimeBefore = overtimeUsers.length;
         const filteredOvertimeUsers = overtimeUsers.filter(o => o.id !== member.id);
@@ -469,10 +649,15 @@ function createAttendanceService(deps) {
         user.dayOff = false;
         user.dayOffExpireAt = null;
         user.isFinished = false;
+        user.checkOutTime = null;
+        user.checkOutRaw = null;
+        user.lastClockOutSource = null;
+        user.lastClockOutReason = null;
+        user.lastClockOutDetectedAt = null;
         transitionRecordedStatus(user, {
             attendanceStatus: 'WORKING',
             voiceStatus: 'LIVE_ON'
-        }, recognizedAt, isAuto ? 'live-on' : 'button-or-command', clockInRule.preShift ? 'pre-shift-clock-in' : 'clock-in');
+        }, recognizedAt, isAuto ? 'live-on' : 'button-or-command', (clockInRule.preShift || canRecognizePreShiftReconnect || canRecognizePreShiftVoiceGrace) ? 'pre-shift-clock-in' : 'clock-in');
         user.finishedPresence = null;
         user.finalLeftAt = null;
         user.earlyOut = false;
@@ -480,13 +665,18 @@ function createAttendanceService(deps) {
         user.disconnectedAt = null;
         user.liveOffStartedAt = null;
         user.pendingClockOut = null;
+        user.pendingAutoOTConfirm = null;
         user.manualResumeRequired = false;
         user.manualResumeRequiredSince = null;
         user.manualResumeRequiredReason = null;
         user.lastManualResumePromptKey = null;
         user.manualResumePromptMarks = [];
         user.finishedLiveOffReminderMarks = [];
-        user.preShiftLiveAt = clockInRule.preShift ? now.toISOString() : null;
+        user.preShiftLiveAt = null;
+        user.preShiftVoiceAt = null;
+        user.preShiftVoiceMode = null;
+        user.preShiftVoiceWindowStartAt = null;
+        user.preShiftVoiceWindowEndAt = null;
         user.lastPreShiftWaitLogKey = null;
         user.lastLiveOnAt = now.toISOString();
         user.shift = shift;
@@ -496,35 +686,95 @@ function createAttendanceService(deps) {
         const session = startAttendanceSession(user, shift, recognizedAt, clockInRule.preShift ? 'pre-shift-live' : (isAuto ? 'live-on' : 'button-or-command'));
         if (session) {
             session.clockInDetectedAt = now.toISOString();
-            if (clockInRule.preShift) session.firstLiveOnAt = now.toISOString();
+            if (clockInRule.preShift || canRecognizePreShiftReconnect || canRecognizePreShiftVoiceGrace) {
+                session.firstLiveOnAt = (previousPreShiftLiveAt?.isValid?.() ? previousPreShiftLiveAt : moment(now).tz(CONFIG.TIMEZONE)).toISOString();
+                session.firstVoiceJoinAt = previousPreShiftVoiceAt?.isValid?.() ? previousPreShiftVoiceAt.toISOString() : null;
+                session.preShiftReconnectGrace = Boolean(canRecognizePreShiftReconnect);
+                session.preShiftVoiceGrace = Boolean(canRecognizePreShiftVoiceGrace);
+                session.preShiftVoiceMode = canRecognizePreShiftVoiceGrace ? preShiftVoiceMode : null;
+                session.preShiftVoiceWindowStartAt = hasMaintenanceVoiceWindow ? preShiftVoiceWindowStartAt.toISOString() : null;
+                session.preShiftVoiceWindowEndAt = hasMaintenanceVoiceWindow ? preShiftVoiceWindowEndAt.toISOString() : null;
+            }
         }
         appendAttendanceEvent(user, 'clock_in_confirmed', recognizedAt, source, {
             detectedAt: now.toISOString(),
-            preShift: clockInRule.preShift
+            preShift: Boolean(clockInRule.preShift || canRecognizePreShiftReconnect || canRecognizePreShiftVoiceGrace),
+            preShiftDetectedAt: previousPreShiftLiveAt?.isValid?.() ? previousPreShiftLiveAt.toISOString() : null,
+            preShiftVoiceAt: previousPreShiftVoiceAt?.isValid?.() ? previousPreShiftVoiceAt.toISOString() : null,
+            preShiftVoiceMode: canRecognizePreShiftVoiceGrace ? preShiftVoiceMode : null,
+            preShiftVoiceWindowStartAt: hasMaintenanceVoiceWindow ? preShiftVoiceWindowStartAt.toISOString() : null,
+            preShiftVoiceWindowEndAt: hasMaintenanceVoiceWindow ? preShiftVoiceWindowEndAt.toISOString() : null,
+            preShiftReconnectGrace: Boolean(canRecognizePreShiftReconnect),
+            preShiftVoiceGrace: Boolean(canRecognizePreShiftVoiceGrace)
         });
 
         if (shift) {
             const diffMins = recognizedAt.diff(getShiftBounds(shift, recognizedAt).start, 'minutes');
             if (diffMins > 120) {
-                user.status = 'absent';
-                if (!user.strikeReceivedThisShift) {
+                user.status = 'late';
+                user.excessiveLateThisShift = true;
+                countExcessiveLateOnce(user, recognizedAt);
+                if (wasFinalAbsent && user.strikeReceivedThisShift && !user.absentConvertedToLateThisShift) {
+                    user.points = (user.points || 0) - (CONFIG.POINTS.ABSENT || 0) + (CONFIG.POINTS.LATE || 0);
+                    user.totalAbsent = Math.max(0, (user.totalAbsent || 0) - 1);
+                    user.totalLate = (user.totalLate || 0) + 1;
+                    incrementMonthlyAttendanceStat(user, {
+                        moment,
+                        at: recognizedAt,
+                        timezone: CONFIG.TIMEZONE,
+                        field: 'totalAbsent',
+                        pointsDelta: -(CONFIG.POINTS.ABSENT || 0),
+                        countDelta: -1
+                    });
+                    incrementMonthlyAttendanceStat(user, {
+                        moment,
+                        at: recognizedAt,
+                        timezone: CONFIG.TIMEZONE,
+                        field: 'totalLate',
+                        pointsDelta: CONFIG.POINTS.LATE || 0
+                    });
+                    user.absentConvertedToLateThisShift = true;
+                } else if (!user.strikeReceivedThisShift) {
                     user.strikes = (user.strikes || 0) + 1;
-                    user.points = (user.points || 0) + CONFIG.POINTS.ABSENT;
-                    user.totalAbsent = (user.totalAbsent || 0) + 1;
+                    user.points = (user.points || 0) + CONFIG.POINTS.LATE;
+                    user.totalLate = (user.totalLate || 0) + 1;
+                    incrementMonthlyAttendanceStat(user, {
+                        moment,
+                        at: recognizedAt,
+                        timezone: CONFIG.TIMEZONE,
+                        field: 'totalLate',
+                        pointsDelta: CONFIG.POINTS.LATE
+                    });
                     user.strikeReceivedThisShift = true;
                 }
-            } else if (diffMins > 5) {
+            } else if (diffMins > Math.max(0, Number(CONFIG.CLOCK_IN_GRACE_MINS || 0))) {
                 user.status = 'late';
+                user.excessiveLateThisShift = false;
                 if (!user.strikeReceivedThisShift) {
                     user.strikes = (user.strikes || 0) + 1;
                     user.points = (user.points || 0) + CONFIG.POINTS.LATE;
                     user.totalLate = (user.totalLate || 0) + 1;
+                    incrementMonthlyAttendanceStat(user, {
+                        moment,
+                        at: recognizedAt,
+                        timezone: CONFIG.TIMEZONE,
+                        field: 'totalLate',
+                        pointsDelta: CONFIG.POINTS.LATE
+                    });
                     user.strikeReceivedThisShift = true;
                 }
             } else {
                 user.status = 'ontime';
+                user.excessiveLateThisShift = false;
                 user.points = (user.points || 0) + CONFIG.POINTS.NORMAL_IN;
                 user.totalNormal = (user.totalNormal || 0) + 1;
+                incrementMonthlyAttendanceStat(user, {
+                    moment,
+                    at: recognizedAt,
+                    timezone: CONFIG.TIMEZONE,
+                    field: 'totalNormal',
+                    pointsDelta: CONFIG.POINTS.NORMAL_IN
+                });
             }
         }
 
@@ -534,8 +784,18 @@ function createAttendanceService(deps) {
             recognizedAt,
             session,
             status: user.status,
-            preShift: clockInRule.preShift,
-            removedOvertimeEntry: overtimeBefore !== overtimeUsers.length
+            preShift: Boolean(clockInRule.preShift || canRecognizePreShiftReconnect || canRecognizePreShiftVoiceGrace),
+            preShiftDetectedAt: previousPreShiftLiveAt?.isValid?.() ? previousPreShiftLiveAt : null,
+            preShiftVoiceAt: previousPreShiftVoiceAt?.isValid?.() ? previousPreShiftVoiceAt : null,
+            preShiftVoiceMode: canRecognizePreShiftVoiceGrace ? preShiftVoiceMode : null,
+            preShiftVoiceWindowStartAt: hasMaintenanceVoiceWindow ? preShiftVoiceWindowStartAt : null,
+            preShiftVoiceWindowEndAt: hasMaintenanceVoiceWindow ? preShiftVoiceWindowEndAt : null,
+            preShiftReconnectGrace: Boolean(canRecognizePreShiftReconnect),
+            preShiftVoiceGrace: Boolean(canRecognizePreShiftVoiceGrace),
+            removedOvertimeEntry: overtimeBefore !== overtimeUsers.length,
+            convertedAbsentToLate: Boolean(wasFinalAbsent && user.status === 'late'),
+            excessiveLate: Boolean(user.excessiveLateThisShift),
+            excessiveLateCounted: Boolean(user.excessiveLateCountedThisShift)
         };
     }
 
@@ -559,6 +819,10 @@ function createAttendanceService(deps) {
         user.disconnected = false;
         user.disconnectedAt = null;
         user.voiceJoinedAt = null;
+        user.preShiftVoiceAt = null;
+        user.preShiftVoiceMode = null;
+        user.preShiftVoiceWindowStartAt = null;
+        user.preShiftVoiceWindowEndAt = null;
         user.liveOffStartedAt = null;
         user.liveOffWarnedFor = null;
         user.finishedLiveOffReminderMarks = [];
@@ -616,9 +880,14 @@ function createAttendanceService(deps) {
         user.isFinished = true;
         user.pendingClockOut = null;
         user.voiceJoinedAt = null;
+        user.preShiftVoiceAt = null;
+        user.preShiftVoiceMode = null;
+        user.preShiftVoiceWindowStartAt = null;
+        user.preShiftVoiceWindowEndAt = null;
         user.liveOffStartedAt = null;
         user.liveOffWarnedFor = null;
         user.pendingManualOT = false;
+        user.pendingAutoOTConfirm = null;
         user.manualResumeRequired = false;
         user.manualResumeRequiredSince = null;
         user.manualResumeRequiredReason = null;
@@ -658,9 +927,14 @@ function createAttendanceService(deps) {
         user.status = null;
         user.pendingClockOut = null;
         user.voiceJoinedAt = null;
+        user.preShiftVoiceAt = null;
+        user.preShiftVoiceMode = null;
+        user.preShiftVoiceWindowStartAt = null;
+        user.preShiftVoiceWindowEndAt = null;
         user.liveOffStartedAt = null;
         user.liveOffWarnedFor = null;
         user.pendingManualOT = false;
+        user.pendingAutoOTConfirm = null;
         user.checkOutTime = at.format('hh:mm A');
         user.checkOutRaw = at.toISOString();
         user.lastClockOutSource = source;
@@ -710,6 +984,10 @@ function createAttendanceService(deps) {
         user.finishedPresence = null;
         user.finalLeftAt = null;
         user.voiceJoinedAt = null;
+        user.preShiftVoiceAt = null;
+        user.preShiftVoiceMode = null;
+        user.preShiftVoiceWindowStartAt = null;
+        user.preShiftVoiceWindowEndAt = null;
         user.liveOffStartedAt = null;
         user.liveOffWarnedFor = null;
         user.pendingClockOut = null;
@@ -935,6 +1213,9 @@ function createAttendanceService(deps) {
         const at = moment(now).tz(CONFIG.TIMEZONE);
 
         user.strikeReceivedThisShift = false;
+        user.absentConvertedToLateThisShift = false;
+        user.excessiveLateThisShift = false;
+        user.excessiveLateCountedThisShift = false;
         user.checkedIn = false;
         user.dayOff = false;
         user.dayOffExpireAt = null;
@@ -973,6 +1254,29 @@ function createAttendanceService(deps) {
         });
     }
 
+    function getPostShiftOvertimeStartMoment(user, now = moment().tz(CONFIG.TIMEZONE), options = {}) {
+        const at = moment(now).tz(CONFIG.TIMEZONE);
+        const overtimeStart = getOvertimeStartMoment(user, at);
+        if (!overtimeStart || at.isBefore(overtimeStart)) return null;
+        const continuousWindowMins = Math.max(0, Number(CONFIG.POST_SHIFT_CONTINUOUS_OT_WINDOW_MINS || 30));
+        const elapsedMins = at.diff(overtimeStart, 'minutes');
+        const interruptedAt = user?.postShiftOtInterruptedAt
+            ? moment(user.postShiftOtInterruptedAt).tz(CONFIG.TIMEZONE)
+            : null;
+        if (
+            options.allowLateReturn &&
+            interruptedAt?.isValid?.() &&
+            interruptedAt.isSameOrAfter(overtimeStart) &&
+            interruptedAt.isSameOrBefore(at)
+        ) {
+            return at;
+        }
+        if (elapsedMins > continuousWindowMins && options.allowLateReturn) {
+            return at;
+        }
+        return overtimeStart;
+    }
+
     function canStartOvertimeNow(user, now = moment().tz(CONFIG.TIMEZONE)) {
         const overtimeStart = getOvertimeStartMoment(user, now);
         return Boolean(overtimeStart && moment(now).tz(CONFIG.TIMEZONE).isSameOrAfter(overtimeStart));
@@ -984,7 +1288,7 @@ function createAttendanceService(deps) {
         return Boolean(bounds?.start && moment(now).tz(CONFIG.TIMEZONE).isBefore(bounds.start));
     }
 
-    function canStartPostShiftOvertime(user, now = moment().tz(CONFIG.TIMEZONE)) {
+    function canStartPostShiftOvertime(user, now = moment().tz(CONFIG.TIMEZONE), options = {}) {
         if (!user || user.checkedIn || user.dayOff) return false;
         if (user.pendingManualOT || user.manualResumeRequired) return false;
         if (getOvertimeUsers().some(ot => ot.id === user.id)) return false;
@@ -993,12 +1297,42 @@ function createAttendanceService(deps) {
         const at = moment(now).tz(CONFIG.TIMEZONE);
         const overtimeStart = getOvertimeStartMoment(user, at);
         if (!overtimeStart || at.isBefore(overtimeStart)) return false;
-        if (at.diff(overtimeStart, 'hours', true) > CONFIG.PURGE_MANUAL_OT) return false;
+        const elapsedMins = at.diff(overtimeStart, 'minutes');
+        const continuousWindowMins = Math.max(0, Number(CONFIG.POST_SHIFT_CONTINUOUS_OT_WINDOW_MINS || 30));
+        const autoOtLimitMins = Math.max(60, Number(CONFIG.MAX_AUTO_OT_MINS || 0) || CONFIG.PURGE_MANUAL_OT * 60);
+        if (elapsedMins > continuousWindowMins && !options.allowLateReturn) return false;
+        if (elapsedMins > autoOtLimitMins && !options.allowLateReturn) return false;
 
         const session = getRelevantSessionForTime(user, at);
         if (!session?.clockInAt || !session?.clockOutAt || !session?.scheduledEndAt) return false;
+        const staleAutoRepairClosed = Boolean(
+            session.clockOutSource === 'auto-repair-stale-overtime' ||
+            user.lastClockOutSource === 'auto-repair-stale-overtime' ||
+            user.lastClockOutSource === 'auto-repair-no-open-session'
+        );
+        if (staleAutoRepairClosed && options.allowLateReturn && (user.isFinished || user.attendanceStatus === 'FINISHED')) {
+            return true;
+        }
+        if (staleAutoRepairClosed) {
+            return false;
+        }
 
         const scheduledEnd = moment(session.scheduledEndAt).tz(CONFIG.TIMEZONE);
+        const requireContinuousLive = options.requireContinuousLive !== false && !options.allowLateReturn;
+        if (requireContinuousLive) {
+            const interruptedAt = user.postShiftOtInterruptedAt
+                ? moment(user.postShiftOtInterruptedAt).tz(CONFIG.TIMEZONE)
+                : null;
+            if (
+                interruptedAt?.isValid?.() &&
+                interruptedAt.isSameOrAfter(scheduledEnd) &&
+                interruptedAt.isSameOrBefore(at)
+            ) return false;
+            const lastLiveOnAt = user.lastLiveOnAt ? moment(user.lastLiveOnAt).tz(CONFIG.TIMEZONE) : null;
+            if (!lastLiveOnAt?.isValid?.()) return false;
+            if (lastLiveOnAt.isAfter(scheduledEnd.clone().add(1, 'minute'))) return false;
+            if (user.disconnected || user.disconnectedAt || user.liveOffStartedAt) return false;
+        }
         const clockOutAt = moment(session.clockOutAt).tz(CONFIG.TIMEZONE);
         const closedAtShiftEnd = Math.abs(clockOutAt.diff(scheduledEnd, 'minutes')) <= 5;
         const handoffClosed = user.lastClockOutSource === 'shift-handoff-auto-finish' ||
@@ -1022,6 +1356,9 @@ function createAttendanceService(deps) {
         user.liveOffWarnedFor = null;
         user.pendingClockOut = null;
         user.pendingManualOT = false;
+        user.pendingAutoOTConfirm = null;
+        user.postShiftOtInterruptedAt = null;
+        user.postShiftOtInterruptedReason = null;
         user.manualResumeRequired = false;
         user.manualResumeRequiredSince = null;
         user.manualResumeRequiredReason = null;
@@ -1030,19 +1367,37 @@ function createAttendanceService(deps) {
         user.finishedPresence = null;
         user.finalLeftAt = null;
         user.lastLiveOnAt = moment(now).tz(CONFIG.TIMEZONE).toISOString();
-        user.checkInTime = user.checkInTime || at.format('hh:mm A');
-        user.checkInRaw = user.checkInRaw || at.toISOString();
+        if (options.resetClockInForOvertime) {
+            user.checkInTime = at.format('hh:mm A');
+            user.checkInRaw = at.toISOString();
+            user.checkOutTime = null;
+            user.checkOutRaw = null;
+            user.lastClockOutSource = null;
+            user.lastClockOutReason = null;
+            user.lastClockOutDetectedAt = null;
+        } else {
+            user.checkInTime = user.checkInTime || at.format('hh:mm A');
+            user.checkInRaw = user.checkInRaw || at.toISOString();
+        }
+
+        const sourceSession = options.sourceSession || (
+            ['AUTO', 'MANUAL'].includes(type) ? getOvertimeSourceSession(user, at) : null
+        );
+        const monthlyAt = options.monthlyAt
+            ? moment(options.monthlyAt).tz(CONFIG.TIMEZONE)
+            : (sourceSession?.scheduledStartAt ? moment(sourceSession.scheduledStartAt).tz(CONFIG.TIMEZONE) : at);
 
         const session = startAttendanceSession(user, user.shift, at, sessionSource);
         if (session) {
-            session.scheduledStartAt = options.sessionScheduledAt
-                ? moment(options.sessionScheduledAt).tz(CONFIG.TIMEZONE).toISOString()
-                : at.toISOString();
-            session.scheduledEndAt = options.sessionScheduledAt
-                ? moment(options.sessionScheduledAt).tz(CONFIG.TIMEZONE).toISOString()
-                : at.toISOString();
+            const sessionStartAt = options.sessionScheduledStartAt || sourceSession?.scheduledStartAt || options.sessionScheduledAt || at;
+            const sessionEndAt = options.sessionScheduledEndAt || sourceSession?.scheduledEndAt || options.sessionScheduledAt || at;
+            session.sessionKey = options.sessionKey || sourceSession?.sessionKey || session.sessionKey;
+            session.scheduledStartAt = moment(sessionStartAt).tz(CONFIG.TIMEZONE).toISOString();
+            session.scheduledEndAt = moment(sessionEndAt).tz(CONFIG.TIMEZONE).toISOString();
             session.otType = type;
             session.otStartedAt = at.toISOString();
+            session.workDateAt = monthlyAt.toISOString();
+            if (options.otEvidence) session.otEvidence = options.otEvidence;
             if (options.restoredFromSessionId) session.restoredFromSessionId = options.restoredFromSessionId;
         }
 
@@ -1055,12 +1410,27 @@ function createAttendanceService(deps) {
             type,
             reason,
             added,
+            otEvidence: options.otEvidence || null,
             restoredFromSessionId: options.restoredFromSessionId || null
         });
 
-        if (added && options.award !== false) {
+        const shouldAwardOvertime = added && options.award !== false && markMonthlyOvertimeAward(user, {
+            moment,
+            at: monthlyAt,
+            timezone: CONFIG.TIMEZONE,
+            sourceKey: session?.id || at.toISOString()
+        });
+
+        if (shouldAwardOvertime) {
             user.totalOT = (user.totalOT || 0) + 1;
             user.points = (user.points || 0) + CONFIG.POINTS.OT;
+            incrementMonthlyAttendanceStat(user, {
+                moment,
+                at: monthlyAt,
+                timezone: CONFIG.TIMEZONE,
+                field: 'totalOT',
+                pointsDelta: CONFIG.POINTS.OT
+            });
         }
 
         return {
@@ -1136,10 +1506,20 @@ function createAttendanceService(deps) {
         if (!canConsiderRestore || user.checkedIn || user.dayOff || overtimeUsers.some(ot => ot.id === user.id)) return null;
         const session = getLatestOvertimeSession(user);
         if (!session) return null;
+        if (
+            session.clockOutSource === 'auto-repair-stale-overtime' ||
+            user.lastClockOutSource === 'auto-repair-stale-overtime' ||
+            user.lastClockOutSource === 'auto-repair-no-open-session'
+        ) {
+            return null;
+        }
 
         const otStartedAt = moment(session.otStartedAt || session.scheduledEndAt || session.clockOutAt).tz(CONFIG.TIMEZONE);
         if (!otStartedAt.isValid() || now.isBefore(otStartedAt)) return null;
-        if (now.diff(otStartedAt, 'hours', true) > CONFIG.PURGE_MANUAL_OT) return null;
+        const restoreLimitHours = session.otType === 'AUTO'
+            ? Math.max(1, Number(CONFIG.MAX_AUTO_OT_MINS || 0) / 60 || CONFIG.PURGE_MANUAL_OT)
+            : CONFIG.PURGE_MANUAL_OT;
+        if (now.diff(otStartedAt, 'hours', true) > restoreLimitHours) return null;
 
         const currentBounds = getShiftBounds(shift || user.shift, now);
         const previousEnd = session.scheduledEndAt ? moment(session.scheduledEndAt).tz(CONFIG.TIMEZONE) : null;
@@ -1182,6 +1562,136 @@ function createAttendanceService(deps) {
             restoredFromSessionId: restorable.session.id || null,
             otStartedAt,
             otType
+        };
+    }
+
+    function reverseAutoTimeoutEarlyPenalty(user, session, outAt, resumedAt, source) {
+        if (!user || !session?.scheduledEndAt || !outAt?.isValid?.()) {
+            return { reversed: false, reason: 'missing-input' };
+        }
+        if (session.autoTimeoutEarlyPenaltyReversedAt) {
+            return { reversed: false, reason: 'already-reversed' };
+        }
+        const scheduledEnd = moment(session.scheduledEndAt).tz(CONFIG.TIMEZONE);
+        const earlyMins = scheduledEnd.isValid() ? scheduledEnd.diff(outAt, 'minutes') : 0;
+        if (earlyMins <= Number(CONFIG.CLOCK_OUT_GRACE_MINS || 0)) {
+            return { reversed: false, reason: 'not-early' };
+        }
+        const timeoutKey = `${session.clockOutSource}:${outAt.toISOString()}`;
+        if (user.reversibleEarlyPenaltyKey && user.reversibleEarlyPenaltyKey !== timeoutKey) {
+            return { reversed: false, reason: 'different-penalty-key' };
+        }
+        if (Number(user.totalEarly || 0) <= 0) {
+            return { reversed: false, reason: 'no-early-count' };
+        }
+
+        const pointDelta = Math.abs(Number(user.reversibleEarlyPenaltyPoints || CONFIG.POINTS?.EARLY_OUT || 0));
+        user.totalEarly = Math.max(0, Number(user.totalEarly || 0) - 1);
+        user.points = Number(user.points || 0) + pointDelta;
+        incrementMonthlyAttendanceStat(user, {
+            moment,
+            at: outAt,
+            timezone: CONFIG.TIMEZONE,
+            field: 'totalEarly',
+            countDelta: -1,
+            pointsDelta: pointDelta
+        });
+        if (Number(user.totalEarly || 0) === 0) user.earlyOut = false;
+        user.reversibleEarlyPenaltyKey = null;
+        user.reversibleEarlyPenaltyAppliedAt = null;
+        user.reversibleEarlyPenaltyPoints = null;
+        session.autoTimeoutEarlyPenaltyReversedAt = moment(resumedAt).tz(CONFIG.TIMEZONE).toISOString();
+        appendAttendanceEvent(user, 'early_penalty_reversed', resumedAt, source, {
+            reason: 'auto-timeout-returned-before-shift-end',
+            clockOutSource: session.clockOutSource,
+            clockOutAt: outAt.toISOString(),
+            earlyMins
+        });
+        return { reversed: true, earlyMins, pointDelta };
+    }
+
+    function applyAutoTimeoutResumeCore(user, shift, now, source = 'voice_snapshot') {
+        if (!user) return { ok: false, reason: 'missing-user' };
+        const resumedAt = moment(now).tz(CONFIG.TIMEZONE);
+        const session = getLatestAutoTimeoutSession(user, resumedAt);
+        if (!session) return { ok: false, reason: 'no-timeout-session' };
+
+        const timeoutSource = session.clockOutSource;
+        const timeoutAt = moment(session.clockOutAt).tz(CONFIG.TIMEZONE);
+        const detectedAt = session.clockOutDetectedAt ? moment(session.clockOutDetectedAt).tz(CONFIG.TIMEZONE) : null;
+        const periodKey = timeoutSource === 'dc-timeout' ? 'dcPeriods' : 'liveOffPeriods';
+        const period = extendLastTimeoutPeriod(session, periodKey, resumedAt);
+        const penalty = reverseAutoTimeoutEarlyPenalty(user, session, timeoutAt, resumedAt, source);
+
+        const previousClockOut = {
+            clockOutAt: session.clockOutAt,
+            clockOutDetectedAt: session.clockOutDetectedAt,
+            clockOutSource: session.clockOutSource,
+            clockOutReason: session.clockOutReason
+        };
+
+        session.reopenedAfterAutoTimeoutAt = resumedAt.toISOString();
+        session.reopenedAfterAutoTimeoutSource = source;
+        session.previousAutoTimeoutClockOut = previousClockOut;
+        session.clockOutAt = null;
+        session.clockOutDetectedAt = null;
+        session.clockOutSource = null;
+        session.clockOutReason = null;
+        const workedSummary = calculateSessionWorkedMinutes(session, resumedAt);
+        session.grossMinutes = workedSummary.grossMinutes;
+        session.liveOffMinutes = workedSummary.liveOffMinutes;
+        session.dcMinutes = workedSummary.dcMinutes;
+        session.creditedMinutes = workedSummary.creditedMinutes;
+
+        user.activeSessionId = session.id;
+        user.checkedIn = true;
+        user.isFinished = false;
+        user.dayOff = false;
+        user.checkOutTime = null;
+        user.checkOutRaw = null;
+        user.lastClockOutSource = null;
+        user.lastClockOutReason = null;
+        user.lastClockOutDetectedAt = null;
+        user.disconnected = false;
+        user.disconnectedAt = null;
+        user.voiceJoinedAt = null;
+        user.liveOffStartedAt = null;
+        user.liveOffWarnedFor = null;
+        user.liveOffWarningMarks = [];
+        user.pendingClockOut = null;
+        user.manualResumeRequired = false;
+        user.manualResumeRequiredSince = null;
+        user.manualResumeRequiredReason = null;
+        user.lastManualResumePromptKey = null;
+        user.manualResumePromptMarks = [];
+        user.finishedPresence = null;
+        user.finalLeftAt = null;
+        user.lastLiveOnAt = resumedAt.toISOString();
+        if (shift) user.shift = shift;
+        transitionRecordedStatus(user, {
+            attendanceStatus: 'WORKING',
+            voiceStatus: 'LIVE_ON'
+        }, resumedAt, source, 'auto-timeout-returned-before-shift-end');
+        appendAttendanceEvent(user, 'auto_timeout_resume_before_shift_end', resumedAt, source, {
+            timeoutSource,
+            timeoutAt: timeoutAt.toISOString(),
+            timeoutDetectedAt: detectedAt?.isValid?.() ? detectedAt.toISOString() : null,
+            periodStartedAt: period?.startedAt || null,
+            periodEndedAt: period?.endedAt || null,
+            periodMinutes: Number(period?.minutes || 0),
+            penaltyReversed: Boolean(penalty.reversed)
+        });
+
+        return {
+            ok: true,
+            user,
+            session,
+            timeoutSource,
+            timeoutAt,
+            detectedAt,
+            period,
+            periodMinutes: Number(period?.minutes || 0),
+            penaltyReversed: Boolean(penalty.reversed)
         };
     }
 
@@ -1320,7 +1830,9 @@ function createAttendanceService(deps) {
         if (transitionRecordedStatus(user, {
             voiceStatus: 'LIVE_ON'
         }, at, source, reason)) changed = true;
-        appendAttendanceEvent(user, 'live_on_recovered', at, source, { reason });
+        if (changed) {
+            appendAttendanceEvent(user, 'live_on_recovered', at, source, { reason });
+        }
 
         return { ok: true, changed, user, session };
     }
@@ -1328,7 +1840,14 @@ function createAttendanceService(deps) {
     function normalizeCurrentShiftSessionCore(member, user, shift, now) {
         if (!member || !user || !shift) return { changed: false, action: 'none', reason: 'missing-input' };
         const sessionKey = getShiftSessionKey(shift, now);
-        if (user.shiftSessionKey === sessionKey) return { changed: false, action: 'none', reason: 'same-session' };
+        const bounds = getShiftBounds(shift, now);
+        const staleCheckInBeforeCurrentStart = Boolean(
+            user.checkedIn &&
+            user.checkInRaw &&
+            bounds?.start &&
+            moment(user.checkInRaw).tz(CONFIG.TIMEZONE).isBefore(bounds.start)
+        );
+        if (user.shiftSessionKey === sessionKey && !staleCheckInBeforeCurrentStart) return { changed: false, action: 'none', reason: 'same-session' };
 
         const previousShift = user.shift || null;
         const shiftChanged = Boolean(previousShift && previousShift !== shift);
@@ -1336,6 +1855,9 @@ function createAttendanceService(deps) {
         user.shift = shift;
         user.status = null;
         user.strikeReceivedThisShift = false;
+        user.absentConvertedToLateThisShift = false;
+        user.excessiveLateThisShift = false;
+        user.excessiveLateCountedThisShift = false;
         user.disconnected = false;
         user.disconnectedAt = null;
         user.voiceJoinedAt = null;
@@ -1346,7 +1868,6 @@ function createAttendanceService(deps) {
         const overtimeUsers = getOvertimeUsers();
         overtimeUsers.splice(0, overtimeUsers.length, ...overtimeUsers.filter(ot => ot.id !== member.id));
 
-        const bounds = getShiftBounds(shift, now);
         const alreadyCheckedThisSession = Boolean(
             user.checkedIn &&
             user.checkInRaw &&
@@ -1388,6 +1909,14 @@ function createAttendanceService(deps) {
         }
 
         user.isFinished = false;
+        if (staleCheckInBeforeCurrentStart) {
+            user.checkedIn = false;
+            user.checkInTime = null;
+            user.checkInRaw = null;
+            user.checkOutTime = null;
+            user.checkOutRaw = null;
+            user.activeSessionId = null;
+        }
         if (finishedBeforeCurrentSession || user.attendanceStatus === 'FINISHED') {
             transitionRecordedStatus(user, {
                 attendanceStatus: 'PRE_SHIFT',
@@ -1436,6 +1965,7 @@ function createAttendanceService(deps) {
         startSessionPeriod,
         closeOpenSessionPeriod,
         sumSessionPeriods,
+        sumCreditedLiveOffPeriods,
         calculateSessionWorkedMinutes,
         getUserLatestSessionSummary,
         applyClockInCore,
@@ -1455,12 +1985,14 @@ function createAttendanceService(deps) {
         canStartOvertimeNow,
         canStartPreShiftOvertime,
         canStartPostShiftOvertime,
+        getPostShiftOvertimeStartMoment,
         applyOvertimeCore,
         applyPreShiftOvertimeCore,
         applyPendingManualOvertimeCore,
         getLatestOvertimeSession,
         getRestorableOvertimeSession,
         applyRestoreOvertimeAfterFinishCore,
+        applyAutoTimeoutResumeCore,
         createPendingClockOut,
         recoverPendingClockOut,
         applyDisconnectedCore,

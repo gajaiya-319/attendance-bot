@@ -27,6 +27,7 @@ function createChatInputCommandHandler({
     opsQueueCommands,
     opsSafetyCommands,
     payrollAuditCommand,
+    endAdenaReviewCommand,
     maintenanceCommands,
     dayOffReadCommands,
     dayOffMutationCommands,
@@ -92,6 +93,7 @@ function createChatInputCommandHandler({
             const otherServerRole = server === 'HEINE' ? CONFIG.ROLES.PAAGRIO : CONFIG.ROLES.HEINE;
             const shiftRole = shift === 'DAY' ? CONFIG.ROLES.DAY : CONFIG.ROLES.NIGHT;
             const otherShiftRole = shift === 'DAY' ? CONFIG.ROLES.NIGHT : CONFIG.ROLES.DAY;
+            const serverLabel = server === 'HEINE' ? '\uBC1C\uB77C\uCE74\uC2A4' : 'Paagrio';
 
             await target.roles.add(serverRole).catch(error => logger.error?.('[ROLE ASSIGN ERROR]', error));
             await target.roles.remove(otherServerRole).catch(() => null);
@@ -103,7 +105,7 @@ function createChatInputCommandHandler({
             await saveSystem();
             renderDashboard();
             return interaction.reply({
-                content: `Assigned ${server} / ${shift} to ${target.displayName}.`,
+                content: `Assigned ${serverLabel} / ${shift} to ${target.displayName}.`,
                 flags: MessageFlags.Ephemeral
             }).then(() => autoDel());
         }
@@ -172,6 +174,9 @@ function createChatInputCommandHandler({
         }
         if (payrollAuditCommand?.aliases?.some(n)) {
             return payrollAuditCommand.execute(interaction, { autoDel });
+        }
+        if (endAdenaReviewCommand?.aliases?.some(n)) {
+            return endAdenaReviewCommand.execute(interaction, { autoDel });
         }
         if (maintenanceCommands?.root?.aliases?.some(n)) {
             return maintenanceCommands.root.execute(interaction, { autoDel });

@@ -14,7 +14,8 @@ function createInitialState(config = CONFIG) {
         panelInfo: { day: { cId: config.DAY_CHAN, mId: null }, night: { cId: config.NIGHT_CHAN, mId: null } },
         announceData: { 1: null, 2: null, 3: null, 4: null, 5: null, 6: null },
         dayOffReservations: {},
-        liveExceptions: {}
+        liveExceptions: {},
+        attendanceEventLog: []
     };
 }
 
@@ -26,7 +27,8 @@ function normalizeState(input = {}, previous = createInitialState()) {
         panelInfo: input.panelInfo || previous.panelInfo,
         announceData: input.announceData || previous.announceData,
         dayOffReservations: input.dayOffReservations || {},
-        liveExceptions: input.liveExceptions || {}
+        liveExceptions: input.liveExceptions || {},
+        attendanceEventLog: Array.isArray(input.attendanceEventLog) ? input.attendanceEventLog : []
     };
 }
 
@@ -42,7 +44,11 @@ function createDataStore({
         isSaving: false,
         pendingSave: false,
         lastSavedAt: null,
-        lastBackupAt: null
+        lastBackupAt: null,
+        lastLoadSource: null,
+        lastLoadRecoveredAt: null,
+        lastLoadError: null,
+        lastSaveError: null
     };
     let activeSavePromise = null;
 
@@ -55,6 +61,7 @@ function createDataStore({
         db.announceData = normalized.announceData;
         db.dayOffReservations = normalized.dayOffReservations;
         db.liveExceptions = normalized.liveExceptions;
+        db.attendanceEventLog = normalized.attendanceEventLog;
         return db;
     }
 
@@ -66,7 +73,8 @@ function createDataStore({
             panelInfo: db.panelInfo,
             announceData: db.announceData,
             dayOffReservations: db.dayOffReservations,
-            liveExceptions: db.liveExceptions
+            liveExceptions: db.liveExceptions,
+            attendanceEventLog: db.attendanceEventLog
         };
     }
 
@@ -79,7 +87,7 @@ function createDataStore({
 
     async function writeJsonAtomic(filePath, payload) {
         const tmpPath = `${filePath}.tmp`;
-        await fs.writeFile(tmpPath, payload);
+        await fs.writeFile(tmpPath, payload, { mode: 0o600 });
         await fs.rename(tmpPath, filePath);
     }
 
@@ -94,7 +102,7 @@ function createDataStore({
     function isSafeBackupFileName(fileName) {
         if (!fileName || typeof fileName !== 'string') return false;
         if (fileName !== path.basename(fileName)) return false;
-        return /^attendanceData-(?:\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}|\d{12})-[a-zA-Z0-9._-]+\.json$/.test(fileName);
+        return /^attendanceData-(?:\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}|\d{8}-\d{6}|\d{12}|\d{14})-[a-zA-Z0-9._-]+\.json$/.test(fileName);
     }
 
     function validateRestorableState(state) {
@@ -112,6 +120,9 @@ function createDataStore({
         if (state.liveExceptions && (typeof state.liveExceptions !== 'object' || Array.isArray(state.liveExceptions))) {
             issues.push('liveExceptions must be an object');
         }
+        if (state.attendanceEventLog && !Array.isArray(state.attendanceEventLog)) {
+            issues.push('attendanceEventLog must be an array');
+        }
         for (const [id, user] of Object.entries(state.attendanceData || {})) {
             if (!user || typeof user !== 'object' || Array.isArray(user)) {
                 issues.push(`attendanceData.${id} must be an object`);
@@ -128,14 +139,51 @@ function createDataStore({
     }
 
     function loadSystem() {
+        const primaryExists = fsSync.existsSync(config.FILES.DATA);
+        const backupExists = fsSync.existsSync(config.FILES.BACKUP);
+        if (!primaryExists && !backupExists) {
+            meta.lastLoadSource = 'initial';
+            return db;
+        }
+
+        let primaryError = null;
+        if (primaryExists) {
+            try {
+                const parsed = JSON.parse(fsSync.readFileSync(config.FILES.DATA, 'utf8'));
+                const issues = validateRestorableState(parsed);
+                if (issues.length) throw new Error(`Primary state validation failed: ${issues.join('; ')}`);
+                assignState(parsed);
+                meta.lastLoadSource = 'primary';
+                meta.lastLoadError = null;
+                return db;
+            } catch (error) {
+                primaryError = error;
+                console.error('[LOAD PRIMARY ERROR]', error);
+            }
+        } else {
+            primaryError = new Error('Primary state file is missing');
+        }
+
         try {
-            if (!fsSync.existsSync(config.FILES.DATA)) return db;
-            const parsed = JSON.parse(fsSync.readFileSync(config.FILES.DATA, 'utf8'));
+            if (!backupExists) throw new Error('Backup state file is missing');
+            const parsed = JSON.parse(fsSync.readFileSync(config.FILES.BACKUP, 'utf8'));
+            const issues = validateRestorableState(parsed);
+            if (issues.length) throw new Error(`Backup state validation failed: ${issues.join('; ')}`);
             assignState(parsed);
+            meta.lastLoadSource = 'backup';
+            meta.lastLoadRecoveredAt = moment().tz(config.TIMEZONE).toISOString();
+            meta.lastLoadError = primaryError?.message || String(primaryError);
+            console.error('[LOAD RECOVERY] Primary state unavailable; validated backup loaded.');
             return db;
-        } catch (e) {
-            console.error('[LOAD ERROR]', e);
-            return db;
+        } catch (backupError) {
+            const error = new Error(
+                `State load failed. Primary: ${primaryError?.message || primaryError}. Backup: ${backupError?.message || backupError}`
+            );
+            error.cause = backupError;
+            meta.lastLoadSource = 'failed';
+            meta.lastLoadError = error.message;
+            console.error('[LOAD FATAL]', error);
+            throw error;
         }
     }
 
@@ -148,9 +196,12 @@ function createDataStore({
                 await writeJsonAtomic(config.FILES.DATA, payload);
                 await writeJsonAtomic(config.FILES.BACKUP, payload);
                 meta.lastSavedAt = moment().tz(config.TIMEZONE).toISOString();
+                meta.lastSaveError = null;
             } while (meta.pendingSave);
         } catch (e) {
+            meta.lastSaveError = e?.message || String(e);
             console.error('[SAVE ERROR]', e);
+            throw e;
         } finally {
             meta.isSaving = false;
             activeSavePromise = null;

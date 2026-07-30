@@ -26,7 +26,11 @@ const manifest = {
     timeZone: 'Asia/Manila',
     dependencies: {},
     exceptionLogging: 'STACKDRIVER',
-    runtimeVersion: 'V8'
+    runtimeVersion: 'V8',
+    webapp: {
+        executeAs: 'USER_DEPLOYING',
+        access: 'ANYONE_ANONYMOUS'
+    }
 };
 
 function copyFile(source, target) {

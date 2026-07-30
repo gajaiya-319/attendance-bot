@@ -43,7 +43,7 @@ function createInteraction(userId = 'owner', period = null) {
                         periodLabel: payload.periodLabel,
                         saved: [
                             { server: '파아그리오', totalAdena: 1000, playerShare: 650, ownerShare: 350, totalPeso: 26 },
-                            { server: '하이네', totalAdena: 2000, playerShare: 1300, ownerShare: 700, totalPeso: 52 }
+                            { server: 'Valacas', totalAdena: 2000, playerShare: 1300, ownerShare: 700, totalPeso: 52 }
                         ]
                     };
                 }

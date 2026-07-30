@@ -21,10 +21,13 @@ function createVoiceSyncWorkflow(deps) {
         getShiftBounds,
         getScheduledEndMoment,
         isMaintenanceWindow,
+        getMaintenanceHandoffWindow = () => null,
         isWithinPreShiftWindow,
         isCurrentShiftRegularWorker,
         canStartPostShiftOvertime,
         getRestorableOvertimeSession,
+        getOpenSession = () => null,
+        sumCreditedLiveOffPeriods = () => 0,
         appendAttendanceEvent,
         transitionRecordedStatus,
         setFinishedPresence,
@@ -37,12 +40,13 @@ function createVoiceSyncWorkflow(deps) {
         handleClockIn,
         activatePendingManualOvertime,
         restoreOvertimeAfterFinish,
+        resumeAutoTimeoutShift = async () => false,
         notifyDayOffPresence = async () => false,
         notifyAfterFinishPresence = async () => false,
         notifyFinishedReturnToVoice = async () => false,
         notifyStandbyClockInRequired = async () => false,
         sendFinishedLiveOffReminder = async () => false,
-        startPostShiftOvertime,
+        requestPostShiftOvertimeConfirmation = async () => ({ handled: false, changed: false }),
         recordLiveConfirmation,
         recordLiveRecovery,
         markLiveOffState,
@@ -52,9 +56,52 @@ function createVoiceSyncWorkflow(deps) {
         updateWorkingRole = async () => {},
         canStartOvertimeNow = () => false,
         startAttendanceSession = () => {},
+        appendAdminAudit = async () => {},
         formatDuration = mins => String(mins),
         logger = console
     } = deps;
+function getTrackedLiveOffMinutes(user, now) {
+    const session = getOpenSession(user);
+    if (!session) return 0;
+    return Math.max(0, sumCreditedLiveOffPeriods(session.liveOffPeriods, now));
+}
+
+function hasContinuousPostShiftLiveEvidence(user, scheduledEnd, snapshot, now) {
+    if (!user || !scheduledEnd?.isValid?.() || !snapshot?.isConnected || !snapshot?.isStreaming) return false;
+    const joinedVoice = !Boolean(snapshot.wasConnected) && Boolean(snapshot.isConnected);
+    const becameLive = !Boolean(snapshot.wasStreaming) && Boolean(snapshot.isStreaming);
+    if (joinedVoice || becameLive) return false;
+    const interruptedAt = user.postShiftOtInterruptedAt
+        ? moment(user.postShiftOtInterruptedAt).tz(CONFIG.TIMEZONE)
+        : null;
+    if (
+        interruptedAt?.isValid?.() &&
+        interruptedAt.isSameOrAfter(moment(scheduledEnd).tz(CONFIG.TIMEZONE)) &&
+        interruptedAt.isSameOrBefore(moment(now).tz(CONFIG.TIMEZONE))
+    ) return false;
+    if (user.disconnected || user.disconnectedAt || user.liveOffStartedAt) return false;
+    const lastLiveOnAt = user.lastLiveOnAt ? moment(user.lastLiveOnAt).tz(CONFIG.TIMEZONE) : null;
+    if (!lastLiveOnAt?.isValid?.()) return false;
+    const end = moment(scheduledEnd).tz(CONFIG.TIMEZONE);
+    if (moment(now).tz(CONFIG.TIMEZONE).isBefore(end)) return false;
+    return lastLiveOnAt.isSameOrBefore(end.clone().add(1, 'minute'));
+}
+
+function markPostShiftOtInterrupted(user, scheduledEnd, now, reason, source) {
+    if (!user || !scheduledEnd?.isValid?.()) return false;
+    const at = moment(now).tz(CONFIG.TIMEZONE);
+    const end = moment(scheduledEnd).tz(CONFIG.TIMEZONE);
+    if (at.isBefore(end)) return false;
+    if (user.postShiftOtInterruptedAt) return false;
+    user.postShiftOtInterruptedAt = at.toISOString();
+    user.postShiftOtInterruptedReason = reason || null;
+    appendAttendanceEvent(user, 'post_shift_ot_interrupted', at, source, {
+        reason,
+        scheduledEndAt: end.toISOString()
+    });
+    return true;
+}
+
 async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().tz(CONFIG.TIMEZONE)) {
     if (!member || !user || !shift) return false;
     let changed = false;
@@ -68,30 +115,116 @@ async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().
     const becameLive = !wasStreaming && isStreaming;
     const stoppedStreaming = wasStreaming && !isStreaming;
     const maintenance = isMaintenanceWindow(now);
+    const bounds = getShiftBounds(shift, now);
+    const maintenanceHandoff = maintenance ? getMaintenanceHandoffWindow(now, shift) : null;
+    const isMaintenanceHandoffStandby = Boolean(
+        maintenanceHandoff?.isDirectHandoff &&
+        maintenanceHandoff.targetShift === shift &&
+        maintenanceHandoff.targetShiftStartAt?.isSame?.(bounds.start) &&
+        now.isSameOrAfter(maintenanceHandoff.standbyStartAt) &&
+        now.isBefore(maintenanceHandoff.standbyEndAt)
+    );
 
     if (maintenance && !isWithinPreShiftWindow(shift, now)) {
-        if (joinedVoice) appendAttendanceEvent(user, 'voice_join_maintenance', now, source, { live: isStreaming });
-        if (becameLive) appendAttendanceEvent(user, 'live_on_maintenance', now, source);
-        return false;
+        if (isMaintenanceHandoffStandby && recordPreShiftVoiceJoin('maintenance', {
+            standbyStartAt: maintenanceHandoff.standbyStartAt,
+            standbyEndAt: maintenanceHandoff.standbyEndAt,
+            previousShiftEndAt: maintenanceHandoff.previousShiftEndAt,
+            targetShiftStartAt: maintenanceHandoff.targetShiftStartAt
+        })) changed = true;
+        if (joinedVoice && appendAttendanceEvent(user, 'voice_join_maintenance', now, source, { live: isStreaming })) changed = true;
+        if (becameLive && appendAttendanceEvent(user, 'live_on_maintenance', now, source)) changed = true;
+        return changed;
     }
 
-    const bounds = getShiftBounds(shift, now);
     const hasRestorableOvertime = Boolean(isStreaming && !user.checkedIn && getRestorableOvertimeSession(user, shift, now));
+    const postShiftScheduledEnd = getScheduledEndMoment(user, now);
+    const hasContinuousPostShiftLive = hasContinuousPostShiftLiveEvidence(user, postShiftScheduledEnd, snapshot, now);
+    const isFinishedPostShiftLive = Boolean(
+        isStreaming &&
+        isConnected &&
+        !user.checkedIn &&
+        (user.isFinished || user.attendanceStatus === 'FINISHED') &&
+        !getOvertimeUsers().some(ot => ot.id === member.id)
+    );
     const canStartPostShiftOt = Boolean(
         isStreaming &&
+        hasContinuousPostShiftLive &&
         !isCurrentShiftRegularWorker(member, now) &&
-        canStartPostShiftOvertime(user, now)
+        canStartPostShiftOvertime(user, now, {
+            allowLateReturn: false,
+            requireContinuousLive: true
+        })
+    );
+    const canRequestDetachedPostShiftOt = Boolean(
+        isFinishedPostShiftLive &&
+        !hasContinuousPostShiftLive &&
+        !hasRestorableOvertime &&
+        !isCurrentShiftRegularWorker(member, now) &&
+        canStartPostShiftOvertime(user, now, {
+            allowLateReturn: true,
+            requireContinuousLive: false
+        })
     );
     
     // ✨ [핵심 수정] 출근한 사람(checkedIn)이거나 이미 퇴근 대기 중인 사람(isFinished)은 
     // 근무 시간이 지나도 채널 상태 감지를 무시하지 않도록 강제 예외 처리합니다.
-    if (!user.checkedIn && !user.isFinished && !user.pendingManualOT && !hasRestorableOvertime && !canStartPostShiftOt && !now.isBetween(bounds.start, bounds.end, null, '[]') && !isWithinPreShiftWindow(shift, now)) {
+    const preShiftVoiceGraceMins = Math.max(0, Number(CONFIG.PRE_SHIFT_VOICE_LIVE_GRACE_MINS || CONFIG.PRE_SHIFT_RECONNECT_GRACE_MINS || CONFIG.GRACE_PERIOD_MINS || 10));
+    const isBeforeShiftStart = Boolean(bounds?.start && now.isBefore(bounds.start));
+    const isPreShiftVoiceGraceWindow = Boolean(
+        bounds?.start &&
+        now.isSameOrAfter(bounds.start) &&
+        now.diff(bounds.start, 'minutes') <= preShiftVoiceGraceMins
+    );
+    function recordPreShiftVoiceJoin(mode = 'regular', windowMeta = {}) {
+        if (!isConnected || !bounds?.start || !now.isBefore(bounds.start) || user.checkedIn || user.isFinished) return false;
+        const standbyStartAt = windowMeta.standbyStartAt ? moment(windowMeta.standbyStartAt).tz(CONFIG.TIMEZONE) : null;
+        const standbyEndAt = windowMeta.standbyEndAt ? moment(windowMeta.standbyEndAt).tz(CONFIG.TIMEZONE) : null;
+        if (
+            mode === 'maintenance' &&
+            (
+                !standbyStartAt?.isValid?.() ||
+                !standbyEndAt?.isValid?.() ||
+                now.isBefore(standbyStartAt) ||
+                !now.isBefore(standbyEndAt) ||
+                !standbyEndAt.isSame(bounds.start)
+            )
+        ) {
+            return false;
+        }
+        let didRecord = false;
+        if (!user.voiceJoinedAt) {
+            user.voiceJoinedAt = now.toISOString();
+            didRecord = true;
+        }
+        if (!user.preShiftVoiceAt) {
+            user.preShiftVoiceAt = now.toISOString();
+            user.preShiftVoiceMode = mode;
+            user.preShiftVoiceWindowStartAt = standbyStartAt?.isValid?.() ? standbyStartAt.toISOString() : null;
+            user.preShiftVoiceWindowEndAt = standbyEndAt?.isValid?.() ? standbyEndAt.toISOString() : null;
+            appendAttendanceEvent(user, 'pre_shift_voice_joined', now, source, {
+                mode,
+                shiftStartAt: bounds.start.toISOString(),
+                standbyStartAt: user.preShiftVoiceWindowStartAt,
+                standbyEndAt: user.preShiftVoiceWindowEndAt,
+                previousShiftEndAt: windowMeta.previousShiftEndAt?.toISOString?.() || null,
+                targetShiftStartAt: windowMeta.targetShiftStartAt?.toISOString?.() || null
+            });
+            didRecord = true;
+        } else if (!user.preShiftVoiceMode) {
+            user.preShiftVoiceMode = mode;
+            didRecord = true;
+        }
+        return didRecord;
+    }
+    if (!user.checkedIn && !user.isFinished && !user.pendingManualOT && !hasRestorableOvertime && !canStartPostShiftOt && !isConnected && !isBeforeShiftStart && !isPreShiftVoiceGraceWindow && !now.isBetween(bounds.start, bounds.end, null, '[]') && !isWithinPreShiftWindow(shift, now)) {
         return false;
     }
 
     if (user.isFinished && !user.checkedIn) {
         if (!isConnected) {
-            return setFinishedPresence(user, 'left_voice', now, source);
+            if (markPostShiftOtInterrupted(user, postShiftScheduledEnd, now, 'left_voice_after_shift_end', source)) changed = true;
+            return setFinishedPresence(user, 'left_voice', now, source) || changed;
         }
         if (setFinishedPresence(user, 'in_voice', now, source)) changed = true;
     }
@@ -119,7 +252,7 @@ async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().
         if ((user.checkedIn || activeLiveException) && !user.disconnected) {
             // ✨ 정규 퇴근 시간 이후에 채널을 나가면 즉시 퇴근 처리 (유예 없음)
             const shiftEnd = getScheduledEndMoment(user, now); 
-            if (shiftEnd && now.isSameOrAfter(shiftEnd)) {
+            if (false && shiftEnd && now.isSameOrAfter(shiftEnd)) {
                 await handleClockOut(member, user, now, '정규 퇴근 시간 이후 채널 이탈 (즉시 자동 퇴근)', now, { clockOutSource: 'auto-out-after-shift' });
                 changed = true;
                 return true;
@@ -166,8 +299,22 @@ async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().
         return true;
     }
 
-    if (canStartPostShiftOt && await startPostShiftOvertime(member, user, now, source)) {
-        return true;
+    if (canStartPostShiftOt) {
+        const confirmResult = await requestPostShiftOvertimeConfirmation(member, user, now, source, {
+            scheduledEnd: postShiftScheduledEnd,
+            allowLateReturn: false,
+            requireContinuousLive: true
+        });
+        if (confirmResult.handled) return true;
+    }
+
+    if (canRequestDetachedPostShiftOt) {
+        const confirmResult = await requestPostShiftOvertimeConfirmation(member, user, now, source, {
+            scheduledEnd: postShiftScheduledEnd,
+            allowLateReturn: true,
+            requireContinuousLive: false
+        });
+        if (confirmResult.handled) return true;
     }
 
     if (
@@ -180,6 +327,9 @@ async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().
     ) {
         const scheduledEnd = getScheduledEndMoment(user, now);
         if (scheduledEnd && now.isBefore(scheduledEnd)) {
+            if (['dc-timeout', 'live-off-timeout'].includes(user.lastClockOutSource || '')) {
+                if (await resumeAutoTimeoutShift(member, user, shift, now, source)) return true;
+            }
             user.isFinished = false;
             user.finishedPresence = null;
             user.finalLeftAt = null;
@@ -230,6 +380,7 @@ async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().
         !getOvertimeUsers().some(ot => ot.id === member.id)
     );
     if (canResumeFromAutoTimeout) {
+        if (await resumeAutoTimeoutShift(member, user, shift, now, source)) return true;
         const resumePenaltyKey = `${lastClockOutSource}:${lastAutoTimeoutClockOutAt.toISOString()}`;
         if (user.reversibleEarlyPenaltyKey === resumePenaltyKey) {
             user.totalEarly = Math.max(0, (user.totalEarly || 0) - 1);
@@ -246,6 +397,11 @@ async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().
         }
         user.checkedIn = true;
         user.isFinished = false;
+        user.checkOutTime = null;
+        user.checkOutRaw = null;
+        user.lastClockOutSource = null;
+        user.lastClockOutReason = null;
+        user.lastClockOutDetectedAt = null;
         user.disconnected = false;
         user.disconnectedAt = null;
         user.voiceJoinedAt = null;
@@ -333,18 +489,30 @@ async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().
         if (joinedVoice) {
             const notified = await notifyFinishedReturnToVoice(member, user, shift, now, 'Returned to voice after clock-out');
             if (notified) changed = true;
+            appendAttendanceEvent(user, 'voice_join_after_finish', now, source, {
+                result: 'finished_kept'
+            });
+            return changed;
         }
         if (!isStreaming && isConnected) {
+            if (markPostShiftOtInterrupted(user, postShiftScheduledEnd, now, 'live_off_after_shift_end', source)) changed = true;
             const notified = await notifyStandbyClockInRequired(member, user, shift, now, 'Finished user in voice without live');
             if (notified) changed = true;
             const finishedReminderSent = await sendFinishedLiveOffReminder(member, user, now, source);
             if (finishedReminderSent) changed = true;
         }
         if (isStreaming) {
+            if (joinedVoice || becameLive || !user.lastLiveOnAt) {
+                user.lastLiveOnAt = now.toISOString();
+                appendAttendanceEvent(user, 'live_on_after_finish_ignored_for_ot', now, source, {
+                    result: 'finished_kept'
+                });
+                changed = true;
+            }
             const notified = await notifyAfterFinishPresence(member, user, shift, now, 'LIVE ON after clock-out');
             return changed || notified;
         }
-        appendAttendanceEvent(user, joinedVoice ? 'voice_join_after_finish' : 'voice_live_off_after_finish', now, source, {
+        appendAttendanceEvent(user, 'voice_live_off_after_finish', now, source, {
             result: 'finished_kept'
         });
         return true;
@@ -354,11 +522,16 @@ async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().
     }
 
     if (!isStreaming) {
-        appendAttendanceEvent(user, joinedVoice ? 'voice_join' : 'voice_live_off_snapshot', now, source, { live: false });
+        if (joinedVoice || stoppedStreaming) {
+            appendAttendanceEvent(user, joinedVoice ? 'voice_join' : 'voice_live_off_snapshot', now, source, { live: false });
+        }
         if (user.disconnected) {
+            const dcStartedAt = user.disconnectedAt || null;
             applyLiveOnState(user, now, source, `${source}_voice_rejoined_live_off`);
             markLiveOffState(user, now);
-            await recordLog(user, 'reconnect', 'DC 복구 - 음성채널 재접속, 라이브 OFF 상태');
+            await recordLog(user, 'reconnect', 'DC 복구 - 음성채널 재접속, 라이브 OFF 상태', null, {
+                presenceStartedAt: dcStartedAt
+            });
             await recordLog(user, 'disconnect', '라이브 OFF 시작 - 음성채널 접속 상태');
             return true;
         }
@@ -371,7 +544,7 @@ async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().
         ) {
             // ✨ 정규 퇴근 시간 이후에 방송을 끄면 즉시 퇴근 처리 (유예 없음)
             const shiftEnd = getScheduledEndMoment(user, now); 
-            if (shiftEnd && now.isSameOrAfter(shiftEnd)) {
+            if (false && shiftEnd && now.isSameOrAfter(shiftEnd)) {
                 await handleClockOut(member, user, now, '정규 퇴근 시간 이후 방송 종료 - 자동 퇴근', now, { clockOutSource: 'auto-out-after-shift-live-off' });
                 changed = true;
                 return true;
@@ -380,6 +553,7 @@ async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().
             const started = markLiveOffState(user, now);
             const liveOffAt = user.liveOffStartedAt || user.voiceJoinedAt;
             const liveOffMins = liveOffAt ? now.diff(moment(liveOffAt).tz(CONFIG.TIMEZONE), 'minutes') : 0;
+            const trackedLiveOffMins = Math.max(liveOffMins, getTrackedLiveOffMinutes(user, now));
             const pendingLiveOffClockOutAt = user.pendingClockOut?.source === 'live_off' && user.pendingClockOut.expiresAt
                 ? moment(user.pendingClockOut.expiresAt).tz(CONFIG.TIMEZONE)
                 : (liveOffAt ? moment(liveOffAt).tz(CONFIG.TIMEZONE).add(CONFIG.LIVE_OFF_CLOCK_OUT_MINS, 'minutes') : null);
@@ -388,7 +562,7 @@ async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().
                 await recordLog(user, 'disconnect', stoppedStreaming ? '라이브 OFF 시작 - 방송 종료' : '라이브 OFF 시작 - 음성채널 접속 상태');
                 changed = true;
             }
-            const warningMark = Math.floor(liveOffMins / CONFIG.LIVE_OFF_DM_INTERVAL_MINS) * CONFIG.LIVE_OFF_DM_INTERVAL_MINS;
+            const warningMark = Math.floor(trackedLiveOffMins / CONFIG.LIVE_OFF_DM_INTERVAL_MINS) * CONFIG.LIVE_OFF_DM_INTERVAL_MINS;
             const liveOffReminderMarks = [10, 20];
             if (
                 !isLiveOffClockOutDue &&
@@ -396,20 +570,34 @@ async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().
                 !user.liveOffWarningMarks.includes(warningMark)
             ) {
                 const reminderNumber = liveOffReminderMarks.indexOf(warningMark) + 1;
+                let dmStatus = 'sent';
+                let dmError = null;
                 await member.send(buildLiveOffWarningDm(
                     reminderNumber,
                     warningMark,
                     CONFIG.LIVE_OFF_CLOCK_OUT_MINS
-                )).catch(() => null);
+                )).catch(error => {
+                    dmStatus = 'failed';
+                    dmError = error?.message || String(error);
+                });
+                await appendAdminAudit('AUTO_DM_LIVE_OFF_WARNING', {
+                    targetId: member.id,
+                    targetName: user.name || member.displayName || member.user?.username || member.id,
+                    shift,
+                    reminderNumber,
+                    mark: warningMark,
+                    trackedLiveOffMins,
+                    currentLiveOffMins: liveOffMins,
+                    dmStatus,
+                    dmError,
+                    reason: 'live-off-during-work'
+                });
                 user.liveOffWarningMarks.push(warningMark);
                 user.liveOffWarnedFor = `${shift}:${liveOffAt ? moment(liveOffAt).format('YYYY-MM-DD HH:mm') : now.format('YYYY-MM-DD HH:mm')}:${warningMark}`;
                 changed = true;
             }
-        } else if (!user.checkedIn && isWithinPreShiftWindow(shift, now)) {
-            if (!user.voiceJoinedAt) {
-                user.voiceJoinedAt = now.toISOString();
-                changed = true;
-            }
+        } else if (!user.checkedIn && (isBeforeShiftStart || isWithinPreShiftWindow(shift, now))) {
+            if (recordPreShiftVoiceJoin('regular')) changed = true;
         } else if (!user.checkedIn && !user.isFinished && isConnected && now.isSameOrAfter(bounds.start)) {
             const notified = await notifyStandbyClockInRequired(member, user, shift, now, 'Standby voice without live');
             if (notified) changed = true;
@@ -426,6 +614,7 @@ async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().
         : '';
 
     const wasDisconnectedBeforeLiveOn = Boolean(user.disconnected);
+    const dcStartedAt = user.disconnectedAt || null;
     if (applyLiveOnState(user, now, source, 'live-on-recovered').changed) changed = true;
 
     if (wasDisconnectedBeforeLiveOn) {
@@ -434,8 +623,12 @@ async function applyVoiceSnapshot(member, user, shift, snapshot, now = moment().
         transitionRecordedStatus(user, {
             voiceStatus: 'LIVE_ON'
         }, now, source, 'dc-recovered-live-on');
-        await recordLog(user, 'reconnect', 'DC 복구 - 라이브 ON 상태로 복귀');
-        await recordLog(user, 'reconnect', '라이브 ON 복구 - DC 이후 방송 재개' + liveOffDurationText);
+        await recordLog(user, 'reconnect', 'DC 복구 - 라이브 ON 상태로 복귀', null, {
+            presenceStartedAt: dcStartedAt
+        });
+        await recordLog(user, 'reconnect', '라이브 ON 복구 - DC 이후 방송 재개' + liveOffDurationText, null, {
+            presenceStartedAt: dcStartedAt
+        });
         if (await activatePendingManualOvertime(user, now)) changed = true;
         return true;
     }

@@ -1,25 +1,33 @@
 'use strict';
 
 function createRoleService({ CONFIG }) {
-    const workerSuffixPattern = /\s*-\s*(?:(?:Great\s*)?(?:Manager|Trainee|Traine)\s+)?[PH]\s*(?:Day|Night)\s*Time(?:\s*\([^)]*\))?(?:\s+.*)?$/i;
-    const namedWorkerSuffixPattern = /\s*-\s*(?:(?:Great\s*)?(?:Manager|Trainee|Traine)\s+)?(?:Heine|Paagrio)\s*(?:Day|Night)\s*Time(?:\s*\([^)]*\))?(?:\s+.*)?$/i;
+    const workerSuffixPattern = /\s*[-\u2013\u2014]\s*(?:(?:Great\s*)?(?:Manager|Trainee|Traine)\s+)?[PVH]\s*(?:Day|Night)\s*Time.*$/i;
+    const namedWorkerSuffixPattern = /\s*[-\u2013\u2014]\s*(?:(?:Great\s*)?(?:Manager|Trainee|Traine)\s+)?(?:Valacas|Heine|Paagrio)\s*(?:Day|Night)\s*Time.*$/i;
+    const workerNameAliases = {
+        'deia#1024': 'Deia',
+        'deia#7347': 'Deia',
+        shijiro: 'Shiijiro'
+    };
 
     function buildGuestNickname(displayName) {
         const base = String(displayName || 'Unknown')
             .replace(/\s+-\s+Guest$/i, '')
             .replace(workerSuffixPattern, '')
             .replace(namedWorkerSuffixPattern, '')
+            .replace(/\s*[-\u2013\u2014]\s*(?:Great\s*)?(?:Manager|Trainee|Traine|Guest)(?:\s+.*)?$/i, ' ')
             .trim() || 'Unknown';
         const suffix = ' - Guest';
         return `${base.slice(0, 32 - suffix.length)}${suffix}`;
     }
 
     function getWorkerNicknameBase(displayName) {
-        return String(displayName || 'Unknown')
+        const base = String(displayName || 'Unknown')
             .replace(workerSuffixPattern, '')
             .replace(namedWorkerSuffixPattern, '')
             .replace(/\s+-\s+Guest$/i, '')
+            .replace(/\s*[-\u2013\u2014]\s*(?:Great\s*)?(?:Manager|Trainee|Traine|Guest)(?:\s+.*)?$/i, ' ')
             .trim() || 'Unknown';
+        return workerNameAliases[base.toLowerCase()] || base;
     }
 
     function getWorkerRoleProfileFromMember(member) {
@@ -37,19 +45,20 @@ function createRoleService({ CONFIG }) {
 
     function getWorkerRoleProfileFromNickname(displayName) {
         const name = String(displayName || '');
-        const match = name.match(/\s-\s*(?:(?:Great\s*)?(?:Manager|Trainee|Traine)\s+)?([PH])\s*(Day|Night)\s*Time(?:\s*\([^)]*\))?(?:\s+.*)?$/i);
+        const match = name.match(/\s*[-\u2013\u2014]\s*(?:(?:Great\s*)?(?:Manager|Trainee|Traine)\s+)?([PVH])\s*(Day|Night)\s*Time.*$/i);
         if (!match) return null;
         return {
-            server: match[1].toUpperCase() === 'H' ? 'HEINE' : 'PAAGRIO',
+            server: ['V', 'H'].includes(match[1].toUpperCase()) ? 'HEINE' : 'PAAGRIO',
             shift: match[2].toUpperCase() === 'DAY' ? 'DAY' : 'NIGHT'
         };
     }
 
     function buildWorkerNickname(displayName, profile) {
         const base = getWorkerNicknameBase(displayName);
-        const serverCode = profile.server === 'HEINE' ? 'H' : 'P';
+        const serverCode = profile.server === 'HEINE' ? 'V' : 'P';
+        const serverEmoji = profile.server === 'HEINE' ? '\u{1F432}' : '\u{1F525}';
         const shiftText = profile.shift === 'DAY' ? 'Day Time' : 'Night Time';
-        const suffix = ` - ${serverCode} ${shiftText}`;
+        const suffix = ` - ${serverCode} ${shiftText}${serverEmoji}`;
         return `${base.slice(0, 32 - suffix.length)}${suffix}`;
     }
 

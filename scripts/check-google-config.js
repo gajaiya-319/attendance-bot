@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 
 require('dotenv').config();
 
@@ -37,6 +37,8 @@ const GOOGLE_ENV_SPECS = [
         required: true,
         validate: value => (WEBAPP_URL_RE.test(value) ? null : 'expected https://script.google.com/macros/s/.../exec')
     }),
+    envSpec('PURCHASE_VALACAS_TAB_NAME'),
+    envSpec('PURCHASE_VALACAS_SHEET_ID'),
     envSpec('PURCHASE_HEINE_TAB_NAME'),
     envSpec('PURCHASE_PAAGRIO_TAB_NAME'),
     envSpec('PURCHASE_DAY_SECTION_LABEL'),
@@ -49,9 +51,11 @@ const GOOGLE_ENV_SPECS = [
     envSpec('PURCHASE_UNIT_PRICE'),
     envSpec('DEATH_PENALTY_AMOUNT'),
     envSpec('DEATH_PENALTY_PAAGRIO_CHANNEL_ID'),
+    envSpec('DEATH_PENALTY_VALACAS_CHANNEL_ID'),
     envSpec('DEATH_PENALTY_HEINE_CHANNEL_ID'),
     envSpec('DEATH_PENALTY_REVIEWER_ROLE_IDS'),
     envSpec('END_ADENA_PAAGRIO_CHANNEL_ID'),
+    envSpec('END_ADENA_VALACAS_CHANNEL_ID'),
     envSpec('END_ADENA_HEINE_CHANNEL_ID'),
     envSpec('END_ADENA_REVIEWER_ROLE_IDS')
 ];
@@ -62,6 +66,7 @@ const CONFIG_DEFAULTS = {
     PAYROLL_ARCHIVE_SPREADSHEET_ID: CONFIG.PAYROLL_ARCHIVE_SPREADSHEET_ID,
     RAW_ATTENDANCE_WEBAPP_URL: CONFIG.RAW_ATTENDANCE_WEBAPP_URL,
     PURCHASE_GOOGLE_KEY_FILE: CONFIG.PURCHASE_GOOGLE_KEY_FILE,
+    PURCHASE_VALACAS_TAB_NAME: CONFIG.PURCHASE_SERVER_TABS?.HEINE,
     PURCHASE_HEINE_TAB_NAME: CONFIG.PURCHASE_SERVER_TABS?.HEINE,
     PURCHASE_PAAGRIO_TAB_NAME: CONFIG.PURCHASE_SERVER_TABS?.PAAGRIO,
     PURCHASE_DAY_SECTION_LABEL: CONFIG.PURCHASE_SECTION_LABELS?.DAY,
@@ -130,7 +135,7 @@ function checkEnvSpec(spec) {
         return {
             status: 'skip',
             name,
-            message: 'optional — using runtime defaults where applicable',
+            message: 'optional ??using runtime defaults where applicable',
             inDotEnv,
             source: effective.source,
             display: ''
@@ -155,7 +160,7 @@ function checkEnvSpec(spec) {
         return {
             status: 'warn',
             name,
-            message: 'using constants.js default — set explicitly in .env for production',
+            message: 'using constants.js default ??set explicitly in .env for production',
             inDotEnv,
             source: effective.source,
             display: maskValue(name, effective.value)
@@ -245,10 +250,10 @@ function printChecklist(results, keyInfo) {
     console.log('');
     console.log('Workbook layout hints:');
     console.log('  - Work list: Great source tabs only. Payroll API tabs must stay in PAYROLL_* spreadsheets.');
-    console.log(`  - purchase bot writes: tabs like "${getEffectiveValue('PURCHASE_HEINE_TAB_NAME').value || 'Heine Great'}" / "${getEffectiveValue('PURCHASE_PAAGRIO_TAB_NAME').value || 'Paagrio Great'}"`);
+    console.log(`  - purchase bot writes: tabs like "${getEffectiveValue('PURCHASE_VALACAS_TAB_NAME').value || getEffectiveValue('PURCHASE_HEINE_TAB_NAME').value || 'Valakas Great'}" / "${getEffectiveValue('PURCHASE_PAAGRIO_TAB_NAME').value || 'Paagrio Great'}"`);
     console.log('  - raw attendance: Raw_Attendance, Current_Workers (Apps Script + Sheets API)');
     console.log('  - Work list payroll setup: disabled; do not create Raw_Data or payroll summary tabs here.');
-    console.log('  - 급여토탈 최근_3일_요약: 봇 API sync (npm run ops:sync-live-3day, 1분 cron)');
+    console.log('  - 급여통합관리 최근_3일_요약: bot API sync (npm run ops:sync-live-3day, 1분 cron)');
     console.log('  - 월간_누적_요약: SUM from Raw_Data (/급여기록 마감 누적)');
     console.log('  - Apps Script: migratePayrollToNewLayout (not old createPerfectPayrollSheets LOOKUP)');
     const archiveId = getEffectiveValue('PAYROLL_ARCHIVE_SPREADSHEET_ID').value || payrollId;

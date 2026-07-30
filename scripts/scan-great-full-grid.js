@@ -51,19 +51,31 @@ async function scanTab(sheets, tab) {
 }
 
 async function scanSummary(sheets, spreadsheetId, label) {
+    const meta = await sheets.spreadsheets.get({
+        spreadsheetId,
+        fields: 'sheets.properties.title'
+    });
+    const hasRecentSummary = (meta.data.sheets || [])
+        .some(sheet => sheet.properties?.title === '\uCD5C\uADFC_3\uC77C_\uC694\uC57D');
+    if (!hasRecentSummary) {
+        console.log(`\n======== ${label} recent 3-day summary (${spreadsheetId}) ========`);
+        console.log('SKIP: recent 3-day summary sheet is not present in this workbook.');
+        return;
+    }
+
     const [vals, forms] = await Promise.all([
         sheets.spreadsheets.values.get({
             spreadsheetId,
-            range: "'최근_3일_요약'!A1:H30",
+            range: "'\uCD5C\uADFC_3\uC77C_\uC694\uC57D'!A1:H30",
             valueRenderOption: 'UNFORMATTED_VALUE'
         }),
         sheets.spreadsheets.values.get({
             spreadsheetId,
-            range: "'최근_3일_요약'!C5:H6",
+            range: "'\uCD5C\uADFC_3\uC77C_\uC694\uC57D'!C5:H6",
             valueRenderOption: 'FORMULA'
         })
     ]);
-    console.log(`\n======== ${label} 최근_3일_요약 (${spreadsheetId}) ========`);
+    console.log(`\n======== ${label} recent 3-day summary (${spreadsheetId}) ========`);
     (vals.data.values || []).forEach((row, i) => {
         if (row?.some(c => c !== '' && c != null)) console.log(`R${i + 1}`, row);
     });
@@ -79,10 +91,10 @@ async function main() {
         scopes: ['https://www.googleapis.com/auth/spreadsheets']
     }) });
     await scanTab(sheets, 'Paagrio Great');
-    await scanTab(sheets, 'Heine Great');
+    await scanTab(sheets, 'Valakas Great');
     await scanSummary(sheets, id, 'Work list');
     if (payrollId && payrollId !== id) {
-        await scanSummary(sheets, payrollId, '급여토탈');
+        await scanSummary(sheets, payrollId, '급여통합관리');
     }
 }
 

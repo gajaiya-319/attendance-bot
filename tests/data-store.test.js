@@ -69,6 +69,8 @@ function createConfig(dir) {
         assert.strictEqual(backups.length, 1, 'backup snapshot is listed');
         assert.strictEqual(store.isSafeBackupFileName(backups[0]), true, 'listed backup name is safe');
         assert.strictEqual(store.isSafeBackupFileName('attendanceData-202605250519-before-restore-ot-user1.json'), true, 'legacy repair backup name is safe');
+        assert.strictEqual(store.isSafeBackupFileName('attendanceData-20260615004126-before-stale-dayoff-reconcile-cleanup.json'), true, 'legacy 14-digit repair backup name is safe');
+        assert.strictEqual(store.isSafeBackupFileName('attendanceData-20260630-155418-before-monthly-ot-repair.json'), true, 'legacy monthly overtime repair backup name is safe');
         assert.strictEqual(store.isSafeBackupFileName('../attendanceData-2026-01-01-00-00-00-manual.json'), false, 'path traversal backup name is rejected');
 
         store.assignState({ attendanceData: { after: { id: 'after' } } });
@@ -147,6 +149,44 @@ function createConfig(dir) {
         const saved = JSON.parse(await fs.readFile(path.join(dir, 'attendanceData.json'), 'utf8'));
         assert.strictEqual(saved.attendanceData.user1.checkedIn, false, 'queued save writes latest user1 state');
         assert.strictEqual(saved.attendanceData.user2.checkedIn, true, 'queued save writes added user2 state');
+    });
+
+    await withTempDir(async dir => {
+        const config = createConfig(dir);
+        await fs.writeFile(config.FILES.DATA, '{invalid-json', 'utf8');
+        await fs.writeFile(config.FILES.BACKUP, JSON.stringify({
+            attendanceData: { recovered: { id: 'recovered', checkedIn: true } },
+            overtimeUsers: []
+        }), 'utf8');
+        const store = createDataStore({ config, fsSync, fs, moment });
+        store.loadSystem();
+        assert.strictEqual(store.db.attendanceData.recovered.checkedIn, true, 'validated backup recovers corrupt primary state');
+        assert.strictEqual(store.meta.lastLoadSource, 'backup');
+        assert.ok(store.meta.lastLoadRecoveredAt);
+    });
+
+    await withTempDir(async dir => {
+        const config = createConfig(dir);
+        await fs.writeFile(config.FILES.DATA, '{invalid-primary', 'utf8');
+        await fs.writeFile(config.FILES.BACKUP, '{invalid-backup', 'utf8');
+        const store = createDataStore({ config, fsSync, fs, moment });
+        assert.throws(() => store.loadSystem(), /State load failed/, 'bot startup stops when primary and backup are both invalid');
+        assert.strictEqual(store.meta.lastLoadSource, 'failed');
+    });
+
+    await withTempDir(async dir => {
+        const writeError = new Error('disk unavailable');
+        const failingFs = {
+            ...fs,
+            writeFile: async () => { throw writeError; }
+        };
+        const store = createDataStore({ config: createConfig(dir), fsSync, fs: failingFs, moment });
+        await assert.rejects(
+            store.saveSystemAsync({ attendanceData: {}, overtimeUsers: [] }),
+            /disk unavailable/,
+            'save failures propagate to callers'
+        );
+        assert.strictEqual(store.meta.lastSaveError, 'disk unavailable');
     });
 
     console.log('data-store tests passed');

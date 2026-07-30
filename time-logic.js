@@ -128,6 +128,33 @@ function createTimeLogic({ CONFIG, SHIFT_SCHEDULE, MAINTENANCE_WINDOWS, MAINTENA
         return Boolean(getActiveMaintenanceWindow(now));
     }
 
+    function getMaintenanceHandoffWindow(now = moment().tz(CONFIG.TIMEZONE), targetShift = 'day') {
+        const window = getActiveMaintenanceWindow(now);
+        if (!window || targetShift !== 'day') return null;
+        const maintenanceStart = moment(window.startedAt).tz(CONFIG.TIMEZONE);
+        const maintenanceEnd = moment(window.endedAt).tz(CONFIG.TIMEZONE);
+        const previousShiftBounds = getShiftBounds('night', maintenanceStart.clone().subtract(1, 'millisecond'));
+        const targetShiftBounds = getShiftBounds(targetShift, maintenanceEnd);
+        const previousShiftEndsAtMaintenance = Boolean(previousShiftBounds?.end && previousShiftBounds.end.isSame(maintenanceStart));
+        const maintenanceEndsAtTargetStart = Boolean(targetShiftBounds?.start && targetShiftBounds.start.isSame(maintenanceEnd));
+
+        return {
+            sourceDate: window.sourceDate || null,
+            override: Boolean(window.override),
+            previousShift: 'night',
+            targetShift,
+            previousShiftStartAt: previousShiftBounds?.start || null,
+            previousShiftEndAt: previousShiftBounds?.end || null,
+            maintenanceStartAt: maintenanceStart,
+            maintenanceEndAt: maintenanceEnd,
+            targetShiftStartAt: targetShiftBounds?.start || null,
+            targetShiftEndAt: targetShiftBounds?.end || null,
+            standbyStartAt: maintenanceStart,
+            standbyEndAt: maintenanceEnd,
+            isDirectHandoff: Boolean(previousShiftEndsAtMaintenance && maintenanceEndsAtTargetStart)
+        };
+    }
+
     function getRecentMaintenanceEnd(now = moment().tz(CONFIG.TIMEZONE), graceMins = CONFIG.FINISHED_VISIBLE_AFTER_MINS || 30) {
         const window = getActiveMaintenanceWindow(now, graceMins);
         if (!window) return null;
@@ -193,6 +220,7 @@ function createTimeLogic({ CONFIG, SHIFT_SCHEDULE, MAINTENANCE_WINDOWS, MAINTENA
         getShiftBusinessDate,
         getOperationalShift,
         getActiveMaintenanceWindow,
+        getMaintenanceHandoffWindow,
         getRecentMaintenanceEnd,
         isMaintenanceWindow,
         getDayOffLogicalDateForShift,

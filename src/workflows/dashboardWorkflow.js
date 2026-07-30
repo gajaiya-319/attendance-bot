@@ -43,6 +43,7 @@ function createDashboardWorkflow(deps) {
         renderSummaryBox = () => '',
         renderCleanGrid = () => 'NONE',
         renderStatusList = () => 'NONE',
+        renderAttentionSummary = () => 'NONE',
         renderOvertimeList = () => 'NONE',
         formatDuration = mins => String(mins),
         logger = console
@@ -80,6 +81,20 @@ function parseDashboardStableKey(stableKey) {
     } catch {
         return null;
     }
+}
+
+function getEarlyFinishedMinutes(user, now) {
+    if (!user || !user.shift || typeof getShiftBounds !== 'function') return 0;
+    if (!(user.isFinished || user.attendanceStatus === 'FINISHED' || user.fState === 'FINISHED')) return 0;
+    if (user.earlyOut !== true) return 0;
+    const rawOut = user.checkOutRaw || user.attendanceStatusChangedAt;
+    if (!rawOut) return 0;
+    const outMoment = moment(rawOut).tz(CONFIG.TIMEZONE);
+    if (!outMoment.isValid()) return 0;
+    const bounds = getShiftBounds(user.shift, outMoment);
+    if (!bounds?.end) return 0;
+    const earlyMins = bounds.end.diff(outMoment, 'minutes');
+    return earlyMins > Number(CONFIG.CLOCK_OUT_GRACE_MINS || 0) ? earlyMins : 0;
 }
 
 function isLiveOnRecoveryPublish(prevKey, nextKey) {
@@ -153,7 +168,12 @@ function buildDashboardStableKey({
             user.attendanceStatus || '',
             user.voiceStatus || '',
             user.checkInTime || '',
-            user.checkOutTime || ''
+            user.checkOutTime || '',
+            Array.isArray(user.liveOffWarningMarks) ? user.liveOffWarningMarks.join('/') : '',
+            user.pendingClockOut?.source || '',
+            user.pendingClockOut?.expiresAt || '',
+            user.dashboardVoiceConnected ? 'voice' : 'no-voice',
+            user.dashboardVoiceStreaming ? 'live' : 'no-live'
         ].join(':'))
         .sort();
     return JSON.stringify({
@@ -236,7 +256,7 @@ async function reconcileDashboardSessionState(guild, now, {
         }
     }
     const overtimeBeforeCleanup = getOvertimeUsers().length;
-    getOvertimeUsers() = getOvertimeUsers().filter(ot => {
+    const nextOvertimeUsers = getOvertimeUsers().filter(ot => {
         const user = getAttendanceData()[ot.id];
         const member = guild.members.cache.get(ot.id);
         if (!user || !member || user.dayOff) return false;
@@ -277,6 +297,7 @@ async function reconcileDashboardSessionState(guild, now, {
         }
         return false;
     });
+    setOvertimeUsers(nextOvertimeUsers);
     if (getOvertimeUsers().length !== overtimeBeforeCleanup) sessionChanged = true;
     return sessionChanged;
 }
@@ -375,6 +396,8 @@ async function renderDashboardCore({ forceMemberRefresh = false, reconcileSessio
                 const u = ensureUserData(m, userShift);
                 const { voiceState, isVoiceConnected, isStreaming } = readMemberVoicePresence(m, guild);
                 u.dashboardName = dashboardStateUtils.getDashboardDisplayName(m, dashboardNameCounts);
+                u.dashboardVoiceConnected = isVoiceConnected;
+                u.dashboardVoiceStreaming = isStreaming;
                 const bounds = getShiftBounds(u.shift, now);
                 const isPreShift = now.isBefore(bounds.start);
                 const liveException = getActiveLiveException(m.id, now);
@@ -395,7 +418,9 @@ async function renderDashboardCore({ forceMemberRefresh = false, reconcileSessio
                 return u;
             });
 
-        const visibleUsers = users.filter(u => u.fState !== 'OUT_OF_SCOPE');
+        const visibleUsers = dashboardStateUtils.filterShadowedDashboardUsers(
+            users.filter(u => u.fState !== 'OUT_OF_SCOPE')
+        );
         const groups = dashboardStateUtils.buildExclusiveDashboardGroups(visibleUsers, dashboardOvertimeUsers);
         const {
             active,
@@ -410,6 +435,14 @@ async function renderDashboardCore({ forceMemberRefresh = false, reconcileSessio
         } = groups;
 
         const totalUsers = visibleUsers.length;
+        const earlyFinished = finished.filter(user => {
+            const earlyMins = getEarlyFinishedMinutes(user, now);
+            if (earlyMins <= 0) return false;
+            user.dashboardEarlyOutMins = earlyMins;
+            return true;
+        });
+        const excessiveLate = active.filter(user => user.excessiveLateThisShift);
+        const attentionTotal = liveOff.length + disconnected.length + absent.length + earlyFinished.length + excessiveLate.length + exclusiveOvertimeUsers.length + standby.length;
 
         const embed = new EmbedBuilder()
             .setColor(embedColor)
@@ -432,6 +465,7 @@ async function renderDashboardCore({ forceMemberRefresh = false, reconcileSessio
                     ['LIVE OFF', liveOff.length],
                     ['DC', disconnected.length],
                     ['ABSENT', absent.length],
+                    ['EARLY OUT', earlyFinished.length],
                     ['WAITING', standby.length]
                 ]),
                 inline: true
@@ -448,9 +482,13 @@ async function renderDashboardCore({ forceMemberRefresh = false, reconcileSessio
         );
 
         safeAddFields(embed, { name: '\u200B', value: '\u200B', inline: false });
-        safeAddFields(embed, { name: `${shiftNameText} [CURRENT]`, value: '\u200B', inline: false });
+        safeAddFields(embed, {
+            name: `🧭 ADMIN ATTENTION (${attentionTotal}명)`,
+            value: renderAttentionSummary({ liveOff, disconnected, absent, earlyFinished, excessiveLate, overtime: exclusiveOvertimeUsers, standby }, now),
+            inline: false
+        });
         safeAddFields(embed,
-            { name: `✅ ACTIVE & LIVE ON (${active.length}명)`, value: renderCleanGrid(active, '✅'), inline: false },
+            { name: '\u200B', value: `**${shiftNameText} [CURRENT]**\n**✅  ACTIVE & LIVE ON (${active.length}명)**\n${renderCleanGrid(active, '✅')}`, inline: false },
             { name: `📴 LIVE OFF (${liveOff.length}명)`, value: renderStatusList(liveOff, '📴', now, 'liveoff'), inline: false },
             { name: `⚡ DISCONNECTED (${disconnected.length}명)`, value: renderStatusList(disconnected, '⚡', now, 'dc'), inline: false },
             { name: `🟣 LIVE EXCEPTION (${liveExceptionUsers.length}명)`, value: renderStatusList(liveExceptionUsers, '🟣', now, 'exception'), inline: false },

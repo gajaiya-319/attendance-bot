@@ -65,14 +65,18 @@ function loadReviewedBackupIssues(reviewedFile) {
 }
 
 function isReviewedIssue(issue, reviewedIssues) {
-    if (issue.severity !== 'warning') return false;
-    return reviewedIssues.some(reviewed => (
-        reviewed
-        && reviewed.file === issue.file
-        && reviewed.type === issue.type
-        && reviewed.message === issue.message
-        && reviewed.sha256 === issue.sha256
-    ));
+    return reviewedIssues.some(reviewed => {
+        const sameIssue = reviewed
+            && reviewed.file === issue.file
+            && reviewed.type === issue.type
+            && reviewed.message === issue.message
+            && reviewed.sha256 === issue.sha256;
+        if (!sameIssue) return false;
+        if (issue.severity === 'warning') return true;
+        return Boolean(reviewed.quarantined) &&
+            issue.severity === 'fatal' &&
+            ['restore-validation', 'state-invariant'].includes(issue.type);
+    });
 }
 
 function splitReviewedIssues(issues, reviewedIssues) {

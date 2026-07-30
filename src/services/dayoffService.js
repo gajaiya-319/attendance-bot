@@ -130,6 +130,36 @@ function createDayOffService({ CONFIG, moment, EmbedBuilder, padWidth, truncateW
         };
     }
 
+    function parsePostedDayOffRequestMessage(message) {
+        const embed = message?.embeds?.find?.(item => item?.title === 'Day Off Request');
+        const description = embed?.description || '';
+        if (!description) return null;
+
+        const footerText = embed?.footer?.text || '';
+        const applicantId = description.match(/Applicant:\s*<@!?(\d+)>/i)?.[1]
+            || footerText.match(/User ID:\s*(\d+)/i)?.[1]
+            || null;
+        const name = description.match(/Name\s*:\s*(.+)/i)?.[1]?.trim() || null;
+        const shiftText = description.match(/Shift\s*:\s*(Day Time|Night Time)/i)?.[1] || null;
+        const leaveDate = description.match(/Date\s*:\s*(\d{4}-\d{2}-\d{2})/i)?.[1] || null;
+        const reason = description.match(/Reason\s*:\s*(.+)/i)?.[1]?.trim() || null;
+        const shift = /^day/i.test(shiftText || '') ? 'day' : /^night/i.test(shiftText || '') ? 'night' : null;
+        if (!applicantId || !name || !shift || !leaveDate) return null;
+
+        return {
+            ok: true,
+            code: 'valid',
+            displayName: name,
+            submittedName: name,
+            nameMismatch: false,
+            shift,
+            shiftLabel: shift === 'day' ? 'Day Time' : 'Night Time',
+            leaveDate,
+            userId: applicantId,
+            reason
+        };
+    }
+
     function buildDayOffDm(reservation) {
         return buildDayOffApprovedDm(reservation);
     }
@@ -221,6 +251,7 @@ function createDayOffService({ CONFIG, moment, EmbedBuilder, padWidth, truncateW
         getMonthNumber,
         normalizeDayOffName,
         parseDayOffRequest,
+        parsePostedDayOffRequestMessage,
         buildDayOffDm,
         buildDayOffRejectDm,
         hasApprovalReaction,

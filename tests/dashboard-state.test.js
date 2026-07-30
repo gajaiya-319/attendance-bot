@@ -37,6 +37,11 @@ const utils = createDashboardStateUtils({
     getOvertimeUsers: () => [{ id: 'ot-user' }]
 });
 
+assert.strictEqual(utils.getDashboardBaseName({ displayName: 'Deia#1024' }), 'Deia');
+assert.strictEqual(utils.getDashboardBaseName({ displayName: 'Deia#7347' }), 'Deia');
+assert.strictEqual(utils.getDashboardUserBaseName({ name: 'Deia#1024' }), 'Deia');
+assert.strictEqual(utils.getDashboardUserBaseName({ name: 'Deia#7347' }), 'Deia');
+
 {
     const state = utils.getHybridDashboardState({
         id: 'working-live-off',
@@ -87,6 +92,62 @@ const utils = createDashboardStateUtils({
 
 {
     const state = utils.getHybridDashboardState({
+        id: 'working-stale-live-on',
+        checkedIn: true,
+        isFinished: false,
+        dayOff: false,
+        disconnected: false,
+        attendanceStatus: 'WORKING',
+        voiceStatus: 'LIVE_ON'
+    }, {
+        now: at('2026-05-20 13:00'),
+        bounds: { start: at('2026-05-20 09:00'), end: at('2026-05-20 21:00') },
+        isVoiceConnected: false,
+        isStreaming: false,
+        isVoiceLiveOff: false,
+        isPreShift: false,
+        hasLiveOffVoice: false,
+        liveException: null
+    });
+
+    assert.strictEqual(state, 'DISCONNECTED', 'actual voice absence overrides stale LIVE_ON status');
+}
+
+{
+    const user = {
+        id: 'standby-after-2h',
+        checkedIn: false,
+        isFinished: false,
+        dayOff: false,
+        disconnected: false
+    };
+    const beforeGrace = utils.getHybridDashboardState(user, {
+        now: at('2026-05-20 10:59'),
+        bounds: { start: at('2026-05-20 09:00'), end: at('2026-05-20 21:00') },
+        isVoiceConnected: true,
+        isStreaming: false,
+        isVoiceLiveOff: true,
+        isPreShift: false,
+        hasLiveOffVoice: true,
+        liveException: null
+    });
+    const afterGrace = utils.getHybridDashboardState(user, {
+        now: at('2026-05-20 11:00'),
+        bounds: { start: at('2026-05-20 09:00'), end: at('2026-05-20 21:00') },
+        isVoiceConnected: true,
+        isStreaming: false,
+        isVoiceLiveOff: true,
+        isPreShift: false,
+        hasLiveOffVoice: true,
+        liveException: null
+    });
+
+    assert.strictEqual(beforeGrace, 'WAITING', 'not checked in voice user stays WAITING before the 2h absence grace');
+    assert.strictEqual(afterGrace, 'ABSENT', 'not checked in voice user becomes ABSENT at 2h after shift start');
+}
+
+{
+    const state = utils.getHybridDashboardState({
         id: 'finished-old',
         checkedIn: false,
         isFinished: true,
@@ -107,6 +168,30 @@ const utils = createDashboardStateUtils({
     });
 
     assert.strictEqual(state, 'ABSENT', 'expired previous finished user becomes ABSENT during current shift');
+}
+
+{
+    const state = utils.getHybridDashboardState({
+        id: 'finished-status-only-old',
+        checkedIn: false,
+        isFinished: false,
+        dayOff: false,
+        disconnected: false,
+        attendanceStatus: 'FINISHED',
+        voiceStatus: 'OFFLINE',
+        attendanceStatusChangedAt: at('2026-05-20 08:00').toISOString()
+    }, {
+        now: at('2026-05-20 13:00'),
+        bounds: { start: at('2026-05-20 09:00'), end: at('2026-05-20 21:00') },
+        isVoiceConnected: false,
+        isStreaming: false,
+        isVoiceLiveOff: false,
+        isPreShift: false,
+        hasLiveOffVoice: false,
+        liveException: null
+    });
+
+    assert.strictEqual(state, 'ABSENT', 'expired FINISHED attendance status is not kept visible when isFinished is stale false');
 }
 
 {
@@ -377,6 +462,111 @@ const utils = createDashboardStateUtils({
     assert.deepStrictEqual(groups.active.map(u => u.id), ['active-user', 'late-user']);
     assert.deepStrictEqual(groups.finished.map(u => u.id), ['finished-user']);
     assert.deepStrictEqual(groups.standby.map(u => u.id), ['waiting-user']);
+}
+
+{
+    const visible = utils.filterShadowedDashboardUsers([
+        {
+            id: 'old-deia',
+            name: 'Deia - P Day Time',
+            dashboardName: 'Deia#1024',
+            checkedIn: false,
+            isFinished: true,
+            attendanceStatus: 'FINISHED',
+            fState: 'FINISHED'
+        },
+        {
+            id: 'new-deia',
+            name: 'Deia - P Day Time',
+            dashboardName: 'Deia#7347',
+            checkedIn: true,
+            isFinished: false,
+            attendanceStatus: 'WORKING',
+            fState: 'ACTIVE'
+        },
+        {
+            id: 'other-finished',
+            name: 'Bitz - P Day Time',
+            dashboardName: 'Bitz',
+            checkedIn: false,
+            isFinished: true,
+            attendanceStatus: 'FINISHED',
+            fState: 'FINISHED'
+        }
+    ]);
+
+    assert.deepStrictEqual(visible.map(u => u.id), ['new-deia', 'other-finished']);
+    assert.strictEqual(visible[0].dashboardName, 'Deia', 'shadowed duplicate removal also refreshes the remaining display name');
+}
+
+{
+    const visible = utils.filterShadowedDashboardUsers([
+        {
+            id: 'old-deia-absent',
+            name: 'Deia#7347',
+            dashboardName: 'Deia#7347',
+            checkedIn: false,
+            isFinished: false,
+            dayOff: false,
+            attendanceStatus: 'PRE_SHIFT',
+            fState: 'ABSENT'
+        },
+        {
+            id: 'new-deia-dayoff',
+            name: 'Deia#1024',
+            dashboardName: 'Deia#1024',
+            checkedIn: false,
+            isFinished: false,
+            dayOff: true,
+            attendanceStatus: 'DAY_OFF',
+            fState: 'LEAVE'
+        }
+    ]);
+
+    assert.deepStrictEqual(visible.map(u => u.id), ['new-deia-dayoff']);
+    assert.strictEqual(visible[0].dashboardName, 'Deia', 'known Deia aliases collapse to the day-off row instead of showing absent too');
+}
+
+{
+    const persistedUser = {
+        id: 'deia-dashboard-only',
+        name: 'Deia#1024',
+        dashboardName: 'Deia#1024',
+        checkedIn: false,
+        isFinished: false,
+        dayOff: false,
+        attendanceStatus: 'PRE_SHIFT',
+        fState: 'WAITING'
+    };
+    const visible = utils.filterShadowedDashboardUsers([persistedUser]);
+    assert.strictEqual(visible[0].dayOff, true, 'dashboard receives the display-only day-off override');
+    assert.strictEqual(persistedUser.dayOff, false, 'dashboard rendering must not mutate persisted attendance data');
+    assert.strictEqual(persistedUser.attendanceStatus, 'PRE_SHIFT');
+}
+
+{
+    const visible = utils.filterShadowedDashboardUsers([
+        {
+            id: '11110001',
+            name: 'Robin - P Day Time',
+            dashboardName: 'Robin',
+            checkedIn: true,
+            isFinished: false,
+            attendanceStatus: 'WORKING',
+            fState: 'ACTIVE'
+        },
+        {
+            id: '22220002',
+            name: 'Robin - V Day Time',
+            dashboardName: 'Robin',
+            checkedIn: true,
+            isFinished: false,
+            attendanceStatus: 'WORKING',
+            fState: 'ACTIVE'
+        }
+    ]);
+
+    assert.deepStrictEqual(visible.map(u => u.dashboardName), ['Robin#0001', 'Robin#0002']);
 }
 
 {

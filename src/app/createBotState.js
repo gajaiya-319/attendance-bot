@@ -29,6 +29,7 @@ function createBotState(ctx) {
     let announceData = { 1: null, 2: null, 3: null, 4: null, 5: null, 6: null };
     let dayOffReservations = {};
     let liveExceptions = {};
+    let attendanceEventLog = [];
     
     let lastSavedAt = null;
     let lastBackupAt = null;
@@ -41,6 +42,9 @@ function createBotState(ctx) {
     let lastOpsQueueStuckAlertAt = 0;
     let lastOpsQueueAutoResultSignature = null;
     let lastOpsQueueAutoResultAlertAt = 0;
+    let lastRawAttendanceSelfRepairAt = 0;
+    let lastRawAttendanceSelfRepairSignature = null;
+    let lastRawAttendanceSelfRepairAlertAt = 0;
 
     let systemStateBridge;
     let persistenceRuntime;
@@ -55,7 +59,8 @@ function createBotState(ctx) {
             panelInfo,
             announceData,
             dayOffReservations,
-            liveExceptions
+            liveExceptions,
+            attendanceEventLog
         }),
         setLiveState: next => {
             attendanceData = next.attendanceData;
@@ -65,6 +70,7 @@ function createBotState(ctx) {
             announceData = next.announceData;
             dayOffReservations = next.dayOffReservations;
             liveExceptions = next.liveExceptions;
+            attendanceEventLog = Array.isArray(next.attendanceEventLog) ? next.attendanceEventLog : [];
         },
         onMetaSynced: meta => {
             lastSavedAt = meta.lastSavedAt;
@@ -141,6 +147,8 @@ function createBotState(ctx) {
         get dayOffReservations() { return dayOffReservations; },
         get liveExceptions() { return liveExceptions; },
         set liveExceptions(v) { liveExceptions = v; },
+        get attendanceEventLog() { return attendanceEventLog; },
+        set attendanceEventLog(v) { attendanceEventLog = Array.isArray(v) ? v : []; },
         get lastSavedAt() { return lastSavedAt; },
         get lastBackupAt() { return lastBackupAt; },
         get lastCommandRegisterAt() { return lastCommandRegisterAt; },
@@ -161,6 +169,12 @@ function createBotState(ctx) {
         set lastOpsQueueAutoResultSignature(v) { lastOpsQueueAutoResultSignature = v; },
         get lastOpsQueueAutoResultAlertAt() { return lastOpsQueueAutoResultAlertAt; },
         set lastOpsQueueAutoResultAlertAt(v) { lastOpsQueueAutoResultAlertAt = v; },
+        get lastRawAttendanceSelfRepairAt() { return lastRawAttendanceSelfRepairAt; },
+        set lastRawAttendanceSelfRepairAt(v) { lastRawAttendanceSelfRepairAt = v; },
+        get lastRawAttendanceSelfRepairSignature() { return lastRawAttendanceSelfRepairSignature; },
+        set lastRawAttendanceSelfRepairSignature(v) { lastRawAttendanceSelfRepairSignature = v; },
+        get lastRawAttendanceSelfRepairAlertAt() { return lastRawAttendanceSelfRepairAlertAt; },
+        set lastRawAttendanceSelfRepairAlertAt(v) { lastRawAttendanceSelfRepairAlertAt = v; },
         systemStateBridge,
         persistenceRuntime,
         startupRuntime,

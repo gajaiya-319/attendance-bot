@@ -273,7 +273,10 @@ assert.strictEqual(
 assert.strictEqual(getMemberServer({ roles: roles(['paagrio']) }, CONFIG.ROLES), 'PAAGRIO');
 assert.strictEqual(getMemberShift({ roles: roles(['night']) }, CONFIG.ROLES), 'NIGHT');
 assert.strictEqual(getPurchaseSheetDayOfMonth(momentTimezone, CONFIG.TIMEZONE, new Date('2026-06-01T01:00:00Z')), 1);
-assert(formatPurchaseRequestOwnerDm({ userName: 'Gab', quantity: 2 }).includes('Gab님이 포션을 2개 신청했습니다.'));
+assert.strictEqual(getPurchaseSheetDayOfMonth(momentTimezone, CONFIG.TIMEZONE, new Date('2026-06-29T18:33:00Z'), 'NIGHT'), 29);
+assert.strictEqual(getPurchaseSheetDayOfMonth(momentTimezone, CONFIG.TIMEZONE, new Date('2026-06-30T15:48:00Z'), 'NIGHT'), 30);
+assert(formatPurchaseRequestOwnerDm({ userName: 'Gab', quantity: 2 }).includes('요청자: Gab'));
+assert(formatPurchaseRequestOwnerDm({ userName: 'Gab', quantity: 2 }).includes('요청 내용: 포션 2개'));
 assert(formatPurchaseApprovedDm({ quantity: 2 }).includes('Please check your potions'));
 
 (async () => {
@@ -295,8 +298,9 @@ assert(formatPurchaseApprovedDm({ quantity: 2 }).includes('Please check your pot
 
         assert.strictEqual(calls[0], `react:${CONFIG.PURCHASE_PROCESSING_EMOJI}`);
         assert(calls[1].startsWith('ownerDm:owner:'));
-        assert(calls[1].includes('Gab님이 포션을 2개 신청했습니다.'));
-        assert(calls[1].includes('확인한 후 구매해 주세요.'));
+        assert(calls[1].includes('요청자: Gab'));
+        assert(calls[1].includes('요청 내용: 포션 2개'));
+        assert(calls[1].includes('확인 후 가능할 때 구매해 주세요.'));
     }
 
     {
@@ -360,7 +364,7 @@ assert(formatPurchaseApprovedDm({ quantity: 2 }).includes('Please check your pot
             message
         }, { id: 'owner', bot: false });
 
-        assert(calls.includes('sheet:PAAGRIO:NIGHT:Gab:6000:1'));
+        assert(calls.includes('sheet:PAAGRIO:NIGHT:Gab:6000:31'));
     }
 
     {
@@ -389,7 +393,7 @@ assert(formatPurchaseApprovedDm({ quantity: 2 }).includes('Please check your pot
             message
         }, { id: 'owner', bot: false });
 
-        assert(calls.includes('sheet:PAAGRIO:NIGHT:Gab:9900:1'));
+        assert(calls.includes('sheet:PAAGRIO:NIGHT:Gab:9900:31'));
         assert(calls.some(call => call.includes('Your haste buff has been purchased.')));
     }
 
@@ -423,8 +427,8 @@ assert(formatPurchaseApprovedDm({ quantity: 2 }).includes('Please check your pot
             message
         }, { id: 'owner', bot: false });
 
-        assert(calls.includes('sheet:HEINE:NIGHT:Lancyy:3000:2'));
-        assert(calls.includes('sheet:PAAGRIO:NIGHT:Lancyy:3000:2'));
+        assert(calls.includes('sheet:HEINE:NIGHT:Lancyy:3000:1'));
+        assert(calls.includes('sheet:PAAGRIO:NIGHT:Lancyy:3000:1'));
     }
 
     {

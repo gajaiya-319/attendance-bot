@@ -44,7 +44,7 @@ async function sendDeepReport(type = 'Regular') {
             let content = '```\n[PTS] [Normal/Late/Absent/Early/OT/Off] [DC] | Name\n';
             const sorted = allStats.sort((a, b) => (b.points || 0) - (a.points || 0));
             sorted.forEach(u => {
-                const stats = `${u.totalNormal || 0}/${u.totalLate || 0}/${u.totalAbsent || 0}/${u.totalEarly || 0}/${u.totalOT || 0}/${u.offCount || 0}`;
+                const stats = `${u.totalNormal || 0}/${u.totalLate || 0}/${u.totalExcessiveLate || 0}/${u.totalAbsent || 0}/${u.totalEarly || 0}/${u.totalOT || 0}/${u.offCount || 0}`;
                 content += `${padWidth((u.points || 0).toString(), 5)} ${padWidth(stats, 18)} ${padWidth((u.dcCount || 0).toString(), 4)} | ${u.name?.split('-')[0] || 'Unknown'}\n`;
             });
             safeAddFields(embed, { name: '전체 인원 지표', value: renderEmbedCodeBlock(content.replace(/^```\n/, ''), 1000) });
@@ -271,14 +271,30 @@ function buildRankingEmbed({ guild = null, shift = 'all' } = {}) {
 
     const sorted = Array.from(workersById.values())
         .sort((a, b) => ((b.points || 0) - (a.points || 0)) || String(a.name || '').localeCompare(String(b.name || '')));
-    const legend = 'Legend: [Normal/Late/Absent/Early/OT/Off]';
+    const legend = 'Legend: [Normal/Late/2H+Late/Absent/Early/OT/Off]';
     const lines = sorted.length
         ? sorted.map((u, idx) => {
             const name = truncateWidth((u.name || 'Unknown').split('-')[0].trim(), 18);
-            const stats = `${u.totalNormal || 0}/${u.totalLate || 0}/${u.totalAbsent || 0}/${u.totalEarly || 0}/${u.totalOT || 0}/${u.offCount || 0}`;
+            const stats = `${u.totalNormal || 0}/${u.totalLate || 0}/${u.totalExcessiveLate || 0}/${u.totalAbsent || 0}/${u.totalEarly || 0}/${u.totalOT || 0}/${u.offCount || 0}`;
             return `${String(idx + 1).padStart(2, '0')}. ${padWidth(name, 20)} ${String(u.points || 0).padStart(5)} pts  [${stats}]`;
         }).join('\n')
         : 'No day/night worker attendance data.';
+    const excessiveLateProblemRows = sorted
+        .filter(u => Number(u.totalExcessiveLate || 0) > 0)
+        .sort((a, b) => Number(b.totalExcessiveLate || 0) - Number(a.totalExcessiveLate || 0))
+        .slice(0, 10)
+        .map(u => `${padWidth(truncateWidth((u.name || 'Unknown').split('-')[0].trim(), 18), 20)} ${u.totalExcessiveLate || 0}\uD68C`)
+        .join('\n');
+    const absentNeverReturnedRows = sorted
+        .filter(u => Number(u.totalAbsent || 0) > 0 && !u.absentConvertedToLateThisShift)
+        .sort((a, b) => Number(b.totalAbsent || 0) - Number(a.totalAbsent || 0))
+        .slice(0, 10)
+        .map(u => `${padWidth(truncateWidth((u.name || 'Unknown').split('-')[0].trim(), 18), 20)} ${u.totalAbsent || 0}\uD68C`)
+        .join('\n');
+    const problemSummary = [
+        `2H+ Late: ${excessiveLateProblemRows || 'NONE'}`,
+        `Absent never returned: ${absentNeverReturnedRows || 'NONE'}`
+    ].join('\n');
 
     const titleByScope = {
         all: 'Combined Day/Night Worker Ranking',
@@ -288,7 +304,7 @@ function buildRankingEmbed({ guild = null, shift = 'all' } = {}) {
 
     return new EmbedBuilder()
         .setTitle(titleByScope[scope])
-        .setDescription(`\`\`\`\n${legend}\n${lines}\n\`\`\``)
+        .setDescription(`\`\`\`\n${legend}\n${lines}\n\n[Problem Summary]\n${problemSummary}\n\`\`\``)
         .setColor('#F1C40F')
         .setFooter({ text: `Members shown: ${sorted.length}. DAY/NIGHT role members are included, even at 0 pts.` })
         .setTimestamp();
@@ -358,9 +374,236 @@ async function buildInactiveCandidatesEmbed(guild, days = CONFIG.INACTIVE_CANDID
     return embed;
 }
 
+function sumSessionPeriodMinutes(periods = [], bounds) {
+    if (!Array.isArray(periods) || !bounds?.start || !bounds?.end) return 0;
+    return periods.reduce((total, period) => {
+        const start = period?.start ? moment(period.start).tz(CONFIG.TIMEZONE) : null;
+        const end = period?.end ? moment(period.end).tz(CONFIG.TIMEZONE) : moment().tz(CONFIG.TIMEZONE);
+        if (!start?.isValid() || !end?.isValid()) return total;
+        const clippedStart = moment.max(start, bounds.start);
+        const clippedEnd = moment.min(end, bounds.end);
+        const mins = Math.max(0, clippedEnd.diff(clippedStart, 'minutes'));
+        return total + mins;
+    }, 0);
+}
+
+function getSessionMinutesForBounds(user, bounds, key) {
+    if (!Array.isArray(user?.sessions)) return 0;
+    return user.sessions.reduce((total, session) => {
+        const clockIn = session?.clockInAt ? moment(session.clockInAt).tz(CONFIG.TIMEZONE) : null;
+        const clockOut = session?.clockOutAt ? moment(session.clockOutAt).tz(CONFIG.TIMEZONE) : moment().tz(CONFIG.TIMEZONE);
+        if (!clockIn?.isValid() || !clockOut?.isValid()) return total;
+        if (clockOut.isBefore(bounds.start) || clockIn.isAfter(bounds.end)) return total;
+        return total + sumSessionPeriodMinutes(session[key], bounds);
+    }, 0);
+}
+
+function toCloseMoment(value) {
+    if (!value) return null;
+    const at = moment(value).tz(CONFIG.TIMEZONE);
+    return at.isValid() ? at : null;
+}
+
+function sessionOverlapsBounds(session, bounds) {
+    if (!session || !bounds?.start || !bounds?.end) return false;
+    const clockIn = toCloseMoment(session.clockInAt);
+    const clockOut = toCloseMoment(session.clockOutAt) || bounds.end;
+    if (!clockIn || !clockOut) return false;
+    return !clockOut.isBefore(bounds.start) && !clockIn.isAfter(bounds.end);
+}
+
+function getCloseSession(user, bounds) {
+    if (!Array.isArray(user?.sessions)) return null;
+    return user.sessions
+        .filter(session => sessionOverlapsBounds(session, bounds))
+        .sort((a, b) => {
+            const aIn = toCloseMoment(a.clockInAt)?.valueOf() || 0;
+            const bIn = toCloseMoment(b.clockInAt)?.valueOf() || 0;
+            return bIn - aIn;
+        })[0] || null;
+}
+
+function getClockInMomentForClose(user, bounds) {
+    const session = getCloseSession(user, bounds);
+    const fromSession = toCloseMoment(session?.clockInAt);
+    const fromUser = toCloseMoment(user?.checkInRaw);
+    const candidate = fromSession || fromUser;
+    if (!candidate || !bounds?.start || !bounds?.end) return null;
+    if (candidate.isAfter(bounds.end)) return null;
+    return candidate;
+}
+
+function getClockOutMomentForClose(user, bounds) {
+    const session = getCloseSession(user, bounds);
+    const fromSession = toCloseMoment(session?.clockOutAt);
+    const fromUser = toCloseMoment(user?.checkOutRaw);
+    const candidate = fromSession || fromUser;
+    if (!candidate || !bounds?.start || !bounds?.end) return null;
+    if (candidate.isBefore(bounds.start) || candidate.isAfter(bounds.end)) return null;
+    return candidate;
+}
+
+function formatCloseTime(at) {
+    return at?.isValid?.() ? at.format('HH:mm') : '--:--';
+}
+
+function getLateInfoForClose(user, bounds) {
+    const inAt = getClockInMomentForClose(user, bounds);
+    if (!inAt || !bounds?.start) return null;
+    const lateMins = inAt.diff(bounds.start, 'minutes');
+    return lateMins > Number(CONFIG.CLOCK_OUT_GRACE_MINS || 0)
+        ? { inAt, lateMins }
+        : null;
+}
+
+function getEarlyOutInfoForClose(user, bounds) {
+    const outAt = getClockOutMomentForClose(user, bounds);
+    if (!outAt || !bounds?.end) return null;
+    const earlyOutMins = bounds.end.diff(outAt, 'minutes');
+    if (earlyOutMins <= Number(CONFIG.CLOCK_OUT_GRACE_MINS || 0)) return null;
+    const inAt = getClockInMomentForClose(user, bounds);
+    const workedMins = inAt ? Math.max(0, outAt.diff(inAt, 'minutes')) : 0;
+    return { outAt, inAt, earlyOutMins, workedMins };
+}
+
+function shortName(user) {
+    return truncateWidth((user?.name || 'Unknown').split('-')[0].trim() || 'Unknown', 18);
+}
+
+async function sendDailyCloseReport(shift = 'day', at = moment().tz(CONFIG.TIMEZONE)) {
+    try {
+        const normalizedShift = shift === 'night' ? 'night' : 'day';
+        const logChan = await client.channels.fetch(CONFIG.LOG_CHANNEL);
+        const guild = logChan.guild;
+        await refreshGuildMembers(guild);
+
+        const now = moment(at).tz(CONFIG.TIMEZONE);
+        const bounds = getShiftBounds(normalizedShift, now);
+        const allStats = getDayNightWorkerStats(guild, normalizedShift)
+            .map(u => ({
+                ...u,
+                lateInfo: getLateInfoForClose(u, bounds),
+                earlyOutInfo: getEarlyOutInfoForClose(u, bounds)
+            }));
+        const offUsers = allStats.filter(u => u.dayOff);
+        const activeUsers = allStats.filter(u => u.checkedIn && !u.dayOff);
+        const finishedUsers = allStats.filter(u => u.isFinished && !u.checkedIn && !u.dayOff);
+        const absentUsers = allStats.filter(u => !u.checkedIn && !u.isFinished && !u.dayOff);
+        const earlyUsers = finishedUsers
+            .filter(u => u.earlyOutInfo?.earlyOutMins > 0)
+            .sort((a, b) => b.earlyOutInfo.earlyOutMins - a.earlyOutInfo.earlyOutMins);
+        const excessiveLateUsers = allStats
+            .filter(u => u.excessiveLateThisShift || Number(u.lateInfo?.lateMins || 0) > 120)
+            .sort((a, b) => Number(b.lateInfo?.lateMins || 0) - Number(a.lateInfo?.lateMins || 0));
+        const lateUsers = allStats
+            .filter(u => u.lateInfo && !excessiveLateUsers.some(late => late.id === u.id))
+            .sort((a, b) => Number(b.lateInfo?.lateMins || 0) - Number(a.lateInfo?.lateMins || 0));
+        const liveOffRows = allStats
+            .map(u => ({
+                user: u,
+                liveOffMins: getSessionMinutesForBounds(u, bounds, 'liveOffPeriods'),
+                dcMins: getSessionMinutesForBounds(u, bounds, 'dcPeriods')
+            }))
+            .filter(row => row.liveOffMins > 0 || row.dcMins > 0)
+            .sort((a, b) => (b.liveOffMins + b.dcMins) - (a.liveOffMins + a.dcMins));
+
+        const workBase = Math.max(allStats.length - offUsers.length, 1);
+        const attendCount = activeUsers.length + finishedUsers.length;
+        const attendRate = Math.round((attendCount / workBase) * 100) || 0;
+        const shiftLabel = normalizedShift === 'day' ? 'DAY SHIFT' : 'NIGHT SHIFT';
+        const periodText = `${bounds.start.format('MM/DD HH:mm')} -> ${bounds.end.format('MM/DD HH:mm')}`;
+
+        const listNames = (arr, formatter = u => shortName(u)) => {
+            if (!arr.length) return 'NONE';
+            return arr.slice(0, 20).map(formatter).join('\n');
+        };
+        const formatLateRow = u => `${padWidth(shortName(u), 18)} IN ${formatCloseTime(u.lateInfo?.inAt)} / ${formatDuration(u.lateInfo?.lateMins || 0)} late`;
+        const formatEarlyRow = u => `${padWidth(shortName(u), 18)} OUT ${formatCloseTime(u.earlyOutInfo?.outAt)} / ${formatDuration(u.earlyOutInfo?.earlyOutMins || 0)} early`;
+        const issueRows = [
+            ...excessiveLateUsers.map(u => `⚠ ${formatLateRow(u)}`),
+            ...lateUsers.map(u => `🟡 ${formatLateRow(u)}`),
+            ...absentUsers.map(u => `❌ ${padWidth(shortName(u), 18)} 결석/미퇴근`),
+            ...earlyUsers.map(u => `🔵 ${formatEarlyRow(u)}`),
+            ...liveOffRows
+                .filter(row => row.liveOffMins > 0)
+                .map(row => `📴 ${padWidth(shortName(row.user), 18)} LIVE OFF ${formatDuration(row.liveOffMins)}`),
+            ...liveOffRows
+                .filter(row => row.dcMins > 0)
+                .map(row => `⚡ ${padWidth(shortName(row.user), 18)} DC ${formatDuration(row.dcMins)}`)
+        ];
+        const issueSummary = issueRows.length
+            ? issueRows.slice(0, 20).join('\n')
+            : '✅ 오늘 주요 문제자 없음';
+
+        const embed = new EmbedBuilder()
+            .setTitle(`DAILY CLOSE REPORT - ${shiftLabel}`)
+            .setColor(normalizedShift === 'day' ? '#F1C40F' : '#3498DB')
+            .setDescription([
+                `PH TIME: ${now.format('YYYY-MM-DD HH:mm:ss')}`,
+                `PERIOD: ${periodText}`,
+                `ATTENDANCE: ${attendCount}/${workBase} (${attendRate}%)`
+            ].join('\n'))
+            .setTimestamp();
+
+        safeAddFields(embed,
+            {
+                name: `오늘 문제자 요약 (${issueRows.length})`,
+                value: renderEmbedCodeBlock(issueSummary),
+                inline: false
+            },
+            {
+                name: 'Summary',
+                value: renderEmbedCodeBlock([
+                    `TOTAL      ${allStats.length}`,
+                    `WORK BASE  ${workBase}`,
+                    `FINISHED   ${finishedUsers.length}`,
+                    `ACTIVE     ${activeUsers.length}`,
+                    `ABSENT     ${absentUsers.length}`,
+                    `2H+ LATE   ${excessiveLateUsers.length}`,
+                    `LATE       ${lateUsers.length}`,
+                    `DAY OFF    ${offUsers.length}`,
+                    `EARLY OUT  ${earlyUsers.length}`
+                ].join('\n')),
+                inline: false
+            },
+            {
+                name: `Early Out (${earlyUsers.length})`,
+                value: renderEmbedCodeBlock(listNames(earlyUsers, formatEarlyRow)),
+                inline: false
+            },
+            {
+                name: `Absent / Not Finished (${absentUsers.length})`,
+                value: renderEmbedCodeBlock(listNames(absentUsers)),
+                inline: false
+            },
+            {
+                name: `Late (${lateUsers.length})`,
+                value: renderEmbedCodeBlock(listNames(lateUsers, formatLateRow)),
+                inline: false
+            },
+            {
+                name: `2H+ Late (${excessiveLateUsers.length})`,
+                value: renderEmbedCodeBlock(listNames(excessiveLateUsers, formatLateRow)),
+                inline: false
+            },
+            {
+                name: `LIVE OFF / DC Top (${liveOffRows.length})`,
+                value: renderEmbedCodeBlock(listNames(liveOffRows, row => `${padWidth(shortName(row.user), 19)} OFF ${formatDuration(row.liveOffMins)} / DC ${formatDuration(row.dcMins)}`)),
+                inline: false
+            }
+        );
+
+        return logChan.send({ embeds: [embed] });
+    } catch (error) {
+        logger.error?.('[DAILY CLOSE REPORT ERROR]', error);
+        return null;
+    }
+}
+
     return {
         sendDeepReport,
         sendOpsReport,
+        sendDailyCloseReport,
         getRankingWorkerShift,
         buildRankingEmbed,
         buildInactiveCandidatesEmbed

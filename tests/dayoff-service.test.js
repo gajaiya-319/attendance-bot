@@ -50,6 +50,39 @@ assert.strictEqual(parsed.shift, 'day');
 assert.strictEqual(parsed.shiftLabel, 'Day Time');
 assert.match(parsed.leaveDate, /^\d{4}-05-21$/);
 
+const posted = service.parsePostedDayOffRequestMessage({
+    embeds: [{
+        title: 'Day Off Request',
+        description: [
+            'Applicant: <@123456789>',
+            'Name   : Kirem - H Night Time',
+            'Shift  : Night Time',
+            'Date   : 2026-06-14',
+            'Reason : Family event'
+        ].join('\n')
+    }]
+});
+assert.strictEqual(posted.userId, '123456789');
+assert.strictEqual(posted.shift, 'night');
+assert.strictEqual(posted.leaveDate, '2026-06-14');
+assert.strictEqual(posted.reason, 'Family event');
+
+const postedWithFooterId = service.parsePostedDayOffRequestMessage({
+    embeds: [{
+        title: 'Day Off Request',
+        description: [
+            'Applicant: Kirem',
+            'Name   : Kirem',
+            'Shift  : Night Time',
+            'Date   : 2026-06-14',
+            'Reason : Family event'
+        ].join('\n'),
+        footer: { text: 'React with ✅ to approve. User ID: 123456789' }
+    }]
+});
+assert.strictEqual(postedWithFooterId.userId, '123456789');
+assert.strictEqual(postedWithFooterId.displayName, 'Kirem');
+
 const missingName = service.parseDayOffRequest({
     content: 'Leave date: May 21',
     member: { displayName: 'Alice', roles: { cache: { has: id => id === 'day-role' } } },
@@ -67,7 +100,7 @@ reservations = {
 };
 assert.strictEqual(service.getDayOffReservationsByStatus('approved').length, 1);
 assert.match(service.formatDayOffReservationLine(reservations.a), /^OK 2026-05-21/);
-assert.strictEqual(service.buildDayOffDm(reservations.a).includes('승인'), true);
+assert.strictEqual(service.buildDayOffDm(reservations.a).includes('approved'), true);
 assert.strictEqual(service.buildDayOffRejectDm({ ...reservations.a, rejectReason: 'No coverage' }).includes('No coverage'), true);
 assert.strictEqual(service.hasApprovalReaction({ reactions: { cache: [{ emoji: { name: '\u2705' }, count: 1 }] } }), true);
 assert.strictEqual(service.hasApprovalText({ content: 'Reason: Family Reunion (Approved by Sir Great on May 31, 2026)' }), true);

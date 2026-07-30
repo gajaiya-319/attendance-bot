@@ -17,6 +17,8 @@ function createGuildMemberEventHandlers({
     writeDayOffLog,
     saveSystem,
     syncCurrentWorkerProfile = async () => {},
+    removeCurrentWorkerProfile = async () => {},
+    isAssignedWorker = () => false,
     renderDashboard,
     logger = console
 }) {
@@ -34,6 +36,8 @@ function createGuildMemberEventHandlers({
     if (typeof writeDayOffLog !== 'function') throw new TypeError('writeDayOffLog must be a function');
     if (typeof saveSystem !== 'function') throw new TypeError('saveSystem must be a function');
     if (typeof syncCurrentWorkerProfile !== 'function') throw new TypeError('syncCurrentWorkerProfile must be a function');
+    if (typeof removeCurrentWorkerProfile !== 'function') throw new TypeError('removeCurrentWorkerProfile must be a function');
+    if (typeof isAssignedWorker !== 'function') throw new TypeError('isAssignedWorker must be a function');
     if (typeof renderDashboard !== 'function') throw new TypeError('renderDashboard must be a function');
 
     const roleSyncHoldLogAtByKey = new Map();
@@ -99,6 +103,30 @@ function createGuildMemberEventHandlers({
             }
 
             const existing = getAttendanceData()[newMember.id];
+            const wasAssignedWorker = Boolean(isAssignedWorker(oldMember));
+            const isNowAssignedWorker = Boolean(isAssignedWorker(newMember));
+            if (relevantRoleChanged && wasAssignedWorker && !isNowAssignedWorker) {
+                if (existing) {
+                    const now = getNow();
+                    applyFinishedState(existing, now, 'role-remove', 'worker-role-removed');
+                    existing.shift = null;
+                    existing.liveOffWarnedFor = null;
+                }
+                removeOvertimeUser(newMember.id);
+                const liveExceptions = getLiveExceptionsMap(getLiveExceptions, logger);
+                if (liveExceptions[newMember.id]?.status === 'active') {
+                    liveExceptions[newMember.id].status = 'cancelled';
+                    liveExceptions[newMember.id].cancelledAt = getNow().toISOString();
+                    liveExceptions[newMember.id].cancelReason = 'worker-role-removed';
+                }
+                await removeCurrentWorkerProfile(newMember).catch(error => {
+                    logger.error?.('[CURRENT WORKER PROFILE REMOVE ERROR]', error);
+                });
+                await writeDayOffLog(`🧹 근무자 역할 제거 감지\n👥 대상: ${newMember.displayName}\n📝 현재 근무/OT/예외 상태를 정리했습니다.`);
+                await saveSystem();
+                await renderDashboard({ forceMemberRefresh: true });
+                return;
+            }
             if (existing?.checkedIn || existing?.disconnected || existing?.dayOff) {
                 await writeRoleSyncHoldLog(
                     newMember,
@@ -137,7 +165,7 @@ function createGuildMemberEventHandlers({
             }
 
             const newName = newMember.displayName.toLowerCase();
-            const hasServerKeyword = /heine|paagrio/.test(newName);
+            const hasServerKeyword = /valacas|heine|paagrio/.test(newName);
             const hasShiftKeyword = /\bday\b|day\s*time|\bnight\b|night\s*time/.test(newName);
             if (!hasServerKeyword && !hasShiftKeyword) {
                 await refreshDashboardForRoleChange();
@@ -147,7 +175,7 @@ function createGuildMemberEventHandlers({
             let changed = false;
             let targetServerRole = null;
             let otherServerRole = null;
-            if (newName.includes('heine')) {
+            if (newName.includes('valacas') || newName.includes('heine')) {
                 targetServerRole = CONFIG.ROLES.HEINE;
                 otherServerRole = CONFIG.ROLES.PAAGRIO;
             } else if (newName.includes('paagrio')) {
@@ -210,6 +238,9 @@ function createGuildMemberEventHandlers({
                 liveExceptions[member.id].cancelledAt = now.toISOString();
                 liveExceptions[member.id].cancelReason = 'member-left-guild';
             }
+            await removeCurrentWorkerProfile(member).catch(error => {
+                logger.error?.('[CURRENT WORKER PROFILE REMOVE ERROR]', error);
+            });
             clearMemberState(member.id);
             await saveSystem();
             renderDashboard({ forceMemberRefresh: true });

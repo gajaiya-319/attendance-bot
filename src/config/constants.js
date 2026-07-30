@@ -19,14 +19,14 @@ const CONFIG = {
     PURCHASE_UNIT_PRICE: Number(process.env.PURCHASE_UNIT_PRICE || 3000),
     PURCHASE_OWNER_DM_IDS: (process.env.PURCHASE_OWNER_DM_IDS || process.env.OWNER_IDS || '280301228716589058').split(',').map(id => id.trim()).filter(Boolean),
     PURCHASE_GOOGLE_KEY_FILE: process.env.PURCHASE_GOOGLE_KEY_FILE || './sheet-bot-key.json',
-    /** Work list: Paagrio Great / Heine Great (live 3-day source). */
+    /** Work list: Paagrio Great / Valakas Great (live 3-day source). */
     PURCHASE_SPREADSHEET_ID: process.env.PURCHASE_SPREADSHEET_ID
         || process.env.SPREADSHEET_ID
         || '1oScjqyvV0EHZffLYxZL4fI_pLVr7R2ABvLv7n-_gJTk',
-    /** 급여토탈관리: 최근_3일_요약 / 월간_누적_요약 (IMPORTRANGE ← Work list). */
+    /** Payroll summary workbook: recent 3-day summary and monthly summary pages. */
     PAYROLL_SUMMARY_SPREADSHEET_ID: process.env.PAYROLL_SUMMARY_SPREADSHEET_ID
         || '1IFZ-oBqatX0cEN7k7JiUr_UkqyAoXPi2LgmEifNG0eY',
-    /** 급여토탈관리: Raw_Data + /급여기록. */
+    /** Payroll archive workbook: Raw_Data and attendance dashboard data. */
     PAYROLL_ARCHIVE_SPREADSHEET_ID: process.env.PAYROLL_ARCHIVE_SPREADSHEET_ID
         || process.env.PAYROLL_SUMMARY_SPREADSHEET_ID
         || '1IFZ-oBqatX0cEN7k7JiUr_UkqyAoXPi2LgmEifNG0eY',
@@ -36,8 +36,14 @@ const CONFIG = {
         || '1IFZ-oBqatX0cEN7k7JiUr_UkqyAoXPi2LgmEifNG0eY',
     RAW_ATTENDANCE_WEBAPP_URL: process.env.RAW_ATTENDANCE_WEBAPP_URL || 'https://script.google.com/macros/s/AKfycbx3a9-T71S_zfRwf-hCCwmLfzJR2mW3E3FTNXHWNaa1s-p5gdJqmCd3L6W9IoVNvBGj/exec',
     PURCHASE_SERVER_TABS: {
-        HEINE: process.env.PURCHASE_HEINE_TAB_NAME || 'Heine Great',
+        VALAKAS: process.env.PURCHASE_VALACAS_TAB_NAME || process.env.PURCHASE_HEINE_TAB_NAME || 'Valakas Great',
+        HEINE: process.env.PURCHASE_VALACAS_TAB_NAME || process.env.PURCHASE_HEINE_TAB_NAME || 'Valakas Great',
         PAAGRIO: process.env.PURCHASE_PAAGRIO_TAB_NAME || 'Paagrio Great'
+    },
+    PURCHASE_SERVER_SHEET_IDS: {
+        VALAKAS: Number(process.env.PURCHASE_VALACAS_SHEET_ID || process.env.PURCHASE_HEINE_SHEET_ID || 140599828),
+        HEINE: Number(process.env.PURCHASE_VALACAS_SHEET_ID || process.env.PURCHASE_HEINE_SHEET_ID || 140599828),
+        PAAGRIO: Number(process.env.PURCHASE_PAAGRIO_SHEET_ID || 354531306)
     },
     PURCHASE_SECTION_LABELS: {
         DAY: process.env.PURCHASE_DAY_SECTION_LABEL || 'Day',
@@ -57,14 +63,21 @@ const CONFIG = {
     DEATH_PENALTY_AMOUNT: Number(process.env.DEATH_PENALTY_AMOUNT || 1000),
     DEATH_PENALTY_CHANNEL_IDS: {
         PAAGRIO: process.env.DEATH_PENALTY_PAAGRIO_CHANNEL_ID || '1502693924026847232',
-        HEINE: process.env.DEATH_PENALTY_HEINE_CHANNEL_ID || '1502725853329752245'
+        VALAKAS: process.env.DEATH_PENALTY_VALACAS_CHANNEL_ID || process.env.DEATH_PENALTY_HEINE_CHANNEL_ID || '1502725853329752245',
+        HEINE: process.env.DEATH_PENALTY_VALACAS_CHANNEL_ID || process.env.DEATH_PENALTY_HEINE_CHANNEL_ID || '1502725853329752245'
     },
     DEATH_PENALTY_REVIEWER_ROLE_IDS: (process.env.DEATH_PENALTY_REVIEWER_ROLE_IDS || '1502599381105246388,1502715137667235870').split(',').map(id => id.trim()).filter(Boolean),
     END_ADENA_CHANNEL_IDS: {
         PAAGRIO: process.env.END_ADENA_PAAGRIO_CHANNEL_ID || '1502689374331080724',
-        HEINE: process.env.END_ADENA_HEINE_CHANNEL_ID || '1502725827094118400'
+        VALAKAS: process.env.END_ADENA_VALACAS_CHANNEL_ID || process.env.END_ADENA_HEINE_CHANNEL_ID || '1502725827094118400',
+        HEINE: process.env.END_ADENA_VALACAS_CHANNEL_ID || process.env.END_ADENA_HEINE_CHANNEL_ID || '1502725827094118400'
     },
     END_ADENA_REVIEWER_ROLE_IDS: (process.env.END_ADENA_REVIEWER_ROLE_IDS || process.env.DEATH_PENALTY_REVIEWER_ROLE_IDS || '1502599381105246388,1502715137667235870').split(',').map(id => id.trim()).filter(Boolean),
+    END_ADENA_SUMMARY_OWNER_ROLE_IDS: (process.env.END_ADENA_SUMMARY_OWNER_ROLE_IDS || process.env.SERVER_OWNER_ROLE_IDS || '1502712503421894757').split(',').map(id => id.trim()).filter(Boolean),
+    END_ADENA_SUMMARY_USER_IDS: (process.env.END_ADENA_SUMMARY_USER_IDS || '727085698401697843').split(',').map(id => id.trim()).filter(Boolean),
+    END_ADENA_OVERTIME_THRESHOLD_MINS: Number(process.env.END_ADENA_OVERTIME_THRESHOLD_MINS || 5),
+    END_ADENA_APPROVAL_WINDOW_MINS: Number(process.env.END_ADENA_APPROVAL_WINDOW_MINS || 60),
+    END_ADENA_MAX_OVERTIME_MINS: Number(process.env.END_ADENA_MAX_OVERTIME_MINS || 360),
     OWNER_IDS: (process.env.OWNER_IDS || '280301228716589058').split(',').map(id => id.trim()).filter(Boolean),
     LIVE_EXCEPTION_MANAGER_ROLE_IDS: (process.env.LIVE_EXCEPTION_MANAGER_ROLE_IDS || '1502599381105246388,1502715137667235870').split(',').map(id => id.trim()).filter(Boolean),
     ANNOUNCEMENT_MANAGER_ROLE_IDS: (process.env.ANNOUNCEMENT_MANAGER_ROLE_IDS || process.env.LIVE_EXCEPTION_MANAGER_ROLE_IDS || '1502599381105246388,1502715137667235870').split(',').map(id => id.trim()).filter(Boolean),
@@ -87,17 +100,69 @@ const CONFIG = {
         MAINTENANCE_OVERRIDES: './logs/maintenance-overrides.json',
         MAX_BACKUPS: 30
     },
-    POINTS: { NORMAL_IN: 10, LATE: -5, EARLY_OUT: -10, OT: 15, ABSENT: -20 },
+    POINTS: { NORMAL_IN: 10, LATE: -5, EXCESSIVE_LATE: -10, EARLY_OUT: -10, OT: 5, ABSENT: -25 },
     TIMEZONE: 'Asia/Manila',
     PURGE_NORMAL: 14,
     PURGE_MANUAL_OT: 40,
     GRACE_PERIOD_MINS: 10,
+    LIVE_OFF_IGNORE_MINS: Number(process.env.LIVE_OFF_IGNORE_MINS || 2),
     LIVE_OFF_DM_AFTER_MINS: 10,
     LIVE_OFF_DM_INTERVAL_MINS: 10,
     LIVE_OFF_CLOCK_OUT_MINS: 30,
+    CLOCK_IN_GRACE_MINS: Number(process.env.CLOCK_IN_GRACE_MINS || 0),
     CLOCK_OUT_GRACE_MINS: 5,
     AUTO_OT_AFTER_MINS: 5,
+    POST_SHIFT_CONTINUOUS_OT_WINDOW_MINS: Number(process.env.POST_SHIFT_CONTINUOUS_OT_WINDOW_MINS || 30),
     PRE_SHIFT_LIVE_BUFFER_MINS: 10,
+    PRE_SHIFT_LIVE_MEMORY_MINS: Number(process.env.PRE_SHIFT_LIVE_MEMORY_MINS || 30),
+    PRE_SHIFT_RECONNECT_GRACE_MINS: Number(process.env.PRE_SHIFT_RECONNECT_GRACE_MINS || 10),
+    PRE_SHIFT_VOICE_MEMORY_MINS: Number(process.env.PRE_SHIFT_VOICE_MEMORY_MINS || 7 * 60),
+    PRE_SHIFT_VOICE_LIVE_GRACE_MINS: Number(process.env.PRE_SHIFT_VOICE_LIVE_GRACE_MINS || 10),
+    MAX_AUTO_OT_MINS: Number(process.env.MAX_AUTO_OT_MINS || 14 * 60),
+    AUTO_OT_CONFIRM_EXPIRE_MINS: Number(process.env.AUTO_OT_CONFIRM_EXPIRE_MINS || 0),
+    AUTO_OT_CONFIRM_REMINDER_MINS: Number(process.env.AUTO_OT_CONFIRM_REMINDER_MINS || 5),
+    ENABLE_PRESENCE_INTENT: String(process.env.ENABLE_PRESENCE_INTENT || 'false').toLowerCase() === 'true',
+    OT_ACTIVITY_DENYLIST: String(process.env.OT_ACTIVITY_DENYLIST || [
+        'Dota',
+        'Dota 2',
+        'League',
+        'League of Legends',
+        'Valorant',
+        'Steam',
+        'Counter-Strike',
+        'CS2',
+        'PUBG',
+        'Fortnite',
+        'Apex Legends',
+        'Overwatch',
+        'Minecraft',
+        'Roblox',
+        'Genshin',
+        'Diablo',
+        'Lost Ark',
+        'Call of Duty',
+        'Warzone',
+        'Grand Theft Auto',
+        'GTA',
+        'Mobile Legends',
+        'Hearthstone',
+        'World of Warcraft',
+        'Riot Client',
+        'Battle.net',
+        'Epic Games'
+    ].join(',')).split(',').map(item => item.trim()).filter(Boolean),
+    OT_ACTIVITY_ALLOWLIST: String(process.env.OT_ACTIVITY_ALLOWLIST || [
+        'Lineage Classic',
+        'LineageClassic',
+        'Lineage',
+        '리니지 클래식',
+        '리니지클래식'
+    ].join(','))
+        .split(',')
+        .map(item => item.trim())
+        .filter(Boolean),
+    AUTO_OT_UNKNOWN_ACTIVITY_POLICY: String(process.env.AUTO_OT_UNKNOWN_ACTIVITY_POLICY || 'allow').toLowerCase(),
+    AUTO_OT_UNKNOWN_ACTIVITY_CONTINUOUS_LIVE_FALLBACK: String(process.env.AUTO_OT_UNKNOWN_ACTIVITY_CONTINUOUS_LIVE_FALLBACK || 'true').toLowerCase() !== 'false',
     FINISHED_VISIBLE_AFTER_MINS: 30,
     AUTO_TIMEOUT_RESUME_WINDOW_MINS: 60,
     GUEST_ASSIGN_AFTER_HOURS: 24,

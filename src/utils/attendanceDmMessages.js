@@ -1,178 +1,281 @@
 'use strict';
 
-/** Worker-facing DM / panel messages (Korean). */
+/** Worker-facing DM messages. Keep these ASCII-only because most workers read English. */
 
 function buildLiveOffClockOutDm(liveOffClockOutMins) {
     return [
-        '🌿 출퇴근 안내',
-        '알림 3/3',
+        '[WORK SESSION ENDED]',
+        'Reminder 3/3',
         '',
-        `라이브 방송이 약 ${liveOffClockOutMins}분째 꺼져 있습니다.`,
-        '근무 시간을 확인할 수 없어 봇이 자동 퇴근 처리했습니다.',
+        `Your live stream stayed OFF for about ${liveOffClockOutMins} minutes.`,
+        'Your work activity could not be verified, so the bot has clocked you out automatically.',
         '',
-        '다시 근무하려면 라이브를 켠 뒤 출근(CLOCK IN) 버튼을 눌러 주세요.'
+        'LIVE STREAM ON is mandatory for work credit.',
+        'Time without LIVE ON is NOT counted as work.',
+        '',
+        'To work again, turn LIVE ON and press CLOCK IN.'
     ].join('\n');
 }
 
 function buildDcTimeoutClockOutDm(gracePeriodMins, autoResumeWindowMins) {
     return [
-        '🌿 출퇴근 안내',
+        '[WORK SESSION ENDED]',
         '',
-        `음성 채널에서 약 ${gracePeriodMins}분 이탈되어 봇이 자동 퇴근 처리했습니다.`,
+        `You were away from the voice channel for about ${gracePeriodMins} minutes.`,
+        'Your work activity could not be verified, so the bot has clocked you out automatically.',
         '',
-        '아직 이번 근무조 시간대라면:',
-        '1. 음성 채널에 다시 접속',
-        '2. 라이브 방송 켜기',
-        '3. 봇이 근무를 자동 재개할 수 있습니다',
+        'To continue working, you must:',
+        '1. Rejoin the correct voice channel',
+        '2. Turn LIVE ON',
+        '3. Press CLOCK IN if the bot does not resume you automatically',
         '',
-        `근무조 시간 밖이거나 ${autoResumeWindowMins}분이 지나면 라이브만 켜서는 출근이 복구되지 않습니다. 출근(CLOCK IN) 버튼을 다시 눌러야 합니다.`,
-        '이번 퇴근에 대한 DC 추가 안내는 더 이상 보내지 않습니다. 🙂'
+        'LIVE STREAM ON is mandatory for work credit.',
+        'Time without voice presence and LIVE ON is NOT counted as work.',
+        '',
+        `If more than ${autoResumeWindowMins} minutes have passed, automatic resume is not available. Press CLOCK IN again.`
+    ].join('\n');
+}
+
+function buildDcGraceHoldDm(gracePeriodMins, shiftEndText = null) {
+    return [
+        '[VOICE DISCONNECT NOTICE]',
+        '',
+        `You have been away from the voice channel for about ${gracePeriodMins} minutes.`,
+        'Your work session is NOT ended yet because your regular shift is still in progress.',
+        '',
+        'Rejoin the correct voice channel and turn LIVE ON as soon as possible.',
+        'If you return before shift end, the disconnect clock-out candidate will be cleared.',
+        '',
+        shiftEndText
+            ? `If you do not return by shift end (${shiftEndText}), the bot may finalize the session at shift close.`
+            : 'If you do not return by shift end, the bot may finalize the session at shift close.',
+        '',
+        'LIVE STREAM ON is mandatory for work credit.'
+    ].join('\n');
+}
+
+function buildLiveOffGraceHoldDm(liveOffClockOutMins, shiftEndText = null) {
+    return [
+        '[LIVE OFF NOTICE]',
+        '',
+        `Your live stream has been OFF for about ${liveOffClockOutMins} minutes.`,
+        'Your work session is NOT ended yet because your regular shift is still in progress.',
+        '',
+        'Turn LIVE ON again as soon as possible.',
+        'If you return before shift end, the live-off clock-out candidate will be cleared.',
+        '',
+        shiftEndText
+            ? `If you do not return by shift end (${shiftEndText}), the bot may finalize the session at shift close.`
+            : 'If you do not return by shift end, the bot may finalize the session at shift close.',
+        '',
+        'LIVE STREAM ON is mandatory for work credit.',
+        'LIVE OFF time is NOT counted as verified work.'
     ].join('\n');
 }
 
 function buildManualResumeRequiredDm(reminderNumber) {
     return [
-        '🌿 출퇴근 안내',
-        `알림 ${reminderNumber}/3`,
+        '[CLOCK IN REQUIRED]',
+        `Reminder ${reminderNumber}/3`,
         '',
-        '라이브는 켜져 있지만 출근 상태가 아닙니다.',
-        '이전에 DC/라이브 OFF 유예를 넘어 출근이 이미 종료되었습니다.',
+        'Your LIVE is ON, but you are NOT clocked in.',
+        'Your previous work session already ended after exceeding the grace period.',
         '',
-        '60분이 지나 자동 재개는 되지 않습니다.',
+        'You must press CLOCK IN now if you are working.',
+        'Time is NOT counted as work until CLOCK IN is accepted.',
         '',
-        '✅ 라이브를 켠 상태에서 출근(CLOCK IN) 버튼을 눌러 주세요.',
-        '⚠️ CLOCK IN을 누르지 않으면 근무 시간으로 인정되지 않습니다.',
-        '',
-        '오류라면 관리자에게 문의해 주세요. 🙂'
+        'Keep LIVE ON and press CLOCK IN immediately.',
+        'Contact a manager only if you believe this is a system error.'
     ].join('\n');
 }
 
 function buildLiveOffWarningDm(reminderNumber, warningMarkMins, liveOffClockOutMins) {
     return [
-        '🌿 출퇴근 안내',
-        `알림 ${reminderNumber}/3`,
+        '[MANDATORY LIVE NOTICE]',
+        `Reminder ${reminderNumber}/3`,
         '',
-        '음성 채널에는 있지만 라이브 방송이 꺼진 것으로 보입니다.',
-        '가능하면 라이브를 다시 켜 주시면 근무 시간이 계속 집계됩니다.',
+        'Your live stream is OFF.',
+        'You are required to keep LIVE ON while working.',
+        'LIVE OFF time is not counted as verified work time.',
         '',
-        `라이브 OFF 지속: 약 ${warningMarkMins}분`,
-        `약 ${liveOffClockOutMins}분 더 꺼져 있으면 자동 퇴근될 수 있습니다.`,
-        '감사합니다. 🙂'
+        `Live stream off duration: about ${warningMarkMins} minutes.`,
+        'Turn LIVE ON immediately.',
+        '',
+        `If LIVE stays OFF, the bot may end your work session automatically after about ${liveOffClockOutMins} more minutes.`
     ].join('\n');
 }
 
 function buildDayOffClockInPromptMessage(reminderNumber, reminderMark) {
     return [
-        '🌿 **출근 안내**',
-        `알림 **${reminderNumber}/2**${reminderMark ? ` · 라이브 시작 후 약 **${reminderMark}분**` : ''}`,
+        '[CLOCK IN REQUIRED]',
+        `Reminder ${reminderNumber}/2${reminderMark ? ` - about ${reminderMark} minutes since your LIVE started` : ''}`,
         '',
-        '오늘 근무를 시작하셨나요?',
+        'Are you working today?',
         '',
-        '맞다면 **라이브를 켜 두고** **출근(CLOCK IN)** 버튼을 눌러 주세요.',
+        'If you are working, you must keep LIVE ON and press CLOCK IN.',
+        'Voice channel or LIVE alone does not count as attendance.',
         '',
-        '⚠️ **CLOCK IN을 눌러야만 출근으로 인정됩니다.**',
-        '접속만 하거나 라이브만 켠 것은 출근으로 처리되지 않습니다.',
-        '',
-        '감사합니다. ✅'
+        'Time is NOT counted as work until CLOCK IN is accepted.'
     ].join('\n');
 }
 
 function buildDayOffPresenceDm() {
     return [
-        '🌿 **출근 안내**',
+        '[CLOCK IN REQUIRED]',
         '',
-        '현재 **휴무(Day Off)** 로 등록되어 있습니다.',
-        '음성 채널 접속은 감지됐지만, 출근은 **자동으로 처리되지 않습니다**.',
+        'You are currently registered as Day Off.',
+        'Your voice-channel presence was detected, but you will NOT be clocked in automatically.',
         '',
-        '근무를 시작하려면 **라이브를 켜고** **출근(CLOCK IN)** 버튼을 눌러 주세요.'
+        'If you are working today, turn LIVE ON and press CLOCK IN.',
+        'Time is NOT counted as work until CLOCK IN is accepted.'
     ].join('\n');
 }
 
 /** Admin log channel (Korean). */
 function buildDayOffPresenceLogLines(nowLabel, userName, action) {
     return [
-        `\`[${nowLabel}]\` 🔵 **휴무 중 접속 감지**`,
-        `👤 대상: **${userName}**`,
-        `📌 동작: ${action}`,
-        '✅ 결과: 휴무 유지, 출근 처리 없음'
+        `\`[${nowLabel}]\` 휴무 중 접속 감지`,
+        `대상: **${userName}**`,
+        `동작: ${action}`,
+        '결과: 휴무 유지, 출근 처리 없음'
     ];
 }
 
 function buildAfterFinishPresenceDm() {
     return [
-        '중요: 이미 퇴근 처리된 상태입니다.',
+        '[CLOCK IN REQUIRED]',
         '',
-        '라이브가 감지됐지만 출근은 자동으로 다시 시작되지 않습니다.',
+        'You have already been clocked out.',
+        'Your LIVE was detected, but attendance will NOT restart automatically.',
         '',
-        '다시 근무하려면 라이브를 켠 뒤 출근(CLOCK IN) 버튼을 **반드시** 눌러 주세요.',
-        'CLOCK IN 없이는 출근으로 인정되지 않습니다.',
+        'If you are working again, turn LIVE ON and press CLOCK IN.',
+        'Time is NOT counted as work until CLOCK IN is accepted.',
         '',
-        '연장 근무라면 OVERTIME 버튼을 쓰거나 관리자에게 문의해 주세요.'
+        'For overtime, use the OVERTIME button or contact a manager.'
     ].join('\n');
 }
 
 function buildFinishedReturnWithinShiftDm() {
     return [
-        '🌿 다시 오신 것을 환영합니다',
+        '[CLOCK IN REQUIRED]',
         '',
-        '음성 채널을 나가 퇴근(FINISHED) 처리된 상태입니다.',
+        'You left the voice channel and were marked as FINISHED.',
         '',
-        '라이브를 켤 수 없는 상황인 것 같습니다.',
-        '그렇다면 출근 채널에서 **출근(CLOCK IN)** 버튼을 눌러 주세요.',
+        'If you are working again, you must press CLOCK IN.',
+        'LIVE STREAM ON is mandatory for normal work credit.',
         '',
-        '✅ CLOCK IN 후에는 **라이브 예외** 로 근무를 이어갈 수 있습니다.',
-        '🚫 CLOCK IN 없이는 이 시간이 근무로 잡히지 않습니다.',
+        'If you cannot stream because of an internet or PC issue, stay in voice and press CLOCK IN to request a live-stream exception.',
+        'Use the exception only when you truly cannot turn LIVE ON.',
         '',
-        '라이브를 정말 켤 수 없을 때만 이용해 주세요. 🙏'
+        'Time is NOT counted as work until CLOCK IN is accepted.'
     ].join('\n');
 }
 
 function buildFinishedReturnDefaultDm() {
     return [
-        '🌿 다시 오신 것을 환영합니다',
+        '[CLOCK IN REQUIRED]',
         '',
-        '음성 채널에는 들어왔지만 아직 퇴근(FINISHED) 상태입니다.',
+        'You rejoined the voice channel, but you are still marked as FINISHED.',
         '',
-        '근무 시간을 다시 집계하려면:',
-        '1. 라이브 방송 켜기',
-        '2. 출근 패널에서 출근(CLOCK IN) 버튼 누르기',
+        'To resume work:',
+        '1. Turn LIVE ON',
+        '2. Press CLOCK IN in the attendance panel',
         '',
-        '라이브만 켜서는 출근이 재개되지 않습니다. 🙂'
+        'LIVE alone does not clock you in.',
+        'Time is NOT counted as work until CLOCK IN is accepted.'
     ].join('\n');
 }
 
 function buildStandbyClockInRequiredDm() {
     return [
-        '🌿 출근 안내',
+        '[CLOCK IN REQUIRED]',
         '',
-        '라이브는 켜져 있지만 아직 출근 처리되지 않았습니다.',
-        '출근 채널에서 **출근(CLOCK IN)** 버튼을 눌러 주세요.',
+        'Your LIVE is ON, but you are NOT clocked in.',
         '',
-        '✅ CLOCK IN을 눌러야 근무 시간이 기록됩니다.'
+        'Press CLOCK IN in the attendance channel immediately.',
+        'Time is NOT counted as work until CLOCK IN is accepted.'
+    ].join('\n');
+}
+
+function buildAbsentWarningDm(reminderNumber, elapsedMins, absentAfterMins = 120) {
+    const remainingMins = Math.max(0, absentAfterMins - elapsedMins);
+    const isFinal = elapsedMins >= absentAfterMins;
+    const title = isFinal ? '[ABSENT MARKED]' : '[ATTENDANCE WARNING]';
+    const statusLine = isFinal
+        ? 'You have been marked ABSENT because you did not clock in for this shift.'
+        : `You have not clocked in. You have about ${remainingMins} minutes before ABSENT status.`;
+
+    return [
+        title,
+        `Reminder ${reminderNumber}/4`,
+        '',
+        statusLine,
+        `Shift time elapsed: about ${elapsedMins} minutes.`,
+        '',
+        'You must explain immediately if you cannot work today.',
+        'If you have any issue, emergency, illness, internet problem, or personal reason, report it to a manager TODAY.',
+        '',
+        'Unexplained absence is a serious violation.',
+        'Unexplained absence may result in termination.',
+        '',
+        'If you are working, join the correct voice channel, turn LIVE ON, and press CLOCK IN immediately.',
+        'Voice channel alone, LIVE alone, or silence does NOT count as attendance.',
+        'Work is not counted until CLOCK IN is accepted.'
+    ].join('\n');
+}
+
+function buildExcessiveLateDm() {
+    return [
+        '[SERIOUS LATE ATTENDANCE]',
+        '',
+        'You were over 2 hours late for your shift.',
+        'This is recorded as serious late attendance.',
+        '',
+        'You must explain to a manager TODAY why you were late.',
+        'Repeated serious late attendance may lead to termination.',
+        '',
+        'Clocking in late does not erase the violation.',
+        'Be on time and keep LIVE ON while working.'
     ].join('\n');
 }
 
 function buildLiveOffGuidanceDm({ final = false, minutes = null } = {}) {
-    const lines = [
-        final ? '⚠️ 라이브가 계속 꺼져 있어 출근이 종료되었습니다.' : '📹 라이브 방송을 켜 주세요.',
-        '',
-        '❓ 지금 라이브를 켤 수 없나요?',
-        '인터넷/PC 문제로 라이브를 켤 수 없다면, 음성 채널에 남아 **출근(CLOCK IN)** 을 눌러 라이브 예외로 다시 시작할 수 있습니다.',
-        '✅ 이렇게 해야만 근무로 인정됩니다.',
-        '',
-        '🙏 라이브를 정말 켤 수 없을 때만 이용해 주세요.',
-        '🚫 CLOCK IN 없이는 출근이 인정되지 않습니다.'
-    ];
+    const lines = final
+        ? [
+            '[WORK SESSION ENDED]',
+            'Your LIVE remained OFF, so your work session has ended.'
+        ]
+        : [
+            '[MANDATORY LIVE NOTICE]',
+            'Turn LIVE ON immediately.'
+        ];
+
     if (minutes !== null) {
-        lines.splice(1, 0, `⏱️ 라이브 OFF 지속: 약 ${minutes}분`);
+        lines.push(`Live stream off duration: about ${minutes} minutes.`);
     }
+
+    lines.push(
+        '',
+        'LIVE STREAM ON is mandatory for work credit.',
+        'LIVE OFF time is NOT counted as verified work.',
+        '',
+        'If you cannot stream because of an internet or PC issue, stay in voice and press CLOCK IN to request a live-stream exception.',
+        'Use the exception only when you truly cannot turn LIVE ON.'
+    );
+
+    if (final) {
+        lines.push('', 'To work again, turn LIVE ON and press CLOCK IN.');
+    } else {
+        lines.push('', 'If LIVE stays OFF, the bot may end your work session automatically.');
+    }
+
     return lines.join('\n');
 }
 
 function buildFinishedLiveOffReminderDm(reminderIndex, reminderTotal, guidanceBody) {
     return [
-        '🌿 퇴근 후 라이브 OFF 안내',
-        `알림 ${reminderIndex}/${reminderTotal}`,
+        '[POST-CLOCK-OUT LIVE OFF NOTICE]',
+        `Reminder ${reminderIndex}/${reminderTotal}`,
         '',
         guidanceBody
     ].join('\n');
@@ -180,38 +283,40 @@ function buildFinishedLiveOffReminderDm(reminderIndex, reminderTotal, guidanceBo
 
 function buildDayOffApprovedDm(reservation) {
     return [
-        '휴무 신청이 승인되었습니다.',
+        'Your day-off request has been approved.',
         '',
-        `이름: ${reservation.name}`,
-        `근무조: ${reservation.shiftLabel}`,
-        `휴무일: ${reservation.leaveDate}`,
+        `Name: ${reservation.name}`,
+        `Shift: ${reservation.shiftLabel}`,
+        `Leave Date: ${reservation.leaveDate}`,
         '',
-        '일정을 확인해 주시고 편히 쉬다 오세요.'
+        'Please confirm the date.'
     ].join('\n');
 }
 
 function buildDayOffRejectedDm(reservation) {
-    const reason = reservation.rejectReason || '관리자 반려';
+    const reason = reservation.rejectReason || 'Rejected by a manager';
     return [
-        '휴무 신청이 반려되었습니다.',
+        'Your day-off request has been rejected.',
         '',
-        `이름: ${reservation.name}`,
-        `근무조: ${reservation.shiftLabel}`,
-        `휴무일: ${reservation.leaveDate}`,
-        `반려자: ${reservation.rejectedByName || '관리자'}`,
-        `사유: ${reason}`,
+        `Name: ${reservation.name}`,
+        `Shift: ${reservation.shiftLabel}`,
+        `Leave Date: ${reservation.leaveDate}`,
+        `Rejected By: ${reservation.rejectedByName || 'Manager'}`,
+        `Reason: ${reason}`,
         '',
-        '문의가 필요하면 관리자에게 연락해 주세요.'
+        'Please contact a manager if you have any questions.'
     ].join('\n');
 }
 
 function buildScheduledBroadcastTitle(slotIndex) {
-    return `📢 시스템 공지 [슬롯 ${slotIndex}]`;
+    return `System Notice [Slot ${slotIndex}]`;
 }
 
 module.exports = {
     buildLiveOffClockOutDm,
     buildDcTimeoutClockOutDm,
+    buildDcGraceHoldDm,
+    buildLiveOffGraceHoldDm,
     buildManualResumeRequiredDm,
     buildLiveOffWarningDm,
     buildDayOffClockInPromptMessage,
@@ -221,6 +326,8 @@ module.exports = {
     buildFinishedReturnWithinShiftDm,
     buildFinishedReturnDefaultDm,
     buildStandbyClockInRequiredDm,
+    buildAbsentWarningDm,
+    buildExcessiveLateDm,
     buildLiveOffGuidanceDm,
     buildFinishedLiveOffReminderDm,
     buildDayOffApprovedDm,

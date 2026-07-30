@@ -113,4 +113,16 @@ const { auditStateInvariants } = require('../scripts/audit-state-invariants');
     assert(types.includes('duplicate-overtime-entry'), 'audit catches duplicate OT entry');
 }
 
+{
+    const result = auditStateInvariants({
+        attendanceData: {},
+        overtimeUsers: [],
+        attendanceEventLog: {}
+    });
+    assert(
+        result.issues.map(issue => issue.type).includes('invalid-attendanceEventLog'),
+        'audit catches invalid central attendance event log'
+    );
+}
+
 console.log('state-invariants-audit tests passed');

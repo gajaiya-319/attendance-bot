@@ -1,9 +1,12 @@
 'use strict';
 
+const { isAutoOtConfirmCustomId } = require('../utils/overtimeActivityPolicy');
+
 function createButtonInteractionHandler({
     createAutoDelete,
     buttonInteractionContext,
-    buttonActionHandlers
+    buttonActionHandlers,
+    endAdenaReviewCommand = null
 }) {
     if (typeof createAutoDelete !== 'function') throw new TypeError('createAutoDelete must be a function');
     if (!buttonInteractionContext || typeof buttonInteractionContext.prepare !== 'function') {
@@ -16,6 +19,20 @@ function createButtonInteractionHandler({
     return async function handleButtonInteraction(interaction) {
         const autoDel = createAutoDelete(interaction);
         if (!interaction.isButton()) return undefined;
+
+        if (endAdenaReviewCommand?.isButton?.(interaction.customId)) {
+            return endAdenaReviewCommand.handleButton(interaction);
+        }
+
+        if (
+            isAutoOtConfirmCustomId(interaction.customId) &&
+            typeof buttonActionHandlers.handleAutoOvertimeConfirmationButton === 'function'
+        ) {
+            return buttonActionHandlers.handleAutoOvertimeConfirmationButton({
+                interaction,
+                autoDel
+            });
+        }
 
         const buttonContext = await buttonInteractionContext.prepare(interaction, { autoDel });
         if (buttonContext.handled) return buttonContext.response;

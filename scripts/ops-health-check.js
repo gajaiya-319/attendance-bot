@@ -6,6 +6,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 const { auditStateInvariants } = require('./audit-state-invariants');
 const { auditBackups } = require('./audit-backups');
+const { autoReviewBackupWarnings } = require('./auto-review-backup-warnings');
 const { auditEmbedFields } = require('./audit-embed-fields');
 const { auditStateWrites } = require('./audit-state-writes');
 const { buildCommandDefinitions, hiddenCommandAliases } = require('../src/commands/definitions');
@@ -18,12 +19,21 @@ function parseArgs(argv = []) {
         backupLimit: 20,
         expectedCommandCount: null,
         runtimeHealthFile: 'logs/runtime-health.json',
+        pendingAttendanceFile: 'logs/raw-attendance-pending.json',
+        payrollIntegrityFile: 'logs/payroll-integrity-audit-state.json',
+        endAdenaFreshnessFile: 'logs/end-adena-freshness.json',
+        externalSmokeFile: 'logs/external-dependency-smoke.json',
+        recoveryDrillFile: 'logs/recovery-drill.json',
+        securityAuditFile: 'logs/security-posture-audit.json',
+        allowEndAdenaDegraded: false,
         json: false
     };
 
     for (const arg of argv) {
         if (arg === '--json') {
             options.json = true;
+        } else if (arg === '--allow-end-adena-degraded') {
+            options.allowEndAdenaDegraded = true;
         } else if (arg.startsWith('--process=')) {
             options.processName = arg.slice('--process='.length);
         } else if (arg.startsWith('--data=')) {
@@ -36,6 +46,14 @@ function parseArgs(argv = []) {
             options.expectedCommandCount = Number(arg.slice('--expected-command-count='.length));
         } else if (arg.startsWith('--runtime-health-file=')) {
             options.runtimeHealthFile = arg.slice('--runtime-health-file='.length);
+        } else if (arg.startsWith('--end-adena-freshness-file=')) {
+            options.endAdenaFreshnessFile = arg.slice('--end-adena-freshness-file='.length);
+        } else if (arg.startsWith('--external-smoke-file=')) {
+            options.externalSmokeFile = arg.slice('--external-smoke-file='.length);
+        } else if (arg.startsWith('--recovery-drill-file=')) {
+            options.recoveryDrillFile = arg.slice('--recovery-drill-file='.length);
+        } else if (arg.startsWith('--security-audit-file=')) {
+            options.securityAuditFile = arg.slice('--security-audit-file='.length);
         }
     }
 
@@ -152,6 +170,221 @@ function readRuntimeHealthFile(runtimeHealthFile) {
     }
 }
 
+function readJsonFile(filePath) {
+    if (!filePath || !fs.existsSync(filePath)) return null;
+    try {
+        return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    } catch (error) {
+        return { parseError: error.message };
+    }
+}
+
+function getExternalDependencySmokeStatus({
+    filePath = 'logs/external-dependency-smoke.json',
+    maxAgeHours = 26,
+    nowMs = Date.now()
+} = {}) {
+    const state = readJsonFile(filePath);
+    if (!state) {
+        return { available: false, ok: true, status: 'monitoring', checkedAt: null, checkCount: 0, failureCount: 0 };
+    }
+    if (state.parseError) {
+        return { available: true, ok: false, status: 'invalid', checkedAt: null, checkCount: 0, failureCount: 1, error: state.parseError };
+    }
+    const checkedAtMs = new Date(state.checkedAt || 0).getTime();
+    const ageHours = Number.isFinite(checkedAtMs) && checkedAtMs > 0
+        ? Math.max(0, (nowMs - checkedAtMs) / (60 * 60 * 1000))
+        : Number.POSITIVE_INFINITY;
+    const stale = ageHours > Math.max(1, Number(maxAgeHours || 26));
+    const failureCount = Number(state.failureCount || 0);
+    const ok = state.ok === true && failureCount === 0 && !stale;
+    return {
+        available: true,
+        ok,
+        status: stale ? 'stale' : (ok ? 'ok' : 'failed'),
+        checkedAt: state.checkedAt || null,
+        ageHours,
+        checkCount: Number(state.checkCount || 0),
+        failureCount,
+        failures: Array.isArray(state.failures) ? state.failures.slice(0, 10) : []
+    };
+}
+
+function getRecoveryDrillStatus({
+    filePath = 'logs/recovery-drill.json',
+    maxAgeHours = 26,
+    nowMs = Date.now()
+} = {}) {
+    const state = readJsonFile(filePath);
+    if (!state) {
+        return { available: false, ok: true, status: 'monitoring', checkedAt: null, scenarioCount: 0, failureCount: 0 };
+    }
+    if (state.parseError) {
+        return { available: true, ok: false, status: 'invalid', checkedAt: null, scenarioCount: 0, failureCount: 1, error: state.parseError };
+    }
+    const checkedAtMs = new Date(state.checkedAt || 0).getTime();
+    const ageHours = Number.isFinite(checkedAtMs) && checkedAtMs > 0
+        ? Math.max(0, (nowMs - checkedAtMs) / (60 * 60 * 1000))
+        : Number.POSITIVE_INFINITY;
+    const stale = ageHours > Math.max(1, Number(maxAgeHours || 26));
+    const failureCount = Number(state.failureCount || 0);
+    const isolated = state.isolated === true;
+    const ok = state.ok === true && isolated && failureCount === 0 && !stale;
+    return {
+        available: true,
+        ok,
+        status: stale ? 'stale' : (ok ? 'ok' : 'failed'),
+        checkedAt: state.checkedAt || null,
+        ageHours,
+        isolated,
+        scenarioCount: Number(state.scenarioCount || 0),
+        failureCount,
+        failures: Array.isArray(state.failures) ? state.failures.slice(0, 10) : []
+    };
+}
+
+function getSecurityPostureStatus({
+    filePath = 'logs/security-posture-audit.json',
+    maxAgeHours = 26,
+    nowMs = Date.now()
+} = {}) {
+    const state = readJsonFile(filePath);
+    if (!state) {
+        return { available: false, ok: true, status: 'monitoring', checkedAt: null, checkCount: 0, criticalCount: 0, advisoryCount: 0 };
+    }
+    if (state.parseError) {
+        return { available: true, ok: false, status: 'invalid', checkedAt: null, checkCount: 0, criticalCount: 1, advisoryCount: 0, error: state.parseError };
+    }
+    const checkedAtMs = new Date(state.checkedAt || 0).getTime();
+    const ageHours = Number.isFinite(checkedAtMs) && checkedAtMs > 0
+        ? Math.max(0, (nowMs - checkedAtMs) / (60 * 60 * 1000))
+        : Number.POSITIVE_INFINITY;
+    const stale = ageHours > Math.max(1, Number(maxAgeHours || 26));
+    const criticalCount = Number(state.criticalCount || 0);
+    const advisoryCount = Number(state.advisoryCount || 0);
+    const ok = state.ok === true && criticalCount === 0 && !stale;
+    return {
+        available: true,
+        ok,
+        status: stale ? 'stale' : (ok ? (advisoryCount ? 'advisory' : 'ok') : 'failed'),
+        checkedAt: state.checkedAt || null,
+        ageHours,
+        checkCount: Number(state.checkCount || 0),
+        criticalCount,
+        advisoryCount,
+        failures: Array.isArray(state.failures) ? state.failures.slice(0, 10) : [],
+        advisories: Array.isArray(state.advisories) ? state.advisories.slice(0, 10) : []
+    };
+}
+
+function getDataConsistencyStatus({
+    pendingAttendanceFile = 'logs/raw-attendance-pending.json',
+    payrollIntegrityFile = 'logs/payroll-integrity-audit-state.json',
+    runtimeHealthFile = 'logs/runtime-health.json',
+    nowMs = Date.now()
+} = {}) {
+    const pending = readJsonFile(pendingAttendanceFile);
+    const pendingItems = Array.isArray(pending) ? pending : (Array.isArray(pending?.items) ? pending.items : []);
+    const payroll = readJsonFile(payrollIntegrityFile);
+    const runtime = readRuntimeHealthFile(runtimeHealthFile);
+    const payrollLastRunMs = new Date(payroll?.lastRunAt || 0).valueOf();
+    const payrollAgeHours = Number.isFinite(payrollLastRunMs) && payrollLastRunMs > 0
+        ? Math.max(0, Math.round((nowMs - payrollLastRunMs) / 3_600_000))
+        : null;
+    return {
+        rawAttendancePending: pendingItems.length,
+        rawAttendanceNeedsReview: pendingItems.filter(item => item?.reviewNotifiedAt).length,
+        payrollAuditAvailable: Boolean(payroll && !payroll.parseError),
+        payrollAuditIssues: Number(payroll?.issueCount || 0),
+        payrollAuditAgeHours: payrollAgeHours,
+        payrollAuditStale: payrollAgeHours !== null && payrollAgeHours > 36,
+        queueAvailable: Boolean(runtime?.backgroundQueue),
+        queuePending: Number(runtime?.backgroundQueue?.pending || 0),
+        queueFailed: Number(runtime?.backgroundQueue?.failed || 0),
+        maxEventLoopLagMs: Number(runtime?.backgroundQueue?.maxEventLoopLagMs || 0)
+    };
+}
+
+function getEndAdenaFreshnessStatus({
+    filePath = 'logs/end-adena-freshness.json',
+    nowMs = Date.now(),
+    maxAgeMinutes = 15
+} = {}) {
+    const state = readJsonFile(filePath);
+    if (!state) {
+        return {
+            available: false,
+            ok: true,
+            ready: false,
+            status: 'monitoring',
+            score: null,
+            ageMinutes: null,
+            issueCount: 0,
+            recoveredCount: 0,
+            certifiedCycles: 0,
+            completedCycles: 0
+        };
+    }
+    if (state.parseError) {
+        return {
+            available: true,
+            ok: false,
+            ready: true,
+            status: 'invalid',
+            score: null,
+            ageMinutes: null,
+            issueCount: 1,
+            recoveredCount: 0,
+            certifiedCycles: 0,
+            completedCycles: 0,
+            error: state.parseError
+        };
+    }
+
+    const checkedAtMs = new Date(state.checkedAt || 0).valueOf();
+    const ageMinutes = Number.isFinite(checkedAtMs) && checkedAtMs > 0
+        ? Math.max(0, Math.round((nowMs - checkedAtMs) / 60_000))
+        : null;
+    const stale = ageMinutes === null || ageMinutes > maxAgeMinutes;
+    const ready = Boolean(state.ready);
+    const score = Number.isFinite(Number(state.score)) ? Number(state.score) : null;
+    const issueCount = Number(state.issueCount || 0);
+    const recoveredCount = Number(state.recoveredCount || 0);
+    const reviewRequiredCount = Array.isArray(state.tasks)
+        ? state.tasks.filter(task => task?.status === 'needs-review').length
+        : 0;
+    const missingCount = Array.isArray(state.tasks)
+        ? state.tasks.filter(task => task?.status === 'missing').length
+        : Math.max(0, issueCount - reviewRequiredCount);
+    const certifiedCycles = Number(state.certifiedCycles || 0);
+    const completedCycles = Number(state.completedCycles || 0);
+    const certified = ready && score === 100 && issueCount === 0 && recoveredCount === 0;
+    const ok = !stale && (!ready || certified);
+    let status = 'monitoring';
+    if (stale) status = 'stale';
+    else if (certified) status = 'certified';
+    else if (ready && reviewRequiredCount > 0 && missingCount === 0) status = 'needs-review';
+    else if (ready && issueCount > 0) status = 'failed';
+    else if (ready) status = 'degraded';
+
+    return {
+        available: true,
+        ok,
+        ready,
+        status,
+        score,
+        checkedAt: state.checkedAt || null,
+        monitoringStartedAt: state.monitoringStartedAt || null,
+        ageMinutes,
+        issueCount,
+        missingCount,
+        reviewRequiredCount,
+        recoveredCount,
+        certifiedCycles,
+        completedCycles
+    };
+}
+
 function getCommandRegistrationStatus(outLogPath, expectedCount = getExpectedGuildCommandCount(), {
     runtimeHealthFile = null,
     pm2Pid = null
@@ -217,6 +450,20 @@ function runOpsHealthCheck(options = {}) {
         ? auditStateInvariants(settings.dataFile)
         : { skipped: true, issueCount: 0, issues: [] };
     const stateWriteFindings = auditStateWrites();
+    let backupAutoReview = null;
+    try {
+        backupAutoReview = autoReviewBackupWarnings({
+            dataFile: settings.dataFile,
+            limit: settings.backupLimit
+        });
+    } catch (error) {
+        backupAutoReview = {
+            ok: false,
+            skipped: true,
+            reason: 'auto-review-error',
+            error: error?.message || String(error)
+        };
+    }
     const backupAudit = auditBackups({ limit: settings.backupLimit, warnOnly: true });
     const embedFindings = auditEmbedFields();
     const pm2 = getPm2ProcessStatus(settings.processName);
@@ -228,6 +475,23 @@ function runOpsHealthCheck(options = {}) {
         settings.expectedCommandCount || getExpectedGuildCommandCount(),
         { runtimeHealthFile: settings.runtimeHealthFile, pm2Pid: pm2.pid }
     );
+    const consistency = getDataConsistencyStatus({
+        pendingAttendanceFile: settings.pendingAttendanceFile,
+        payrollIntegrityFile: settings.payrollIntegrityFile,
+        runtimeHealthFile: settings.runtimeHealthFile
+    });
+    const endAdenaFreshness = getEndAdenaFreshnessStatus({
+        filePath: settings.endAdenaFreshnessFile
+    });
+    const externalDependencies = getExternalDependencySmokeStatus({
+        filePath: settings.externalSmokeFile
+    });
+    const recoveryDrill = getRecoveryDrillStatus({
+        filePath: settings.recoveryDrillFile
+    });
+    const securityPosture = getSecurityPostureStatus({
+        filePath: settings.securityAuditFile
+    });
 
     const checks = {
         pm2,
@@ -244,6 +508,7 @@ function runOpsHealthCheck(options = {}) {
         },
         backups: {
             ok: backupAudit.fatalIssueCount === 0,
+            autoReview: backupAutoReview,
             warningCount: backupAudit.warningCount,
             fatalIssueCount: backupAudit.fatalIssueCount,
             reviewedIssueCount: backupAudit.reviewedIssueCount || 0,
@@ -256,6 +521,11 @@ function runOpsHealthCheck(options = {}) {
             findings: embedFindings
         },
         commandRegistration,
+        consistency,
+        endAdenaFreshness,
+        externalDependencies,
+        recoveryDrill,
+        securityPosture,
         errorLog: {
             ...errorLog,
             recentLines: errorLog.ok ? [] : readRecentErrorLines(errorLogPath)
@@ -268,12 +538,21 @@ function runOpsHealthCheck(options = {}) {
         !checks.stateWrites.ok,
         !checks.backups.ok,
         !checks.embeds.ok,
-        !checks.commandRegistration.ok && pm2.available
+        !checks.commandRegistration.ok && pm2.available,
+        checks.externalDependencies.available && !checks.externalDependencies.ok,
+        checks.recoveryDrill.available && !checks.recoveryDrill.ok,
+        checks.securityPosture.available && !checks.securityPosture.ok,
+        ['invalid', 'stale', 'failed'].includes(checks.endAdenaFreshness.status),
+        checks.endAdenaFreshness.status === 'degraded' && !settings.allowEndAdenaDegraded
     ].some(Boolean);
     const warning = [
         !pm2.available,
+        !checks.externalDependencies.available,
+        !checks.recoveryDrill.available,
+        !checks.securityPosture.available,
         checks.backups.warningCount > 0,
-        !checks.errorLog.ok
+        !checks.errorLog.ok,
+        checks.endAdenaFreshness.status === 'degraded' && settings.allowEndAdenaDegraded
     ].some(Boolean);
 
     return {
@@ -285,7 +564,12 @@ function runOpsHealthCheck(options = {}) {
             backupLimit: settings.backupLimit,
             maxErrorLogAgeMinutes: settings.maxErrorLogAgeMinutes,
             expectedCommandCount: settings.expectedCommandCount || getExpectedGuildCommandCount(),
-            runtimeHealthFile: settings.runtimeHealthFile
+            runtimeHealthFile: settings.runtimeHealthFile,
+            endAdenaFreshnessFile: settings.endAdenaFreshnessFile,
+            externalSmokeFile: settings.externalSmokeFile,
+            recoveryDrillFile: settings.recoveryDrillFile,
+            securityAuditFile: settings.securityAuditFile,
+            allowEndAdenaDegraded: settings.allowEndAdenaDegraded
         },
         checks
     };
@@ -301,6 +585,11 @@ function formatHealthSummary(result) {
         `Backups: ${result.checks.backups.checked} checked, ${result.checks.backups.fatalIssueCount} fatal, ${result.checks.backups.warningCount} warning(s), ${result.checks.backups.reviewedIssueCount || 0} reviewed`,
         `Embeds: ${result.checks.embeds.findingCount} finding(s)`,
         `Commands: ${result.checks.commandRegistration.registeredCount ?? 'missing'} / ${result.checks.commandRegistration.expectedCount} (${result.checks.commandRegistration.source})`,
+        `Consistency: attendance pending=${result.checks.consistency?.rawAttendancePending || 0}, payroll issues=${result.checks.consistency?.payrollAuditIssues || 0}, background pending=${result.checks.consistency?.queuePending || 0}, max lag=${result.checks.consistency?.maxEventLoopLagMs || 0}ms`,
+        `External: ${result.checks.externalDependencies?.status || 'missing'}, checks=${result.checks.externalDependencies?.checkCount || 0}, failures=${result.checks.externalDependencies?.failureCount || 0}`,
+        `Recovery drill: ${result.checks.recoveryDrill?.status || 'missing'}, scenarios=${result.checks.recoveryDrill?.scenarioCount || 0}, failures=${result.checks.recoveryDrill?.failureCount || 0}`,
+        `Security: ${result.checks.securityPosture?.status || 'missing'}, checks=${result.checks.securityPosture?.checkCount || 0}, critical=${result.checks.securityPosture?.criticalCount || 0}, advisory=${result.checks.securityPosture?.advisoryCount || 0}`,
+        `End Adena: ${result.checks.endAdenaFreshness?.status || 'missing'}, score=${result.checks.endAdenaFreshness?.score ?? 'monitoring'}, cycles=${result.checks.endAdenaFreshness?.certifiedCycles || 0}/${result.checks.endAdenaFreshness?.completedCycles || 0}, missing=${result.checks.endAdenaFreshness?.missingCount || 0}, review=${result.checks.endAdenaFreshness?.reviewRequiredCount || 0}`,
         `Error log: ${result.checks.errorLog.exists ? (result.checks.errorLog.empty ? 'empty' : `${result.checks.errorLog.ageMinutes} min old`) : 'missing'}`
     ];
 
@@ -329,6 +618,11 @@ module.exports = {
     getExpectedGuildCommandCount,
     getLogFreshness,
     readRuntimeHealthFile,
+    getDataConsistencyStatus,
+    getEndAdenaFreshnessStatus,
+    getExternalDependencySmokeStatus,
+    getRecoveryDrillStatus,
+    getSecurityPostureStatus,
     readLogLines,
     runOpsHealthCheck,
     formatHealthSummary

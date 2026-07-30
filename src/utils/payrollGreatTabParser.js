@@ -1,8 +1,8 @@
 'use strict';
 
 const SERVER_LABELS = {
-    HEINE: '하이네',
-    PAAGRIO: '파아그리오'
+    HEINE: '\uBC1C\uB77C\uCE74\uC2A4',
+    PAAGRIO: '\uD30C\uC544\uADF8\uB9AC\uC624'
 };
 
 const PLAYER_HEADER_ROW_INDEX = 6;
@@ -52,23 +52,43 @@ function findRowIndexes(rows, matcher) {
     return hits;
 }
 
-/** 합계 전용 열(다른 선수 열 합과 동일한 값) 제거. */
 function pruneRollupColumns(rows, labelRowIndexes, playerCols) {
     if (!labelRowIndexes.length || playerCols.length < 2) return playerCols;
-    const refRow = rows[labelRowIndexes[0]];
-    if (!refRow) return playerCols;
 
-    const values = playerCols.map(col => parseNumber(refRow[col]));
-    return playerCols.filter((col, index) => {
-        const value = values[index];
-        if (!value) return false;
-        const otherSum = values.reduce((sum, v, j) => (j === index ? sum : sum + v), 0);
-        if (otherSum > 0 && Math.abs(value - otherSum) < 1) return false;
+    const hasNearbyPlayerHeader = col => {
+        const header = rows[PLAYER_HEADER_ROW_INDEX] || [];
+        for (const offset of [0, -1, -2]) {
+            const label = cellText(header, col + offset);
+            if (label && !isNonPlayerHeaderLabel(label)) return true;
+        }
+        return false;
+    };
+
+    return playerCols.filter(col => {
+        if (hasNearbyPlayerHeader(col)) return true;
+
+        let comparedRows = 0;
+        let rollupMatches = 0;
+        for (const rowIndex of labelRowIndexes) {
+            const row = rows[rowIndex];
+            const value = parseNumber(row?.[col]);
+            if (!value) continue;
+            const otherValues = playerCols
+                .filter(otherCol => otherCol !== col)
+                .map(otherCol => parseNumber(row?.[otherCol]))
+                .filter(Boolean);
+            const otherSum = otherValues.reduce((sum, otherValue) => sum + otherValue, 0);
+            comparedRows += 1;
+            if (otherValues.length >= 2 && otherSum > 0 && Math.abs(value - otherSum) < 1) {
+                rollupMatches += 1;
+            }
+        }
+
+        if (comparedRows > 0 && rollupMatches === comparedRows) return false;
         return true;
     });
 }
 
-/** 7행 이름(보조) + Total Gain Adena 행의 숫자 셀 전체 스캔 — 열 밀림(C→D) 대응. */
 function discoverPlayerAdenaColumnIndices(rows) {
     const adenaRows = findRowIndexes(rows, text => /total\s*gain\s*adena/i.test(text));
     const fromAdenaRow = new Set();
@@ -136,7 +156,7 @@ function sumAcrossPlayerColumns(rows, rowIndexes, playerCols) {
     return sum;
 }
 
-function parseGreatTabPayrollRows(rows, serverLabel) {
+function parseGreatTabPayrollRows(rows, serverLabel, options = {}) {
     if (!Array.isArray(rows) || rows.length < 20) {
         return { ok: false, code: 'tab-too-short' };
     }
@@ -160,16 +180,16 @@ function parseGreatTabPayrollRows(rows, serverLabel) {
     const playerShare = sumAcrossPlayerColumns(rows, findRowIndexes(rows, (text, row) => {
         const a = cellText(row, 0);
         const b = cellText(row, 1);
-        return /^0\.65$/i.test(a) || /^0\.65$/i.test(b) || /^player$/i.test(a) || /^player$/i.test(b);
+        return /^0\.(?:65|70)$/i.test(a) || /^0\.(?:65|70)$/i.test(b) || /^player$/i.test(a) || /^player$/i.test(b);
     }), playerCols);
     const ownerShare = sumAcrossPlayerColumns(rows, findRowIndexes(rows, (text, row) => {
         const a = cellText(row, 0);
         const b = cellText(row, 1);
-        return /^0\.35$/i.test(a) || /^0\.35$/i.test(b) || /^owner$/i.test(a) || /^owner$/i.test(b);
+        return /^0\.(?:35|30)$/i.test(a) || /^0\.(?:35|30)$/i.test(b) || /^owner$/i.test(a) || /^owner$/i.test(b);
     }), playerCols);
     const totalPeso = sumAcrossPlayerColumns(rows, findRowIndexes(rows, text => /expected\s*peso/i.test(text)), playerCols);
 
-    if (!totalAdena && !grossSalary && !playerShare && !ownerShare) {
+    if (!totalAdena && !grossSalary && !playerShare && !ownerShare && !options.allowEmptyTotals) {
         return { ok: false, code: 'no-payroll-totals' };
     }
 

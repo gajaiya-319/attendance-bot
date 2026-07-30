@@ -3,6 +3,10 @@
 const assert = require('assert');
 const { parseGreatTabPayrollRows } = require('../src/utils/payrollGreatTabParser');
 
+function col(letter) {
+    return letter.split('').reduce((sum, ch) => sum * 26 + ch.charCodeAt(0) - 64, 0) - 1;
+}
+
 const sampleRows = [];
 for (let i = 0; i < 60; i += 1) sampleRows.push(new Array(20).fill(''));
 
@@ -73,6 +77,25 @@ assert.strictEqual(compact.row.totalAdena, 260000);
 assert.strictEqual(compact.row.grossSalary, 31200);
 assert.strictEqual(compact.row.totalPeso, 771);
 
+const seventyThirtyRows = [];
+for (let i = 0; i < 30; i += 1) seventyThirtyRows.push(new Array(6).fill(''));
+seventyThirtyRows[6][2] = 'Solo';
+seventyThirtyRows[13][0] = 'Total Gain Adena';
+seventyThirtyRows[13][2] = 100000;
+seventyThirtyRows[21][0] = 'TOTAL';
+seventyThirtyRows[21][2] = 10000;
+seventyThirtyRows[22][0] = '5%';
+seventyThirtyRows[22][2] = 9500;
+seventyThirtyRows[23][0] = '0.70';
+seventyThirtyRows[23][2] = 7000;
+seventyThirtyRows[24][0] = '0.30';
+seventyThirtyRows[24][2] = 3000;
+
+const seventyThirty = parseGreatTabPayrollRows(seventyThirtyRows, 'Paagrio');
+assert.strictEqual(seventyThirty.ok, true);
+assert.strictEqual(seventyThirty.row.playerShare, 7000);
+assert.strictEqual(seventyThirty.row.ownerShare, 3000);
+
 const horizontalRows = [];
 for (let i = 0; i < 60; i += 1) horizontalRows.push(new Array(20).fill(''));
 horizontalRows[6][0] = 'Day';
@@ -115,5 +138,39 @@ assert.strictEqual(horizontal.row.txFee, 180);
 assert.strictEqual(horizontal.row.playerShare, 200);
 assert.strictEqual(horizontal.row.ownerShare, 100);
 assert.strictEqual(horizontal.row.totalPeso, 18);
+
+const mixedShiftRows = [];
+for (let i = 0; i < 60; i += 1) mixedShiftRows.push(new Array(40).fill(''));
+mixedShiftRows[6][col('C')] = 'Giru Kun';
+mixedShiftRows[6][col('F')] = 'Deia';
+mixedShiftRows[6][col('I')] = 'x';
+mixedShiftRows[6][col('L')] = 'x';
+mixedShiftRows[6][col('O')] = 'VALAK';
+mixedShiftRows[6][col('R')] = 'Erzie';
+mixedShiftRows[6][col('U')] = 'x';
+mixedShiftRows[6][col('X')] = 'Miyaki';
+mixedShiftRows[6][col('AA')] = 'Katsuki';
+mixedShiftRows[6][col('AG')] = 'Note';
+mixedShiftRows[13][0] = 'Total Gain Adena';
+mixedShiftRows[13][col('C')] = 530000;
+mixedShiftRows[13][col('O')] = 310000;
+mixedShiftRows[13][col('R')] = 503000;
+mixedShiftRows[13][col('X')] = 405000;
+mixedShiftRows[13][col('AA')] = 165000;
+mixedShiftRows[13][col('AG')] = 1913000;
+mixedShiftRows[39][0] = 'Total Gain Adena';
+mixedShiftRows[39][col('F')] = 593000;
+mixedShiftRows[39][col('I')] = 456000;
+mixedShiftRows[39][col('L')] = 520000;
+mixedShiftRows[39][col('O')] = 680000;
+mixedShiftRows[39][col('R')] = 683000;
+mixedShiftRows[39][col('U')] = 715000;
+mixedShiftRows[39][col('X')] = 828000;
+mixedShiftRows[39][col('AG')] = 4475000;
+
+const mixedShift = parseGreatTabPayrollRows(mixedShiftRows, 'Paagrio');
+assert.strictEqual(mixedShift.ok, true);
+assert.deepStrictEqual(mixedShift.playerColumns, ['C', 'F', 'I', 'L', 'O', 'R', 'U', 'X', 'AA']);
+assert.strictEqual(mixedShift.row.totalAdena, 6388000);
 
 console.log('payroll-great-tab-parser tests passed');

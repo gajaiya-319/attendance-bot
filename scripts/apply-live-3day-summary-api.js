@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Setup 최근_3일_요약: hidden Great mirrors + local formulas, then API value sync.
+ * Setup recent 3-day summary: hidden Great mirrors + local formulas, then API value sync.
  *
  *   node scripts/apply-live-3day-summary-api.js
  *   node scripts/apply-live-3day-summary-api.js --formulas-only
@@ -23,7 +23,7 @@ const {
 const { syncLiveThreeDaySummaryValues } = require('./lib/payroll-live-summary-sync');
 const { buildSimpleMonthlySheetBatch } = require('./lib/payroll-monthly-summary-simple');
 
-const RECENT_SHEET = '최근_3일_요약';
+const RECENT_SHEET = '\uCD5C\uADFC_3\uC77C_\uC694\uC57D';
 
 function payrollSpreadsheetId() {
     return process.env.PAYROLL_SUMMARY_SPREADSHEET_ID
@@ -114,6 +114,10 @@ async function main() {
                     range: `'${RECENT_SHEET}'!B3`,
                     values: [[`▶ 서버별 3일 급여 기록 내역 (실시간: ${PAAGRIO_TAB} / ${HEINE_TAB} ← Work list)`]]
                 },
+                {
+                    range: `'${RECENT_SHEET}'!B4:H4`,
+                    values: [['서버명', '총 획득 아데나', '총 급여', '수수료 5%', '직원 70%', '오너 30%', '총 페소']]
+                },
                 { range: `'${RECENT_SHEET}'!C5:H5`, values: [paagrioFormulas] },
                 { range: `'${RECENT_SHEET}'!C6:H6`, values: [heineFormulas] },
                 { range: `'${RECENT_SHEET}'!C7:H7`, values: [['=SUM(C5:C6)', '=SUM(D5:D6)', '=SUM(E5:E6)', '=SUM(F5:F6)', '=SUM(G5:G6)', '=SUM(H5:H6)']] },
@@ -133,7 +137,7 @@ async function main() {
         payrollSpreadsheetId: payrollId,
         greatSpreadsheetId: greatId,
         mirrors: [MIRROR_PAAGRIO, MIRROR_HEINE],
-        note: 'Open 급여토탈관리 → allow IMPORTRANGE on mirror tabs once. Until then, API sync fills numbers every 5 min.'
+        note: 'Open 급여통합관리 once and allow IMPORTRANGE on mirror tabs. Until then, API sync fills numbers every 5 min.'
     };
 
     if (!formulasOnly) {
