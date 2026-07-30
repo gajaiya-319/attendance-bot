@@ -249,6 +249,7 @@ function createServiceLayer(ctx) {
         getAttendanceData: () => botState.attendanceData,
         payrollOperationLogService,
         purchaseSheetService,
+        refreshGuildMembers: (guild, options) => botState.refreshGuildMembers(guild, options),
         logger: console
     });
 

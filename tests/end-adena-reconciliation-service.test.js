@@ -283,6 +283,7 @@ function member(id, displayName, roleIds) {
     const logCalls = [];
     const sent = [];
     const dmSent = [];
+    let memberRefreshCalls = 0;
     let forceActiveOvertime = false;
     const members = new Map([
         ['u1', member('u1', 'Zurin - V Day Time', ['day-role', 'heine-role'])],
@@ -378,6 +379,12 @@ function member(id, displayName, roleIds) {
                 };
             }
         },
+        refreshGuildMembers: async (guild, options) => {
+            memberRefreshCalls += 1;
+            assert.strictEqual(guild.members.cache, members);
+            assert.deepStrictEqual(options, { force: false, minIntervalMs: 10 * 60 * 1000 });
+            return true;
+        },
         logger: { warn() {}, error() {}, log() {} }
     });
 
@@ -411,6 +418,7 @@ function member(id, displayName, roleIds) {
         bounds,
         at: bounds.end.clone().add(60, 'minutes')
     });
+    assert.strictEqual(memberRefreshCalls, 1, 'reconciliation must use the shared member refresh controller');
     assert.strictEqual(report.ok, true);
     assert.strictEqual(report.expectedWorkers.length, 2);
     assert.strictEqual(report.submitted.length, 3);

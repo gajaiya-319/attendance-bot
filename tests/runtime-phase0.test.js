@@ -97,6 +97,28 @@ function createLiveState() {
     await persistence.saveSystemAsync();
     assert.ok(fsSync.existsSync(dataPath));
 
+    let memberFetchCount = 0;
+    let releaseMemberFetch;
+    const memberFetchGuild = {
+        members: {
+            fetch: () => {
+                memberFetchCount += 1;
+                return new Promise(resolve => {
+                    releaseMemberFetch = resolve;
+                });
+            }
+        }
+    };
+    const concurrentMemberFetches = [
+        persistence.refreshGuildMembers(memberFetchGuild, { force: true }),
+        persistence.refreshGuildMembers(memberFetchGuild, { force: true })
+    ];
+    releaseMemberFetch();
+    assert.deepStrictEqual(await Promise.all(concurrentMemberFetches), [true, true]);
+    assert.strictEqual(memberFetchCount, 1, 'concurrent member refreshes must share one Discord request');
+    assert.strictEqual(await persistence.refreshGuildMembers(memberFetchGuild), true);
+    assert.strictEqual(memberFetchCount, 1, 'fresh member cache must suppress repeated Discord requests');
+
     const startup = createStartupRuntime({
         CONFIG: {
             VERSION: 'test',

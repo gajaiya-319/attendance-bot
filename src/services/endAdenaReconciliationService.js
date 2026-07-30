@@ -579,6 +579,7 @@ function createEndAdenaReconciliationService({
     getAttendanceData,
     payrollOperationLogService,
     purchaseSheetService,
+    refreshGuildMembers = null,
     logger = console
 }) {
     if (!CONFIG?.TIMEZONE || !CONFIG?.ROLES) throw new TypeError('CONFIG with TIMEZONE and ROLES must be provided');
@@ -632,9 +633,16 @@ function createEndAdenaReconciliationService({
             };
         }
         const targetGuild = guild || client?.guilds?.cache?.get?.(CONFIG.GUILD_ID) || null;
-        await targetGuild?.members?.fetch?.().catch(error => {
-            logger.warn?.('[END ADENA RECONCILIATION MEMBER FETCH WARN]', error?.message || error);
-        });
+        if (targetGuild && typeof refreshGuildMembers === 'function') {
+            await refreshGuildMembers(targetGuild, {
+                force: false,
+                minIntervalMs: 10 * 60 * 1000
+            });
+        } else if (targetGuild && !targetGuild.members?.cache?.size) {
+            await targetGuild.members?.fetch?.().catch(error => {
+                logger.log?.('[END ADENA RECONCILIATION MEMBER FETCH SKIP]', error?.message || error);
+            });
+        }
 
         const sheet = await purchaseSheetService.readAdenaSummary({ shift: normalizedShift });
         if (!sheet.ok) {
