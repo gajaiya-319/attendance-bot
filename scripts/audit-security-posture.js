@@ -23,6 +23,7 @@ async function main() {
         checkCount: result.checkCount,
         criticalCount: result.criticalCount,
         advisoryCount: result.advisoryCount,
+        leastPrivilegeProfile: result.leastPrivilegeProfile,
         failures: result.failures,
         advisories: result.advisories
     }, null, 2));

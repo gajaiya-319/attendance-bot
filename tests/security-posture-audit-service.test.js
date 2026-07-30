@@ -6,6 +6,7 @@ const os = require('os');
 const path = require('path');
 const { PermissionFlagsBits } = require('discord.js');
 const {
+    buildLeastPrivilegeProfile,
     calculateChannelPermissions,
     runSecurityPostureAudit
 } = require('../src/services/securityPostureAuditService');
@@ -41,6 +42,7 @@ function response(body, status = 200) {
             PermissionFlagsBits.ViewChannel |
             PermissionFlagsBits.SendMessages |
             PermissionFlagsBits.ReadMessageHistory |
+            PermissionFlagsBits.EmbedLinks |
             PermissionFlagsBits.AddReactions |
             PermissionFlagsBits.ManageMessages;
         const roles = [
@@ -59,6 +61,7 @@ function response(body, status = 200) {
             END_ADENA_CHANNEL_IDS: {}
         };
         let publicBot = false;
+        let denyEmbedLinks = false;
         const fetchFn = async url => {
             if (url.endsWith('/users/@me')) return response({ id: botId, username: 'Attendance Bot', bot: true });
             if (url.endsWith('/oauth2/applications/@me')) {
@@ -66,7 +69,18 @@ function response(body, status = 200) {
             }
             if (url.endsWith(`/guilds/${guildId}/members/${botId}`)) return response({ user: { id: botId }, roles: [botRoleId] });
             if (url.endsWith(`/guilds/${guildId}/roles`)) return response(roles);
-            if (url.endsWith(`/channels/${channelId}`)) return response({ id: channelId, type: 0, permission_overwrites: [] });
+            if (url.endsWith(`/channels/${channelId}`)) {
+                return response({
+                    id: channelId,
+                    type: 0,
+                    permission_overwrites: denyEmbedLinks ? [{
+                        id: botId,
+                        type: 1,
+                        allow: '0',
+                        deny: PermissionFlagsBits.EmbedLinks.toString()
+                    }] : []
+                });
+            }
             return response({ message: 'not found' }, 404);
         };
         const baseOptions = {
@@ -82,12 +96,25 @@ function response(body, status = 200) {
         assert.strictEqual(healthy.ok, true);
         assert.strictEqual(healthy.criticalCount, 0);
         assert.strictEqual(healthy.advisoryCount, 0);
+        const leastPrivilegeProfile = buildLeastPrivilegeProfile();
+        assert(leastPrivilegeProfile.permissions.includes('EmbedLinks'));
+        assert(!leastPrivilegeProfile.permissions.includes('Administrator'));
+        assert.strictEqual(healthy.leastPrivilegeProfile.permissionBits, leastPrivilegeProfile.permissionBits);
 
         publicBot = true;
         const advisory = await runSecurityPostureAudit(baseOptions);
         assert.strictEqual(advisory.ok, true, 'advisory does not block required operations');
         assert.strictEqual(advisory.advisoryCount, 1);
         assert.strictEqual(advisory.advisories[0].name, 'discord-application-policy');
+
+        publicBot = false;
+        denyEmbedLinks = true;
+        const missingEmbedLinks = await runSecurityPostureAudit(baseOptions);
+        assert.strictEqual(missingEmbedLinks.ok, false);
+        assert.strictEqual(missingEmbedLinks.criticalCount, 1);
+        assert.strictEqual(missingEmbedLinks.failures[0].name, 'discord-channel-permissions');
+        assert.match(missingEmbedLinks.failures[0].error, /EmbedLinks/);
+        denyEmbedLinks = false;
 
         const denied = calculateChannelPermissions({
             guildId,

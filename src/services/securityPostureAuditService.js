@@ -12,7 +12,8 @@ const REQUIRED_GUILD_PERMISSIONS = [
 const REQUIRED_TEXT_PERMISSIONS = [
     ['ViewChannel', PermissionFlagsBits.ViewChannel],
     ['SendMessages', PermissionFlagsBits.SendMessages],
-    ['ReadMessageHistory', PermissionFlagsBits.ReadMessageHistory]
+    ['ReadMessageHistory', PermissionFlagsBits.ReadMessageHistory],
+    ['EmbedLinks', PermissionFlagsBits.EmbedLinks]
 ];
 const REQUIRED_REVIEW_PERMISSIONS = [
     ['AddReactions', PermissionFlagsBits.AddReactions],
@@ -27,6 +28,23 @@ const ELEVATED_PERMISSIONS = [
     ['KickMembers', PermissionFlagsBits.KickMembers],
     ['ModerateMembers', PermissionFlagsBits.ModerateMembers]
 ];
+
+function buildLeastPrivilegeProfile() {
+    const permissionGroups = {
+        guild: REQUIRED_GUILD_PERMISSIONS.map(([name]) => name),
+        text: REQUIRED_TEXT_PERMISSIONS.map(([name]) => name),
+        review: REQUIRED_REVIEW_PERMISSIONS.map(([name]) => name)
+    };
+    const permissions = [...REQUIRED_GUILD_PERMISSIONS, ...REQUIRED_TEXT_PERMISSIONS, ...REQUIRED_REVIEW_PERMISSIONS];
+    const bits = permissions.reduce((value, [, flag]) => value | flag, 0n);
+    return {
+        permissionGroups,
+        permissions: permissions.map(([name]) => name),
+        permissionBits: bits.toString(),
+        permissionHex: `0x${bits.toString(16)}`,
+        excludedElevatedPermissions: ELEVATED_PERMISSIONS.map(([name]) => name)
+    };
+}
 
 function unique(values = []) {
     return [...new Set(values.filter(Boolean).map(String))];
@@ -128,6 +146,7 @@ async function runSecurityPostureAudit({
     if (typeof fetchFn !== 'function') throw new TypeError('fetchFn must be a function');
     const checkedAt = new Date(now).toISOString();
     const checks = [];
+    const leastPrivilegeProfile = buildLeastPrivilegeProfile();
 
     async function check(name, operation, severity = 'critical') {
         const startedAt = Date.now();
@@ -198,6 +217,7 @@ async function runSecurityPostureAudit({
             checkCount: checks.length,
             criticalCount: critical.length,
             advisoryCount: 0,
+            leastPrivilegeProfile,
             checks,
             failures: critical,
             advisories: []
@@ -291,6 +311,7 @@ async function runSecurityPostureAudit({
         checkCount: checks.length,
         criticalCount: critical.length,
         advisoryCount: advisories.length,
+        leastPrivilegeProfile,
         checks,
         failures: critical.map(item => ({ name: item.name, error: item.error, status: item.status })),
         advisories: advisories.map(item => ({ name: item.name, error: item.error, status: item.status }))
@@ -298,6 +319,7 @@ async function runSecurityPostureAudit({
 }
 
 module.exports = {
+    buildLeastPrivilegeProfile,
     calculateChannelPermissions,
     calculateGuildPermissions,
     runSecurityPostureAudit

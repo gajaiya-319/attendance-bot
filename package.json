@@ -28,6 +28,7 @@
         "ops:external-smoke": "node scripts/check-external-dependencies.js",
         "ops:recovery-drill": "node scripts/run-recovery-drill.js",
         "ops:security-audit": "node scripts/audit-security-posture.js",
+        "ops:discord-permissions": "node scripts/print-discord-least-privilege.js",
         "ops:google-check": "node scripts/check-google-config.js",
         "ops:raw-audit": "node scripts/audit-raw-attendance-dashboard.js --live",
         "ops:sync-current-workers": "node scripts/sync-current-workers-from-discord.js",
