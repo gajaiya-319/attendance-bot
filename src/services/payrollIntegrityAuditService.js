@@ -6,9 +6,18 @@ const cryptoDefault = require('crypto');
 const { notifyPayrollOwners: notifyPayrollOwnersDefault } = require('../utils/payrollOwnerNotify');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const SHEET_MUTATION_KINDS = new Set(['purchase', 'death-penalty', 'end-adena']);
+const SHEET_MUTATION_ACTIONS = new Set(['approve', 'cancel']);
 
 function isSuccessfulOperation(entry = {}) {
+    if (entry.result?.duplicate === true || entry.result?.skipped === true || entry.status === 'skipped') return false;
     return entry.status === 'success' || entry.result?.ok === true;
+}
+
+function isSuccessfulSheetMutation(entry = {}) {
+    return SHEET_MUTATION_KINDS.has(String(entry.kind || '')) &&
+        SHEET_MUTATION_ACTIONS.has(String(entry.action || '')) &&
+        isSuccessfulOperation(entry);
 }
 
 function operationIdentity(entry = {}) {
@@ -30,7 +39,7 @@ function findDuplicateMessageOperations(entries = [], {
     const grouped = new Map();
 
     for (const entry of entries) {
-        if (!isSuccessfulOperation(entry)) continue;
+        if (!isSuccessfulSheetMutation(entry)) continue;
         const createdAt = new Date(entry.createdAt || 0).valueOf();
         if (!Number.isFinite(createdAt) || createdAt < cutoff) continue;
         const identity = operationIdentity(entry);
@@ -232,6 +241,7 @@ function createPayrollIntegrityAuditService({
 module.exports = {
     createPayrollIntegrityAuditService,
     findDuplicateMessageOperations,
+    isSuccessfulSheetMutation,
     collectSheetAuditIssues,
     formatIntegrityAlert,
     issueFingerprint

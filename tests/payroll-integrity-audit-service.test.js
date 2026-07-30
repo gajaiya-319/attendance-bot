@@ -27,6 +27,30 @@ const {
             result: { ok: true }
         },
         {
+            createdAt: '2026-07-25T05:01:30.000Z',
+            kind: 'death-penalty',
+            action: 'approve',
+            messageId: 'msg-1',
+            server: 'PAAGRIO',
+            result: { ok: true, duplicate: true, skipped: true }
+        },
+        {
+            createdAt: '2026-07-25T05:02:00.000Z',
+            kind: 'end-adena-prevalidation',
+            action: 'validate',
+            messageId: 'validation-only',
+            server: 'PAAGRIO',
+            status: 'success'
+        },
+        {
+            createdAt: '2026-07-25T05:03:00.000Z',
+            kind: 'end-adena-prevalidation',
+            action: 'validate',
+            messageId: 'validation-only',
+            server: 'PAAGRIO',
+            status: 'success'
+        },
+        {
             createdAt: '2026-07-23T05:01:00.000Z',
             kind: 'death-penalty',
             action: 'approve',
@@ -38,6 +62,7 @@ const {
     assert.strictEqual(duplicates.length, 1);
     assert.strictEqual(duplicates[0].messageId, 'msg-1');
     assert.strictEqual(duplicates[0].count, 2);
+    assert.strictEqual(duplicates.some(item => item.messageId === 'validation-only'), false);
 
     const sheetIssues = collectSheetAuditIssues({
         audited: [
