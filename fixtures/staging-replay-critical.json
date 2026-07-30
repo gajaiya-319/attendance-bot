@@ -59,6 +59,30 @@
           "flagsInclude": ["LATE", "ABSENT_CONVERTED_TO_LATE"]
         }
       ]
+    },
+    {
+      "id": "day-overtime-crosses-midnight-before-next-shift",
+      "events": [
+        { "at": "2026-07-29T09:00:00+08:00", "type": "clock_in_confirmed", "source": "button", "userId": "worker-day-cross", "userName": "Worker Day Cross", "shift": "day" },
+        { "at": "2026-07-29T21:05:00+08:00", "type": "overtime_started", "source": "auto", "userId": "worker-day-cross", "userName": "Worker Day Cross", "shift": "day" },
+        { "at": "2026-07-30T02:19:00+08:00", "type": "clock_out_confirmed", "source": "dc-timeout", "userId": "worker-day-cross", "userName": "Worker Day Cross", "shift": "day" },
+        { "at": "2026-07-30T09:03:00+08:00", "type": "recorded_status_changed", "source": "voice_state", "userId": "worker-day-cross", "userName": "Worker Day Cross", "shift": "day", "meta": { "attendanceStatus": { "to": "FINISHED" } } },
+        { "at": "2026-07-30T09:22:00+08:00", "type": "clock_in_confirmed", "source": "live_on", "userId": "worker-day-cross", "userName": "Worker Day Cross", "shift": "day" }
+      ],
+      "expectedRecords": [
+        {
+          "userId": "worker-day-cross",
+          "workDate": "2026-07-29",
+          "fields": { "finalStatus": "FINISHED", "overtimeMinutes": 319 },
+          "flagsInclude": ["ON_TIME", "OVERTIME"]
+        },
+        {
+          "userId": "worker-day-cross",
+          "workDate": "2026-07-30",
+          "fields": { "finalStatus": "WORKING", "lateMinutes": 22 },
+          "flagsInclude": ["LATE"]
+        }
+      ]
     }
   ],
   "payrollScenarios": [

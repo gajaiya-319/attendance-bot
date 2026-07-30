@@ -15,8 +15,8 @@ const { createReplayDependencies } = require('../scripts/run-staging-replay');
     const suite = await runStagingReplaySuite(fixture, dependencies);
 
     assert.strictEqual(suite.ok, true, suite.failures.join('\n'));
-    assert.strictEqual(suite.scenarioCount, 6);
-    assert.strictEqual(suite.passedCount, 6);
+    assert.strictEqual(suite.scenarioCount, 7);
+    assert.strictEqual(suite.passedCount, 7);
     assert.strictEqual(suite.failedCount, 0);
 
     const brokenFixture = JSON.parse(JSON.stringify(fixture));

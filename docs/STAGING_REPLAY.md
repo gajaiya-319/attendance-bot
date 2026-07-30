@@ -27,6 +27,7 @@ security, recovery, backup, and restore checks.
 
 - Day shift with 55 minutes of overtime.
 - Night shift overtime crossing midnight.
+- Day shift overtime crossing midnight before the next 09:00 shift.
 - Absent status converted to a late clock-in.
 - Concurrent duplicate death-penalty approval.
 - Regular and overtime End Adena accumulation.

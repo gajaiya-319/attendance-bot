@@ -4,10 +4,13 @@ function getEventMoment(event, moment, timezone) {
     return moment(event?.at || event?.recordedAt || 0).tz(timezone);
 }
 
-function getLogicalWorkDate(event, { moment, timezone }) {
+function getLogicalWorkDate(event, { moment, timezone, dayShiftBoundaryHour = 9 }) {
     const at = getEventMoment(event, moment, timezone);
     const shift = String(event?.shift || '').toLowerCase();
     if (shift === 'night' && at.hour() < 12) {
+        return at.clone().subtract(1, 'day').format('YYYY-MM-DD');
+    }
+    if (shift === 'day' && at.hour() < dayShiftBoundaryHour) {
         return at.clone().subtract(1, 'day').format('YYYY-MM-DD');
     }
     return at.format('YYYY-MM-DD');
@@ -45,6 +48,9 @@ function updateProjectionFromEvent(record, event, { moment, timezone }) {
     if (!record.shift && event.shift) record.shift = event.shift;
 
     if (type === 'clock_in_confirmed') {
+        if (!record.clockInAt && record.clockOutAt && at.isAfter(moment(record.clockOutAt).tz(timezone))) {
+            record.clockOutAt = null;
+        }
         if (!record.clockInAt || at.isBefore(moment(record.clockInAt).tz(timezone))) {
             record.clockInAt = iso;
         }

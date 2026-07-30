@@ -38,6 +38,31 @@ function getShiftBounds(shift, value) {
 }
 
 {
+    const previousDayOvertime = {
+        at: at('2026-07-30 02:19'),
+        type: 'clock_out_confirmed',
+        userId: 'u-day-cross-midnight',
+        shift: 'day'
+    };
+    const nextDayClockIn = {
+        at: at('2026-07-30 09:22'),
+        type: 'clock_in_confirmed',
+        userId: 'u-day-cross-midnight',
+        shift: 'day'
+    };
+    assert.strictEqual(
+        getLogicalWorkDate(previousDayOvertime, { moment, timezone }),
+        '2026-07-29',
+        'day-shift overtime after midnight belongs to the previous work date'
+    );
+    assert.strictEqual(
+        getLogicalWorkDate(nextDayClockIn, { moment, timezone }),
+        '2026-07-30',
+        'the next day clock-in starts a new work date at 09:00 or later'
+    );
+}
+
+{
     const events = [
         {
             at: at('2026-06-30 21:00'),
@@ -119,6 +144,36 @@ function getShiftBounds(shift, value) {
     assert(record.flags.includes('ON_TIME'), 'on-time flag is projected');
     assert(record.flags.includes('OVERTIME'), 'overtime flag is projected');
     assert.strictEqual(record.overtimeMinutes, 40, 'post-shift worked minutes are projected');
+}
+
+{
+    const [record] = projectAttendanceFromEventLog([
+        {
+            at: at('2026-07-30 09:03'),
+            type: 'recorded_status_changed',
+            source: 'voice_state',
+            userId: 'u-stale-finished',
+            userName: 'Worker',
+            shift: 'day',
+            meta: { attendanceStatus: { to: 'FINISHED' } }
+        },
+        {
+            at: at('2026-07-30 09:22'),
+            type: 'clock_in_confirmed',
+            source: 'live_on',
+            userId: 'u-stale-finished',
+            userName: 'Worker',
+            shift: 'day'
+        }
+    ], {
+        moment,
+        timezone,
+        getShiftBounds
+    });
+
+    assert.strictEqual(record.clockOutAt, null, 'stale finished state before first clock-in is discarded');
+    assert.strictEqual(record.finalStatus, 'WORKING');
+    assert.strictEqual(record.lateMinutes, 22);
 }
 
 console.log('attendance-projection-service tests passed');
