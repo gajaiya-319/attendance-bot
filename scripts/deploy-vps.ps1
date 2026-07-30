@@ -3,12 +3,17 @@ param(
     [string]$KeyPath = "C:\Users\hyun yong\Downloads\discord-bot.key",
     [string]$RemotePath = "/home/ubuntu/attendance-bot",
     [string]$AppName = "attendance-bot",
+    [int]$CanarySoakSeconds = 130,
     [switch]$SkipPredeploy,
     [switch]$SkipInstall,
     [switch]$DryRun
 )
 
 $ErrorActionPreference = "Stop"
+
+if ($CanarySoakSeconds -lt 60) {
+    throw "CanarySoakSeconds must be at least 60 seconds."
+}
 
 function Invoke-Checked {
     param(
@@ -123,6 +128,11 @@ chmod 600 .env attendanceData.json attendanceData.json.bak
 $installCommand
 pm2 startOrReload ecosystem.config.js --only '$AppName' --update-env
 pm2 save
+canary_pid="`$(pm2 pid '$AppName')"
+if [ -z "`$canary_pid" ] || [ "`$canary_pid" = "0" ]; then
+    echo "[DEPLOY CANARY] PM2 did not provide a running PID"
+    exit 1
+fi
 sleep 10
 npm run ops:external-smoke
 npm run ops:security-audit
@@ -131,6 +141,14 @@ npm run staging:replay:runtime
 npm run ops:health -- --allow-end-adena-degraded
 npm run dr:backup
 npm run dr:verify
+echo "[DEPLOY CANARY] Soaking PID `$canary_pid for $CanarySoakSeconds seconds"
+sleep '$CanarySoakSeconds'
+npm run ops:wait -- --timeout=1 --interval=1
+post_canary_pid="`$(pm2 pid '$AppName')"
+if [ "`$post_canary_pid" != "`$canary_pid" ]; then
+    echo "[DEPLOY CANARY] PM2 PID changed from `$canary_pid to `$post_canary_pid"
+    exit 1
+fi
 node scripts/record-operational-evidence.js --allow-unhealthy
 echo '$cronBase64' | base64 -d > /tmp/attendance-bot-dr-cron
 (crontab -l 2>/dev/null | grep -v attendance-bot-dr || true; cat /tmp/attendance-bot-dr-cron) | crontab -
