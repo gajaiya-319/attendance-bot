@@ -157,6 +157,20 @@ assert.deepStrictEqual(parseEndAdenaMessage('NAME: Bellet\n-GAINED ADENA:111,125
     amount: 111000,
     requestedName: 'Bellet'
 });
+assert.deepStrictEqual(parseEndAdenaMessage([
+    'Name: Kauchinrei (OT)',
+    '-START: 08/2/2026',
+    '-START TIME: 12:00 AM KR TIME',
+    '-GAINED ADENA : 130,000'
+].join('\n')), {
+    rawAmount: 130000,
+    amount: 130000,
+    requestedName: 'Kauchinrei',
+    startDate: '08/2/2026',
+    startTime: '12:00 AM',
+    startTimezone: 'Asia/Seoul',
+    submissionType: 'OVERTIME'
+});
 assert.strictEqual(parseEndAdenaMessage('END ADENA: 150,884'), null);
 assert.strictEqual(getServerForChannel('paagrio-end', CONFIG.END_ADENA_CHANNEL_IDS), 'PAAGRIO');
 assert.strictEqual(getServerForChannel('heine-end', CONFIG.END_ADENA_CHANNEL_IDS), 'VALAKAS');

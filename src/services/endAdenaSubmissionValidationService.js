@@ -67,9 +67,18 @@ function sessionWindowScore(session, bounds, shift, at) {
     return score;
 }
 
-function resolveAttendanceShiftBounds({ moment, timezone, getShiftBounds, shift, messageAt, sessions = [] }) {
+function resolveAttendanceShiftBounds({ moment, timezone, getShiftBounds, shift, messageAt, sessions = [], declaredStartAt = null, submissionType = null }) {
     const normalizedShift = String(shift || '').toLowerCase();
     const at = moment(messageAt).tz(timezone);
+    if (declaredStartAt?.isValid?.()) {
+        const bounds = getDeclaredShiftBounds(getShiftBounds, normalizedShift, declaredStartAt.clone().tz(timezone), submissionType);
+        const matchedSessions = (sessions || [])
+            .map(session => ({ session, score: sessionWindowScore(session, bounds, normalizedShift, at) }))
+            .filter(item => item.score > 0)
+            .sort((left, right) => right.score - left.score)
+            .map(item => item.session);
+        return { bounds, matchedSessions, source: 'declared-start' };
+    }
     const candidates = [];
     const seen = new Set();
 
@@ -103,15 +112,63 @@ function getAttendanceSessionId(session) {
     return String(session.id || `${session.sessionKey || 'session'}:${session.clockInAt || ''}`);
 }
 
-function selectSubmissionSession(sessions, bounds, shift, messageAt) {
+function normalizeSubmissionType(value) {
+    const normalized = String(value || '').trim().toUpperCase();
+    if (!normalized) return null;
+    return normalized === 'REGULAR' ? 'REGULAR' : 'OVERTIME';
+}
+
+function getDeclaredShiftBounds(getShiftBounds, shift, declaredStartAt, submissionType = null) {
+    let bounds = getShiftBounds(shift, declaredStartAt);
+    if (
+        normalizeSubmissionType(submissionType) === 'OVERTIME' &&
+        bounds?.start && declaredStartAt.valueOf() < bounds.start.valueOf()
+    ) {
+        bounds = getShiftBounds(shift, declaredStartAt.clone().subtract(1, 'day'));
+    }
+    return bounds;
+}
+
+function inferSessionSubmissionType(session, bounds) {
+    if (!session) return null;
+    if (
+        session.otType || session.otStartedAt ||
+        /(?:^|[:_-])(?:ot|overtime)(?:$|[:_-])/i.test(String(session.id || ''))
+    ) return 'OVERTIME';
+    const clockInMs = Date.parse(session.clockInAt || '');
+    if (bounds?.end && Number.isFinite(clockInMs) && clockInMs > bounds.end.valueOf()) return 'OVERTIME';
+    return 'REGULAR';
+}
+
+function parseDeclaredStartMoment({ parsed, moment, timezone }) {
+    if (!parsed?.startDate || !parsed?.startTime) return null;
+    const sourceTimezone = parsed.startTimezone || timezone;
+    const input = `${parsed.startDate} ${parsed.startTime}`;
+    const formats = [
+        'M/D/YYYY h:mm A', 'MM/D/YYYY h:mm A',
+        'M/DD/YYYY h:mm A', 'MM/DD/YYYY h:mm A',
+        'M-D-YYYY h:mm A', 'MM-D-YYYY h:mm A',
+        'M-DD-YYYY h:mm A', 'MM-DD-YYYY h:mm A',
+        'YYYY-M-D h:mm A', 'YYYY-MM-DD h:mm A',
+        'M/D/YYYY H:mm', 'YYYY-M-D H:mm'
+    ];
+    const declared = moment.tz(input, formats, true, sourceTimezone);
+    return declared.isValid() ? declared.tz(timezone) : null;
+}
+
+function selectSubmissionSession(sessions, bounds, shift, messageAt, submissionType = null) {
     const atMs = Date.parse(messageAt?.toISOString?.() || messageAt || '');
-    return (sessions || [])
+    const candidates = (sessions || [])
         .filter(session => sessionWindowScore(session, bounds, shift, messageAt) > 0)
         .filter(session => {
             const clockInMs = Date.parse(session.clockInAt || '');
             return Number.isFinite(clockInMs) && (!Number.isFinite(atMs) || clockInMs <= atMs);
-        })
-        .sort((left, right) => (
+        });
+    const normalizedType = normalizeSubmissionType(submissionType);
+    const typedCandidates = normalizedType
+        ? candidates.filter(session => inferSessionSubmissionType(session, bounds) === normalizedType)
+        : candidates;
+    return typedCandidates.sort((left, right) => (
             Date.parse(right.clockInAt || '') - Date.parse(left.clockInAt || '') ||
             Date.parse(right.clockOutAt || '') - Date.parse(left.clockOutAt || '')
         ))[0] || null;
@@ -192,16 +249,41 @@ function createEndAdenaSubmissionValidationService({
         return promise;
     }
 
-    async function collectDuplicateMessageIds(message, { bounds, userName, shift, sessions, submissionSession }) {
+    async function collectDuplicateMessageIds(message, { bounds, userName, shift, sessions, submissionSession, submissionType }) {
         const duplicates = new Set();
+        const candidateMessages = new Map();
         const submissionSessionId = getAttendanceSessionId(submissionSession);
-        const isSameSubmissionSession = (candidateAt, explicitSessionId = null) => {
-            if (!submissionSessionId) return true;
+        const normalizedSubmissionType = normalizeSubmissionType(submissionType) ||
+            inferSessionSubmissionType(submissionSession, bounds) || 'REGULAR';
+        const declaredWindowMatches = parsedCandidate => {
+            const declaredStartAt = parseDeclaredStartMoment({
+                parsed: parsedCandidate,
+                moment,
+                timezone: CONFIG.TIMEZONE
+            });
+            if (!declaredStartAt) return true;
+            const candidateBounds = getDeclaredShiftBounds(
+                getShiftBounds,
+                String(shift || '').toLowerCase(),
+                declaredStartAt,
+                parsedCandidate?.submissionType || null
+            );
+            return candidateBounds?.start?.valueOf?.() === bounds.start.valueOf() &&
+                candidateBounds?.end?.valueOf?.() === bounds.end.valueOf();
+        };
+        const isSameSubmissionSession = (candidateAt, explicitSessionId = null, explicitSessionType = null, parsedCandidate = null) => {
             const candidateSession = explicitSessionId
                 ? null
-                : selectSubmissionSession(sessions, bounds, shift, candidateAt);
+                : selectSubmissionSession(sessions, bounds, shift, candidateAt, parsedCandidate?.submissionType || null);
             const candidateSessionId = explicitSessionId || getAttendanceSessionId(candidateSession);
-            return !candidateSessionId || candidateSessionId === submissionSessionId;
+            const candidateType = normalizeSubmissionType(
+                explicitSessionType || parsedCandidate?.submissionType ||
+                inferSessionSubmissionType(candidateSession, bounds) ||
+                inferSessionSubmissionType(explicitSessionId ? { id: explicitSessionId } : null, bounds)
+            ) || 'REGULAR';
+            if (candidateType !== normalizedSubmissionType) return false;
+            if (!submissionSessionId || !candidateSessionId) return true;
+            return candidateSessionId === submissionSessionId;
         };
         const channelCache = message.channel?.messages?.cache;
         const fetched = channelCache?.values
@@ -210,6 +292,7 @@ function createEndAdenaSubmissionValidationService({
         if (fetched?.values) {
             for (const candidate of fetched.values()) {
                 if (!candidate?.id || candidate.id === message.id || candidate.author?.bot || isExcludedUserId(CONFIG, candidate.author)) continue;
+                candidateMessages.set(String(candidate.id), candidate);
                 const reactions = candidate.reactions?.cache;
                 const hasSuccess = Boolean(reactions?.find?.(item => item.emoji?.name === CONFIG.PURCHASE_SUCCESS_EMOJI));
                 const hasCancel = Boolean(reactions?.find?.(item => item.emoji?.name === CONFIG.PURCHASE_CANCEL_EMOJI));
@@ -220,10 +303,19 @@ function createEndAdenaSubmissionValidationService({
                 if (!parsed) continue;
                 const candidateName = parsed.requestedName || String(candidate.member?.displayName || candidate.author?.username || '').split('-')[0].trim();
                 if (candidate.author?.id === message.author?.id || namesOverlap(candidateName, userName, aliases)) {
-                    if (!isSameSubmissionSession(candidate.createdAt || candidate.createdTimestamp || null)) continue;
+                    if (!declaredWindowMatches(parsed)) continue;
+                    if (!isSameSubmissionSession(candidate.createdAt || candidate.createdTimestamp || null, null, null, parsed)) continue;
                     duplicates.add(String(candidate.id));
                 }
             }
+        }
+
+        async function getCandidateMessage(messageId) {
+            if (candidateMessages.has(messageId)) return candidateMessages.get(messageId);
+            const exact = await message.channel?.messages?.fetch?.(messageId).catch(() => null);
+            const candidate = exact?.id ? exact : exact?.get?.(messageId) || null;
+            candidateMessages.set(messageId, candidate);
+            return candidate;
         }
 
         if (!operationCache || operationCache.expiresAt <= Date.now()) {
@@ -244,18 +336,31 @@ function createEndAdenaSubmissionValidationService({
             const sameWindow = Date.parse(audit.shiftStartAt || '') === bounds.start.valueOf() &&
                 Date.parse(audit.shiftEndAt || '') === bounds.end.valueOf();
             if (!sameWindow) continue;
+            const operationUserName = operation.userName || operation.payload?.userName;
+            if (!namesOverlap(operationUserName, userName, aliases)) continue;
+            const candidateMessage = await getCandidateMessage(messageId);
+            const parsedCandidate = candidateMessage ? parseEndAdenaMessage(candidateMessage.content) : null;
+            if (parsedCandidate && !declaredWindowMatches(parsedCandidate)) continue;
             if (!isSameSubmissionSession(
                 operation.messageCreatedAt || audit.messageCreatedAt || operation.createdAt || null,
-                audit.attendanceSessionId || operation.payload?.attendanceSessionId || null
+                audit.attendanceSessionId || operation.payload?.attendanceSessionId || null,
+                audit.attendanceSessionType || operation.payload?.attendanceSessionType || null,
+                parsedCandidate
             )) continue;
-            if (namesOverlap(operation.userName || operation.payload?.userName, userName, aliases)) duplicates.add(messageId);
+            duplicates.add(messageId);
         }
         return [...duplicates];
     }
 
-    function resolveShiftContext({ message, shift, userName } = {}) {
+    function resolveShiftContext({ message, shift, userName, parsed = null } = {}) {
         const normalizedShift = String(shift || '').toUpperCase();
         const messageAt = moment(message?.createdAt || Date.now()).tz(CONFIG.TIMEZONE);
+        const parsedMessage = parsed || parseEndAdenaMessage(message?.content);
+        const declaredStartAt = parseDeclaredStartMoment({
+            parsed: parsedMessage,
+            moment,
+            timezone: CONFIG.TIMEZONE
+        });
         const attendance = userName
             ? findAttendanceUser(getAttendanceData(), message?.author?.id, userName, aliases)
             : null;
@@ -266,20 +371,28 @@ function createEndAdenaSubmissionValidationService({
                 getShiftBounds,
                 shift: normalizedShift,
                 messageAt,
-                sessions: attendance?.user?.sessions || []
+                sessions: attendance?.user?.sessions || [],
+                declaredStartAt,
+                submissionType: parsedMessage?.submissionType || null
             })
             : { bounds: null, matchedSessions: [], source: 'message-time' };
+        const submissionSession = selectSubmissionSession(
+            resolution.matchedSessions,
+            resolution.bounds,
+            normalizedShift,
+            messageAt,
+            parsedMessage?.submissionType || null
+        );
+        const submissionType = normalizeSubmissionType(parsedMessage?.submissionType) ||
+            inferSessionSubmissionType(submissionSession, resolution.bounds) || 'REGULAR';
         return {
             messageAt,
             attendance,
             attendanceUserId: attendance?.userId || null,
             matchedSessions: resolution.matchedSessions,
-            submissionSession: selectSubmissionSession(
-                resolution.matchedSessions,
-                resolution.bounds,
-                normalizedShift,
-                messageAt
-            ),
+            submissionSession,
+            submissionType,
+            declaredStartAt: declaredStartAt?.toISOString?.() || null,
             source: resolution.source,
             bounds: resolution.bounds,
             shiftStartAt: resolution.bounds?.start?.toISOString?.() || null,
@@ -292,7 +405,7 @@ function createEndAdenaSubmissionValidationService({
         const normalizedShift = String(shift || '').toUpperCase();
         const issues = [];
         const addIssue = (code, severity, messageText) => issues.push({ code, severity, message: messageText });
-        const shiftContext = resolveShiftContext({ message, shift: normalizedShift, userName });
+        const shiftContext = resolveShiftContext({ message, shift: normalizedShift, userName, parsed });
         const messageAt = shiftContext.messageAt;
         const bounds = shiftContext.bounds;
 
@@ -331,7 +444,15 @@ function createEndAdenaSubmissionValidationService({
         let attendanceUserId = shiftContext.attendanceUserId;
         if (bounds && userName) {
             const worked = shiftContext.matchedSessions.length > 0;
-            if (!worked) addIssue('attendance-not-found', 'error', '\ud574\ub2f9 \uadfc\ubb34\uc870\uc758 \uc2e4\uc81c \ucd9c\uadfc \uae30\ub85d\uc744 \ucc3e\uc9c0 \ubabb\ud588\uc2b5\ub2c8\ub2e4.');
+            if (!worked) {
+                addIssue(
+                    'attendance-not-found',
+                    shiftContext.declaredStartAt ? 'warning' : 'error',
+                    shiftContext.declaredStartAt
+                        ? '\uac8c\uc2dc\ubb3c\uc758 \uadfc\ubb34 \uc2dc\uac04\uc740 \ud655\uc778\ud588\uc9c0\ub9cc \ubd07 \ucd9c\uadfc \uae30\ub85d\uc774 \uc5c6\uc2b5\ub2c8\ub2e4. \uad00\ub9ac\uc790\uac00 \uc99d\ube59\uc744 \ud655\uc778\ud558\uc138\uc694.'
+                        : '\ud574\ub2f9 \uadfc\ubb34\uc870\uc758 \uc2e4\uc81c \ucd9c\uadfc \uae30\ub85d\uc744 \ucc3e\uc9c0 \ubabb\ud588\uc2b5\ub2c8\ub2e4.'
+                );
+            }
         }
 
         let duplicateMessageIds = [];
@@ -341,7 +462,8 @@ function createEndAdenaSubmissionValidationService({
                 userName,
                 shift: normalizedShift,
                 sessions: shiftContext.matchedSessions,
-                submissionSession: shiftContext.submissionSession
+                submissionSession: shiftContext.submissionSession,
+                submissionType: shiftContext.submissionType
             });
             if (duplicateMessageIds.length) {
                 addIssue('duplicate-submission', 'error', `\uac19\uc740 \uadfc\ubb34\uc870 \uc81c\ucd9c ${duplicateMessageIds.length}\uac74\uc774 \uc774\ubbf8 \uc788\uc2b5\ub2c8\ub2e4.`);
@@ -368,9 +490,8 @@ function createEndAdenaSubmissionValidationService({
             shiftResolutionSource: shiftContext.source,
             attendanceSessionIds: shiftContext.matchedSessions.map(session => session.id || session.sessionKey).filter(Boolean),
             attendanceSessionId: getAttendanceSessionId(shiftContext.submissionSession),
-            attendanceSessionType: shiftContext.submissionSession
-                ? shiftContext.submissionSession.otType || 'REGULAR'
-                : null,
+            attendanceSessionType: shiftContext.submissionSession?.otType || shiftContext.submissionType,
+            declaredStartAt: shiftContext.declaredStartAt,
             issues
         };
         validation.status = validationStatus(validation);
@@ -399,7 +520,8 @@ function createEndAdenaSubmissionValidationService({
                 shiftResolutionSource: validation.shiftResolutionSource,
                 attendanceSessionIds: validation.attendanceSessionIds,
                 attendanceSessionId: validation.attendanceSessionId,
-                attendanceSessionType: validation.attendanceSessionType
+                attendanceSessionType: validation.attendanceSessionType,
+                declaredStartAt: validation.declaredStartAt
             },
             source: 'message-create'
         }).catch(error => logger.warn?.('[END ADENA PREVALIDATION LOG WARN]', error?.message || error));

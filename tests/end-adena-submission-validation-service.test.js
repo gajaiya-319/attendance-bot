@@ -345,6 +345,140 @@ function createService({
     assert.strictEqual(repeatedOvertime.valid, false);
     assert.deepStrictEqual(repeatedOvertime.duplicateMessageIds, ['first-overtime-submission']);
 
+    const nightBoundsResolver = (_shift, input) => {
+        const start = moment(input).tz(TIMEZONE).startOf('day').hour(21);
+        return { start, end: start.clone().add(12, 'hours') };
+    };
+    const abCurrentStart = moment.tz('2026-08-01 21:00', TIMEZONE);
+    const abDeclaredSubmission = await createService({
+        boundsResolver: nightBoundsResolver,
+        data: {
+            ab: {
+                name: 'AB',
+                sessions: [{
+                    id: 'night:2026-07-31-21-00:regular',
+                    shift: 'night',
+                    sessionKey: 'night:2026-07-31 21:00',
+                    clockInAt: moment.tz('2026-07-31 21:05', TIMEZONE).toISOString(),
+                    clockOutAt: moment.tz('2026-08-01 09:00', TIMEZONE).toISOString()
+                }]
+            }
+        },
+        operations: [{
+            kind: 'end-adena',
+            action: 'approve',
+            status: 'success',
+            messageId: 'ab-previous-night',
+            userName: 'AB',
+            payload: { audit: {
+                shiftStartAt: moment.tz('2026-07-31 21:00', TIMEZONE).toISOString(),
+                shiftEndAt: moment.tz('2026-08-01 09:00', TIMEZONE).toISOString(),
+                attendanceSessionId: 'night:2026-07-31-21-00:regular',
+                attendanceSessionType: 'REGULAR'
+            } }
+        }],
+        summary: {
+            ok: true,
+            cells: [{ server: 'PAAGRIO', shift: 'NIGHT', userName: 'AB', value: 0, range: 'U35' }],
+            results: []
+        }
+    }).service.validate({
+        message: createMessage({
+            id: 'ab-current-night',
+            createdAt: abCurrentStart.clone().add(12, 'hours').add(7, 'minutes').toDate(),
+            content: '-NAME: AB\n-START: 8/1/2026\n-START TIME: 10:00 PM KR TIME\n-GAINED ADENA: 191,000',
+            author: { id: 'ab', username: 'AB', bot: false },
+            member: { displayName: 'AB - P Night Time', roles: roles(['night', 'paagrio']) }
+        }),
+        server: 'PAAGRIO',
+        parsed: {
+            requestedName: 'AB', rawAmount: 191000, amount: 191000,
+            startDate: '8/1/2026', startTime: '10:00 PM', startTimezone: 'Asia/Seoul'
+        },
+        member: { displayName: 'AB - P Night Time', roles: roles(['night', 'paagrio']) },
+        shift: 'NIGHT',
+        userName: 'AB'
+    });
+    assert.strictEqual(abDeclaredSubmission.valid, true, 'declared current night is not matched to an older attendance session');
+    assert.strictEqual(abDeclaredSubmission.shiftStartAt, abCurrentStart.toISOString());
+    assert.strictEqual(abDeclaredSubmission.shiftResolutionSource, 'declared-start');
+    assert.deepStrictEqual(abDeclaredSubmission.duplicateMessageIds, []);
+    assert.deepStrictEqual(abDeclaredSubmission.issues.map(issue => [issue.code, issue.severity]), [
+        ['attendance-not-found', 'warning']
+    ]);
+
+    const kauchinreiBoundsResolver = (_shift, input) => {
+        const start = moment(input).tz(TIMEZONE).startOf('day').hour(9);
+        return { start, end: start.clone().add(12, 'hours') };
+    };
+    const kauchinreiStart = moment.tz('2026-08-01 09:00', TIMEZONE);
+    const oldOvertimeMessage = {
+        id: 'kauchinrei-old-overtime',
+        content: 'Name: Kauchinrei (OT)\n-START: 08/01/2026\n-START TIME: 3:00 AM KR TIME\n-GAINED ADENA: 40,000',
+        createdAt: moment.tz('2026-08-01 05:05', TIMEZONE).toDate(),
+        author: { id: 'kauchinrei', username: 'Kauchinrei', bot: false },
+        reactions: { cache: new Map() }
+    };
+    const currentOvertimeMessage = createMessage({
+        id: 'kauchinrei-current-overtime',
+        createdAt: moment.tz('2026-08-02 05:17', TIMEZONE).toDate(),
+        content: 'Name: Kauchinrei (OT)\n-START: 08/2/2026\n-START TIME: 12:00 AM KR TIME\n-GAINED ADENA: 130,000',
+        author: { id: 'kauchinrei', username: 'Kauchinrei', bot: false },
+        member: { displayName: 'Kauchinrei - P Day Time', roles: roles(['day', 'paagrio']) },
+        channel: { messages: { fetch: async input => (
+            typeof input === 'string' ? oldOvertimeMessage : new Map([[oldOvertimeMessage.id, oldOvertimeMessage]])
+        ) } }
+    });
+    const kauchinreiOvertime = await createService({
+        boundsResolver: kauchinreiBoundsResolver,
+        data: {
+            kauchinrei: {
+                name: 'Kauchinrei',
+                sessions: [{
+                    id: 'day:2026-08-01-09-00:regular',
+                    shift: 'day',
+                    sessionKey: 'day:2026-08-01 09:00',
+                    clockInAt: kauchinreiStart.toISOString(),
+                    clockOutAt: kauchinreiStart.clone().add(12, 'hours').toISOString()
+                }, {
+                    id: 'day:2026-08-01-09-00:late-live',
+                    shift: 'day',
+                    sessionKey: 'day:2026-08-01 09:00',
+                    clockInAt: kauchinreiStart.clone().add(13, 'hours').add(41, 'minutes').toISOString(),
+                    clockOutAt: kauchinreiStart.clone().add(15, 'hours').toISOString()
+                }]
+            }
+        },
+        operations: [{
+            kind: 'end-adena', action: 'approve', status: 'success',
+            messageId: oldOvertimeMessage.id, userName: 'Kauchinrei',
+            payload: { audit: {
+                shiftStartAt: kauchinreiStart.toISOString(),
+                shiftEndAt: kauchinreiStart.clone().add(12, 'hours').toISOString()
+            } }
+        }],
+        summary: {
+            ok: true,
+            cells: [{ server: 'PAAGRIO', shift: 'DAY', userName: 'Kauchinrei', value: 0, range: 'I10' }],
+            results: []
+        }
+    }).service.validate({
+        message: currentOvertimeMessage,
+        server: 'PAAGRIO',
+        parsed: {
+            requestedName: 'Kauchinrei', rawAmount: 130000, amount: 130000,
+            startDate: '08/2/2026', startTime: '12:00 AM', startTimezone: 'Asia/Seoul',
+            submissionType: 'OVERTIME'
+        },
+        member: currentOvertimeMessage.member,
+        shift: 'DAY',
+        userName: 'Kauchinrei'
+    });
+    assert.strictEqual(kauchinreiOvertime.valid, true, `a new declared OT window is not blocked by the previous OT: ${JSON.stringify(kauchinreiOvertime)}`);
+    assert.deepStrictEqual(kauchinreiOvertime.duplicateMessageIds, []);
+    assert.strictEqual(kauchinreiOvertime.attendanceSessionId, 'day:2026-08-01-09-00:late-live');
+    assert.strictEqual(kauchinreiOvertime.attendanceSessionType, 'OVERTIME');
+
     console.log('end-adena-submission-validation-service tests passed');
 })().catch(error => {
     console.error(error);

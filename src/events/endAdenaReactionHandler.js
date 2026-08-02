@@ -460,7 +460,8 @@ function createEndAdenaReactionHandler({
                     validationContext = await submissionValidationService.resolveShiftContext({
                         message,
                         shift,
-                        userName
+                        userName,
+                        parsed
                     });
                 }
 
