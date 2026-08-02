@@ -312,7 +312,8 @@ function createEndAdenaReactionHandler({
                 if (
                     validation.valid &&
                     hasReaction(resolvedMessage, CONFIG.PURCHASE_APPROVAL_EMOJI) &&
-                    !hasReaction(resolvedMessage, CONFIG.PURCHASE_SUCCESS_EMOJI)
+                    !hasReaction(resolvedMessage, CONFIG.PURCHASE_SUCCESS_EMOJI) &&
+                    isWithinAutoRetryWindow(resolvedMessage)
                 ) {
                     await retryApprovedFailure(resolvedMessage);
                 }
@@ -354,6 +355,14 @@ function createEndAdenaReactionHandler({
         return true;
     }
 
+    function isWithinAutoRetryWindow(message) {
+        const createdAtMs = new Date(message?.createdAt || message?.createdTimestamp || 0).getTime();
+        const maxAgeMins = Number(CONFIG.END_ADENA_AUTO_RETRY_MAX_AGE_MINS || 1440);
+        if (!Number.isFinite(createdAtMs) || !Number.isFinite(maxAgeMins) || maxAgeMins <= 0) return false;
+        const ageMs = Date.now() - createdAtMs;
+        return ageMs >= 0 && ageMs <= maxAgeMins * 60_000;
+    }
+
     async function syncMessageStatus(message, { pendingMessageIds = new Set() } = {}) {
         try {
             if (!isEnabled() || message.author?.bot || isExcludedUserId(CONFIG, message.author)) return false;
@@ -386,7 +395,7 @@ function createEndAdenaReactionHandler({
                 if (!validation.valid) return true;
             }
 
-            if (hasApproval && hasFailure && !isQueued) {
+            if (hasApproval && hasFailure && !isQueued && isWithinAutoRetryWindow(message)) {
                 const retried = await retryApprovedFailure(message);
                 if (retried) return true;
             }

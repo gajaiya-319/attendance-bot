@@ -350,7 +350,11 @@ assert.strictEqual(
             calls,
             users: ['bot']
         });
-        const message = createMessage({ calls, reactions: [approvalReaction, failureReaction] });
+        const message = createMessage({
+            calls,
+            reactions: [approvalReaction, failureReaction],
+            createdAt: new Date()
+        });
         message.reply = async () => ({ edit: async () => null });
         let valid = false;
         const handler = createHandler({
@@ -1008,7 +1012,8 @@ assert.strictEqual(
         const message = createMessage({
             calls,
             reactions: [approvalReaction, failureReaction],
-            content: 'NAME: BitShelby\n-GAINED ADENA 180,000'
+            content: 'NAME: BitShelby\n-GAINED ADENA 180,000',
+            createdAt: new Date()
         });
         const handler = createHandler({
             purchaseSheetService: {
@@ -1024,6 +1029,39 @@ assert.strictEqual(
         assert(calls.includes('fetch:head'));
         assert(calls.includes('retry-sheet:PAAGRIO:DAY:BitShelby:180000:1'));
         assert(calls.includes(`react:${CONFIG.PURCHASE_SUCCESS_EMOJI}`));
+    }
+
+    {
+        const calls = [];
+        const approvalReaction = createReaction({
+            emoji: CONFIG.PURCHASE_APPROVAL_EMOJI,
+            calls,
+            users: ['head']
+        });
+        const failureReaction = createReaction({
+            emoji: CONFIG.PURCHASE_FAILURE_EMOJI,
+            calls,
+            users: ['bot']
+        });
+        const message = createMessage({
+            calls,
+            reactions: [approvalReaction, failureReaction],
+            content: 'NAME: BitShelby\n-GAINED ADENA 180,000',
+            createdAt: new Date(Date.now() - 25 * 60 * 60 * 1000)
+        });
+        const handler = createHandler({
+            purchaseSheetService: {
+                addAdena: async () => {
+                    calls.push('stale-retry-sheet-write');
+                    return { ok: true };
+                }
+            }
+        });
+
+        await handler.syncMessageStatus(message, { pendingMessageIds: new Set() });
+
+        assert.strictEqual(calls.includes('fetch:head'), false, 'stale approval is not fetched for automatic retry');
+        assert.strictEqual(calls.includes('stale-retry-sheet-write'), false, 'stale approval is not automatically written');
     }
 
     {
