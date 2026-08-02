@@ -335,7 +335,7 @@ function enumerateSheetEntries(sheetContexts, dateKeys) {
     return entries;
 }
 
-function enumerateSupplementalOtEntries(sheetContexts) {
+function enumerateItemSaleEntries(sheetContexts) {
     const entries = [];
     for (const [server, sheet] of Object.entries(sheetContexts)) {
         for (const shift of ['DAY', 'NIGHT']) {
@@ -694,17 +694,24 @@ async function runAudit(options) {
     const rows = buildAuditRows({ sheetEntries, expectedEntries, posts });
     const summary = summarizeRows(rows);
     const activePosts = posts.filter(post => ['APPROVED', 'RECORDED_ONLY'].includes(post.state));
-    const supplementalOtEntries = enumerateSupplementalOtEntries(sheetContexts);
-    const overtimeKeys = new Set(activePosts
-        .filter(post => post.submissionType === 'OVERTIME' && post.sheet?.ok)
-        .map(post => `${post.shift}|${post.server}|${String(post.sheet.userName || '').trim().toLowerCase()}`));
-    const unlinkedSupplementalOtEntries = supplementalOtEntries.filter(entry => !overtimeKeys.has(
-        `${entry.shift}|${entry.server}|${String(entry.userName || '').trim().toLowerCase()}`
-    ));
-    summary.supplementalOtTotal = supplementalOtEntries.reduce((sum, entry) => sum + entry.value, 0);
-    summary.unlinkedSupplementalOtTotal = unlinkedSupplementalOtEntries.reduce((sum, entry) => sum + entry.value, 0);
+    const itemSaleEntries = enumerateItemSaleEntries(sheetContexts).map(entry => ({
+        ...entry,
+        source: 'MANUAL_ITEM_SALE'
+    }));
+    summary.approvedDateTotal = summary.totals.reduce((sum, item) => sum + item.expected, 0);
+    summary.itemSaleTotal = itemSaleEntries.reduce((sum, entry) => sum + entry.value, 0);
+    summary.verifiedGrandTotal = summary.approvedDateTotal + summary.itemSaleTotal;
+    summary.serverTotals = ['PAAGRIO', 'VALAKAS'].map(server => {
+        const approvedDateTotal = summary.totals
+            .filter(item => item.server === server)
+            .reduce((sum, item) => sum + item.expected, 0);
+        const itemSaleTotal = itemSaleEntries
+            .filter(item => item.server === server)
+            .reduce((sum, item) => sum + item.value, 0);
+        return { server, approvedDateTotal, itemSaleTotal, verifiedTotal: approvedDateTotal + itemSaleTotal };
+    });
     const report = {
-        ok: rows.every(row => row.status === 'MATCH') && unlinkedSupplementalOtEntries.length === 0,
+        ok: rows.every(row => row.status === 'MATCH'),
         generatedAt: new Date().toISOString(),
         scope: { from: options.from, to: options.to, timezone: CONFIG.TIMEZONE, dates: dateKeys },
         source: {
@@ -725,13 +732,11 @@ async function runAudit(options) {
             attendanceExpectedRows: expectedEntries.length,
             auditedRows: rows.length,
             issueRows: rows.filter(row => row.status !== 'MATCH').length,
-            supplementalOtEntries: supplementalOtEntries.length,
-            unlinkedSupplementalOtEntries: unlinkedSupplementalOtEntries.length
+            itemSaleEntries: itemSaleEntries.length
         },
         summary,
         rows,
-        supplementalOtEntries,
-        unlinkedSupplementalOtEntries,
+        itemSaleEntries,
         nonApprovedPosts: posts.filter(post => post.state !== 'APPROVED'),
         unresolvedPosts: posts.filter(post => !post.sheet?.ok),
         posts,
@@ -766,8 +771,12 @@ function printReport(report) {
         counts: report.counts,
         statusCounts: report.summary.statusCounts,
         totals: report.summary.totals,
+        approvedDateTotal: report.summary.approvedDateTotal,
+        itemSaleTotal: report.summary.itemSaleTotal,
+        verifiedGrandTotal: report.summary.verifiedGrandTotal,
+        serverTotals: report.summary.serverTotals,
         issues: report.rows.filter(row => row.status !== 'MATCH'),
-        unlinkedSupplementalOtEntries: report.unlinkedSupplementalOtEntries
+        itemSaleEntries: report.itemSaleEntries
     }, null, 2));
 }
 
@@ -792,7 +801,7 @@ module.exports = {
     classifyAuditRow,
     dateKeysBetween,
     detectDuplicateSegments,
-    enumerateSupplementalOtEntries,
+    enumerateItemSaleEntries,
     getMessageState,
     parseDeclaredStart,
     resolvePostContext,

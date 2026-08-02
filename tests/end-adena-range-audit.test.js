@@ -5,7 +5,7 @@ const {
     buildAuditRows,
     classifyAuditRow,
     detectDuplicateSegments,
-    enumerateSupplementalOtEntries,
+    enumerateItemSaleEntries,
     summarizeRows
 } = require('../scripts/audit-end-adena-range');
 
@@ -34,7 +34,7 @@ function post(messageId, amount, submissionType = 'REGULAR') {
 }
 
 {
-    const entries = enumerateSupplementalOtEntries({
+    const entries = enumerateItemSaleEntries({
         PAAGRIO: {
             tab: 'Paagrio Great',
             rows: [
