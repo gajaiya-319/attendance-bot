@@ -1,5 +1,7 @@
 'use strict';
 
+const { findApprovedDayOffReservation } = require('../utils/dayOffReservationPolicy');
+
 function createReportingWorkflow(deps) {
     const {
         client,
@@ -17,6 +19,7 @@ function createReportingWorkflow(deps) {
         getDayNightWorkerStats,
         getDayNightWorkerOvertimeUsers,
         getAttendanceData,
+        getDayOffReservations = () => ({}),
         getOvertimeUsers,
         renderPercentBar,
         renderReportTopRow,
@@ -479,12 +482,22 @@ async function sendDailyCloseReport(shift = 'day', at = moment().tz(CONFIG.TIMEZ
 
         const now = moment(at).tz(CONFIG.TIMEZONE);
         const bounds = getShiftBounds(normalizedShift, now);
+        const businessDate = bounds.start.format('YYYY-MM-DD');
         const allStats = getDayNightWorkerStats(guild, normalizedShift)
-            .map(u => ({
-                ...u,
-                lateInfo: getLateInfoForClose(u, bounds),
-                earlyOutInfo: getEarlyOutInfoForClose(u, bounds)
-            }));
+            .map(u => {
+                const approvedDayOff = findApprovedDayOffReservation(getDayOffReservations(), {
+                    userId: u.id,
+                    shift: normalizedShift,
+                    businessDate
+                });
+                return {
+                    ...u,
+                    dayOff: Boolean(u.dayOff || approvedDayOff),
+                    dayOffReservationId: approvedDayOff?.messageId || approvedDayOff?.id || null,
+                    lateInfo: getLateInfoForClose(u, bounds),
+                    earlyOutInfo: getEarlyOutInfoForClose(u, bounds)
+                };
+            });
         const offUsers = allStats.filter(u => u.dayOff);
         const activeUsers = allStats.filter(u => u.checkedIn && !u.dayOff);
         const finishedUsers = allStats.filter(u => u.isFinished && !u.checkedIn && !u.dayOff);

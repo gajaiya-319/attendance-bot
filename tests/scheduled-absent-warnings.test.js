@@ -12,6 +12,7 @@ function at(value) {
     const transitions = [];
     const audits = [];
     const rawRows = [];
+    const dayOffReservations = {};
     const attendanceData = {
         brave: {
             id: 'brave',
@@ -54,6 +55,7 @@ function at(value) {
         moment,
         EmbedBuilder: class {},
         getAttendanceData: () => attendanceData,
+        getDayOffReservations: () => dayOffReservations,
         getOvertimeUsers: () => [],
         setOvertimeUsers: () => {},
         getLiveExceptions: () => ({}),
@@ -155,6 +157,39 @@ function at(value) {
     ]);
     assert.strictEqual(logs.length, 1);
     assert.strictEqual(audits.at(-1).action, 'FINAL_ABSENT_CONFIRMED');
+
+    attendanceData.leave = {
+        id: 'leave',
+        name: 'Approved Leave',
+        shift: 'night',
+        checkedIn: false,
+        dayOff: false,
+        disconnected: false,
+        isFinished: false,
+        points: 0,
+        totalAbsent: 0
+    };
+    guild.members.cache.set('leave', {
+        id: 'leave',
+        user: { bot: false },
+        send: async message => sent.push(message),
+        voice: {}
+    });
+    dayOffReservations.leave = {
+        messageId: 'leave',
+        userId: 'leave',
+        status: 'approved',
+        shift: 'night',
+        leaveDate: '2026-06-28'
+    };
+    const sentBeforeApprovedLeave = sent.length;
+    const rawBeforeApprovedLeave = rawRows.length;
+    assert.strictEqual(await workflow.checkAbsentWarnings(at('2026-06-28 21:30')), false);
+    assert.strictEqual(await workflow.checkAbsentWarnings(at('2026-06-29 09:01')), false);
+    assert.strictEqual(sent.length, sentBeforeApprovedLeave, 'approved leave receives no absence warning');
+    assert.strictEqual(rawRows.length, rawBeforeApprovedLeave, 'approved leave is never written as absent');
+    assert.strictEqual(attendanceData.leave.totalAbsent, 0);
+    assert.strictEqual(attendanceData.leave.points, 0);
 
     const timeoutCalls = [];
     const timeoutData = {

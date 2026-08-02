@@ -14,6 +14,7 @@ const {
     markMonthlyOvertimeAward
 } = require('../utils/monthlyAttendanceStats');
 const { isExcludedUserId } = require('../utils/excludedUsers');
+const { findApprovedDayOffReservation } = require('../utils/dayOffReservationPolicy');
 
 function createScheduledJobsWorkflow(deps) {
     const {
@@ -22,6 +23,7 @@ function createScheduledJobsWorkflow(deps) {
         moment,
         EmbedBuilder,
         getAttendanceData,
+        getDayOffReservations = () => ({}),
         getOvertimeUsers,
         setOvertimeUsers,
         getLiveExceptions,
@@ -60,6 +62,15 @@ const ABSENT_WARNING_MARKS = [30, 60, 90, 120];
 
 function getAbsentWarningMark(elapsedMins) {
     return ABSENT_WARNING_MARKS.filter(mark => elapsedMins >= mark).pop() || null;
+}
+
+function hasApprovedDayOffForBounds(user, bounds) {
+    const businessDate = bounds?.start?.format?.('YYYY-MM-DD');
+    return Boolean(findApprovedDayOffReservation(getDayOffReservations(), {
+        userId: user?.id,
+        shift: user?.shift,
+        businessDate
+    }));
 }
 
 function hasContinuousPostShiftLiveEvidence(user, targetEnd, now, isStreamingNow, hasLiveException = false) {
@@ -123,6 +134,7 @@ function isEligibleForAbsentWarning(user, member, now) {
     if (!isCurrentShiftRegularWorker(member, now)) return false;
     const bounds = getShiftBounds(user.shift, now);
     if (!bounds?.start || !bounds?.end) return false;
+    if (hasApprovedDayOffForBounds(user, bounds)) return false;
     if (now.isBefore(bounds.start) || now.isSameOrAfter(bounds.end)) return false;
     return true;
 }
@@ -168,6 +180,7 @@ async function finalizeAbsentAfterShiftEnd(member, user, bounds, now) {
     if (!user || user.checkedIn || user.dayOff || user.isFinished) return false;
     if (!['day', 'night'].includes(user.shift)) return false;
     if (!bounds?.start || !bounds?.end || now.isBefore(bounds.end)) return false;
+    if (hasApprovedDayOffForBounds(user, bounds)) return false;
     if (getOvertimeUsers().some(ot => ot.id === user.id)) return false;
     if (getActiveLiveException(user.id, now)) return false;
 

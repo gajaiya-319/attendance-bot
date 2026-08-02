@@ -64,7 +64,8 @@ function makeUser(id, name, data) {
                 clockInAt: at('2026-06-30 09:00').toISOString(),
                 clockOutAt: at('2026-06-30 15:27').toISOString()
             }]
-        })
+        }),
+        makeUser('approved-leave', 'Approved Leave - V Day Time', {})
     ];
 
     const workflow = createReportingWorkflow({
@@ -99,6 +100,15 @@ function makeUser(id, name, data) {
         getDayNightWorkerStats: () => users,
         getDayNightWorkerOvertimeUsers: () => [],
         getAttendanceData: () => ({}),
+        getDayOffReservations: () => ({
+            leave: {
+                messageId: 'leave',
+                userId: 'approved-leave',
+                status: 'approved',
+                shift: 'day',
+                leaveDate: '2026-06-30'
+            }
+        }),
         getOvertimeUsers: () => [],
         renderPercentBar: () => '',
         renderReportTopRow: () => '',
@@ -124,6 +134,9 @@ function makeUser(id, name, data) {
     assert(fieldsText.includes('Two Late') && fieldsText.includes('IN 11:30') && fieldsText.includes('150m late'));
     assert(fieldsText.includes('Early Out (1)'), 'early out section is shown');
     assert(fieldsText.includes('Early Guy') && fieldsText.includes('OUT 15:27') && fieldsText.includes('213m early'));
+    assert(fieldsText.includes('DAY OFF    1'), 'approved reservation remains day off after transient state expiry');
+    const absentField = sent[0].embeds[0].data.fields.find(field => field.name.startsWith('Absent / Not Finished'));
+    assert(!absentField.value.includes('Approved Leave'), 'approved leave is excluded from absent close rows');
 
     console.log('reporting-daily-close tests passed');
 })().catch(error => {
