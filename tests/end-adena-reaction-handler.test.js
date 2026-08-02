@@ -108,7 +108,8 @@ function createHandler({
     submissionValidationService = null,
     onApprovalRecorded = null,
     retryDelaysMs = [],
-    waitFn = async () => {}
+    waitFn = async () => {},
+    logger = { log: () => {}, warn: () => {}, error: () => {} }
 }) {
     return createEndAdenaReactionHandler({
         MessagePermissionFlags: {
@@ -123,7 +124,7 @@ function createHandler({
         onApprovalRecorded,
         retryDelaysMs,
         waitFn,
-        logger: { log: () => {}, warn: () => {}, error: () => {} }
+        logger
     });
 }
 
@@ -449,6 +450,7 @@ assert.strictEqual(
     {
         const calls = [];
         const approvalEvents = [];
+        const approvalErrors = [];
         const message = createMessage({
             calls,
             content: 'NAME: WrongName\n-GAINED ADENA: 140,884',
@@ -467,7 +469,8 @@ assert.strictEqual(
                 const start = momentTimezone(input).tz(CONFIG.TIMEZONE).startOf('day').hour(9);
                 return { start, end: start.clone().hour(21) };
             },
-            onApprovalRecorded: async event => approvalEvents.push(event),
+            onApprovalRecorded: event => approvalEvents.push(event),
+            logger: { log() {}, warn() {}, error: error => approvalErrors.push(error) },
             purchaseSheetService: {
                 addAdena: async payload => {
                     calls.push(`sheet:${payload.server}:${payload.shift}:${payload.userName}:${payload.amount}:${payload.dayOfMonth}`);
@@ -484,6 +487,7 @@ assert.strictEqual(
 
         assert(calls.includes('sheet:PAAGRIO:DAY:BitShelby:140000:31'));
         assert.strictEqual(approvalEvents.length, 1);
+        assert.deepStrictEqual(approvalErrors, [], 'a synchronous post-approval hook does not fail the reaction handler');
         assert.strictEqual(approvalEvents[0].audit.reviewerId, 'head');
         assert.strictEqual(approvalEvents[0].audit.authorId, 'author');
         assert.match(approvalEvents[0].audit.shiftStartAt, /T01:00:00\.000Z$/);

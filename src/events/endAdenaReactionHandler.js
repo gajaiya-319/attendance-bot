@@ -537,19 +537,21 @@ function createEndAdenaReactionHandler({
                     });
                     if (typeof onGreatTabChanged === 'function') onGreatTabChanged();
                     if (!result.duplicate && typeof onApprovalRecorded === 'function') {
-                        await onApprovalRecorded({
-                            action: isCancel ? 'cancel' : 'approve',
-                            server: finalServer,
-                            shift: shift || null,
-                            userName,
-                            messageId: message.id,
-                            channelId: message.channelId,
-                            rawAmount,
-                            audit,
-                            result
-                        }).catch(error => {
+                        try {
+                            await onApprovalRecorded({
+                                action: isCancel ? 'cancel' : 'approve',
+                                server: finalServer,
+                                shift: shift || null,
+                                userName,
+                                messageId: message.id,
+                                channelId: message.channelId,
+                                rawAmount,
+                                audit,
+                                result
+                            });
+                        } catch (error) {
                             logger.warn?.('[END ADENA POST-APPROVAL HOOK WARN]', error?.message || error);
-                        });
+                        }
                     }
                 } else {
                     const finalServer = result.server || server;
