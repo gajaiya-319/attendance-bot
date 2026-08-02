@@ -6,6 +6,7 @@ const {
     classifyAuditRow,
     detectDuplicateSegments,
     enumerateItemSaleEntries,
+    resolvePostContext,
     summarizeRows
 } = require('../scripts/audit-end-adena-range');
 
@@ -31,6 +32,32 @@ function post(messageId, amount, submissionType = 'REGULAR') {
             value: 230000
         }
     };
+}
+
+{
+    const context = resolvePostContext({
+        parsed: {
+            startDate: '8/1/2026',
+            startTime: '10:00 AM',
+            startTimezone: 'Asia/Seoul'
+        },
+        message: { timestamp: '2026-08-02T12:56:15.329Z' },
+        attendanceUser: { shift: 'day' },
+        operation: {
+            shift: 'DAY',
+            payload: { audit: {
+                attendanceSessionId: 'day:2026-08-01-09-00:regular',
+                shiftStartAt: '2026-08-01T01:00:00.000Z',
+                shiftEndAt: '2026-08-01T13:00:00.000Z'
+            } }
+        },
+        timeLogic: { getShiftBounds: () => { throw new Error('trusted bounds should be used'); } }
+    });
+    assert.strictEqual(context.ok, true);
+    assert.strictEqual(context.businessDate, '2026-08-02');
+    assert.strictEqual(context.dateSource, 'message-created-at');
+    assert.strictEqual(context.declaredStartAt, null);
+    assert.strictEqual(context.declaredDateConflict, false);
 }
 
 {

@@ -164,7 +164,11 @@ function createService({
         server: 'PAAGRIO',
         shift: 'DAY',
         userName: 'BitShelby',
-        payload: { audit: { shiftStartAt: START.toISOString(), shiftEndAt: END.toISOString() } }
+        payload: { audit: {
+            messageCreatedAt: CREATED.toISOString(),
+            shiftStartAt: START.toISOString(),
+            shiftEndAt: END.toISOString()
+        } }
     }];
     const duplicate = await createService({ operations: duplicateOperations }).service.validate({
         message: createMessage(),
@@ -227,21 +231,22 @@ function createService({
     }).service.validate({
         message: createMessage({ createdAt: overtimeCreated.toDate() }),
         server: 'PAAGRIO',
-        parsed: parsed(),
+        parsed: { ...parsed(), submissionType: 'OVERTIME' },
         member: createMessage().member,
         shift: 'DAY',
         userName: 'BitShelby'
     });
     assert.strictEqual(crossMidnight.valid, true);
-    assert.strictEqual(crossMidnight.shiftStartAt, previousStart.toISOString());
-    assert.strictEqual(crossMidnight.shiftEndAt, previousEnd.toISOString());
-    assert.strictEqual(crossMidnight.shiftResolutionSource, 'attendance-session');
-    assert.deepStrictEqual(crossMidnight.attendanceSessionIds, [
-        'day:2026-07-29-09-00:regular',
-        'day:2026-07-29-09-00:overtime'
+    assert.strictEqual(crossMidnight.shiftStartAt, moment.tz('2026-07-30 09:00', TIMEZONE).toISOString());
+    assert.strictEqual(crossMidnight.shiftEndAt, moment.tz('2026-07-30 21:00', TIMEZONE).toISOString());
+    assert.strictEqual(crossMidnight.shiftResolutionSource, 'message-time');
+    assert.strictEqual(crossMidnight.submissionDate, '2026-07-30');
+    assert.deepStrictEqual(crossMidnight.attendanceSessionIds, []);
+    assert.strictEqual(crossMidnight.attendanceSessionId, null);
+    assert.strictEqual(crossMidnight.attendanceSessionType, 'OVERTIME');
+    assert.deepStrictEqual(crossMidnight.issues.map(issue => [issue.code, issue.severity]), [
+        ['attendance-not-found', 'warning']
     ]);
-    assert.strictEqual(crossMidnight.attendanceSessionId, 'day:2026-07-29-09-00:overtime');
-    assert.strictEqual(crossMidnight.attendanceSessionType, 'FORCED');
 
     const regularApproval = {
         kind: 'end-adena',
@@ -290,14 +295,15 @@ function createService({
     }).service.validate({
         message: createMessage({ id: 'overtime-submission', createdAt: overtimeCreated.toDate() }),
         server: 'PAAGRIO',
-        parsed: parsed(),
+        parsed: { ...parsed(), submissionType: 'OVERTIME' },
         member: createMessage().member,
         shift: 'DAY',
         userName: 'BitShelby'
     });
     assert.strictEqual(supplementalOvertime.valid, true);
     assert.deepStrictEqual(supplementalOvertime.duplicateMessageIds, []);
-    assert.strictEqual(supplementalOvertime.attendanceSessionId, 'day:2026-07-29-09-00:overtime');
+    assert.strictEqual(supplementalOvertime.attendanceSessionId, null);
+    assert.strictEqual(supplementalOvertime.submissionDate, '2026-07-30');
 
     const repeatedOvertime = await createService({
         boundsResolver: (_shift, input) => {
@@ -337,7 +343,7 @@ function createService({
     }).service.validate({
         message: createMessage({ id: 'second-overtime-submission', createdAt: overtimeCreated.toDate() }),
         server: 'PAAGRIO',
-        parsed: parsed(),
+        parsed: { ...parsed(), submissionType: 'OVERTIME' },
         member: createMessage().member,
         shift: 'DAY',
         userName: 'BitShelby'
@@ -346,7 +352,9 @@ function createService({
     assert.deepStrictEqual(repeatedOvertime.duplicateMessageIds, ['first-overtime-submission']);
 
     const nightBoundsResolver = (_shift, input) => {
-        const start = moment(input).tz(TIMEZONE).startOf('day').hour(21);
+        const at = moment(input).tz(TIMEZONE);
+        const start = at.clone().startOf('day').hour(21);
+        if (at.hour() < 12) start.subtract(1, 'day');
         return { start, end: start.clone().add(12, 'hours') };
     };
     const abCurrentStart = moment.tz('2026-08-01 21:00', TIMEZONE);
@@ -356,11 +364,11 @@ function createService({
             ab: {
                 name: 'AB',
                 sessions: [{
-                    id: 'night:2026-07-31-21-00:regular',
+                    id: 'night:2026-08-01-21-00:regular',
                     shift: 'night',
-                    sessionKey: 'night:2026-07-31 21:00',
-                    clockInAt: moment.tz('2026-07-31 21:05', TIMEZONE).toISOString(),
-                    clockOutAt: moment.tz('2026-08-01 09:00', TIMEZONE).toISOString()
+                    sessionKey: 'night:2026-08-01 21:00',
+                    clockInAt: abCurrentStart.clone().add(5, 'minutes').toISOString(),
+                    clockOutAt: abCurrentStart.clone().add(12, 'hours').toISOString()
                 }]
             }
         },
@@ -371,6 +379,7 @@ function createService({
             messageId: 'ab-previous-night',
             userName: 'AB',
             payload: { audit: {
+                messageCreatedAt: moment.tz('2026-08-01 09:07', TIMEZONE).toISOString(),
                 shiftStartAt: moment.tz('2026-07-31 21:00', TIMEZONE).toISOString(),
                 shiftEndAt: moment.tz('2026-08-01 09:00', TIMEZONE).toISOString(),
                 attendanceSessionId: 'night:2026-07-31-21-00:regular',
@@ -386,26 +395,26 @@ function createService({
         message: createMessage({
             id: 'ab-current-night',
             createdAt: abCurrentStart.clone().add(12, 'hours').add(7, 'minutes').toDate(),
-            content: '-NAME: AB\n-START: 8/1/2026\n-START TIME: 10:00 PM KR TIME\n-GAINED ADENA: 191,000',
+            content: '-NAME: AB\n-START: 7/1/2026\n-START TIME: 10:00 PM KR TIME\n-GAINED ADENA: 191,000',
             author: { id: 'ab', username: 'AB', bot: false },
             member: { displayName: 'AB - P Night Time', roles: roles(['night', 'paagrio']) }
         }),
         server: 'PAAGRIO',
         parsed: {
             requestedName: 'AB', rawAmount: 191000, amount: 191000,
-            startDate: '8/1/2026', startTime: '10:00 PM', startTimezone: 'Asia/Seoul'
+            startDate: '7/1/2026', startTime: '10:00 PM', startTimezone: 'Asia/Seoul'
         },
         member: { displayName: 'AB - P Night Time', roles: roles(['night', 'paagrio']) },
         shift: 'NIGHT',
         userName: 'AB'
     });
-    assert.strictEqual(abDeclaredSubmission.valid, true, 'declared current night is not matched to an older attendance session');
+    assert.strictEqual(abDeclaredSubmission.valid, true, 'the post date wins even when the declared date is wrong');
     assert.strictEqual(abDeclaredSubmission.shiftStartAt, abCurrentStart.toISOString());
-    assert.strictEqual(abDeclaredSubmission.shiftResolutionSource, 'declared-start');
+    assert.strictEqual(abDeclaredSubmission.shiftResolutionSource, 'attendance-session');
+    assert.strictEqual(abDeclaredSubmission.submissionDate, '2026-08-02');
+    assert.strictEqual(abDeclaredSubmission.declaredStartAt, null);
     assert.deepStrictEqual(abDeclaredSubmission.duplicateMessageIds, []);
-    assert.deepStrictEqual(abDeclaredSubmission.issues.map(issue => [issue.code, issue.severity]), [
-        ['attendance-not-found', 'warning']
-    ]);
+    assert.deepStrictEqual(abDeclaredSubmission.issues, []);
 
     const kauchinreiBoundsResolver = (_shift, input) => {
         const start = moment(input).tz(TIMEZONE).startOf('day').hour(9);
@@ -474,9 +483,11 @@ function createService({
         shift: 'DAY',
         userName: 'Kauchinrei'
     });
-    assert.strictEqual(kauchinreiOvertime.valid, true, `a new declared OT window is not blocked by the previous OT: ${JSON.stringify(kauchinreiOvertime)}`);
+    assert.strictEqual(kauchinreiOvertime.valid, true, `a new post-date OT is not blocked by the previous day's OT: ${JSON.stringify(kauchinreiOvertime)}`);
     assert.deepStrictEqual(kauchinreiOvertime.duplicateMessageIds, []);
-    assert.strictEqual(kauchinreiOvertime.attendanceSessionId, 'day:2026-08-01-09-00:late-live');
+    assert.strictEqual(kauchinreiOvertime.submissionDate, '2026-08-02');
+    assert.strictEqual(kauchinreiOvertime.shiftResolutionSource, 'message-time');
+    assert.strictEqual(kauchinreiOvertime.attendanceSessionId, null);
     assert.strictEqual(kauchinreiOvertime.attendanceSessionType, 'OVERTIME');
 
     console.log('end-adena-submission-validation-service tests passed');

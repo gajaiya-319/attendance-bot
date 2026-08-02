@@ -1,6 +1,5 @@
 'use strict';
 
-const { getShiftSheetDayOfMonth } = require('../utils/shiftSheetDate');
 const { parseEndAdenaMessage } = require('../utils/endAdenaMessage');
 const { isExcludedUserId } = require('../utils/excludedUsers');
 
@@ -56,8 +55,20 @@ function normalizePayrollServer(server) {
     return upper || null;
 }
 
-function getMessageDayOfMonth(moment, timezone, message, shift = null, shiftStartAt = null) {
-    return getShiftSheetDayOfMonth(moment, timezone, shift, shiftStartAt || message?.createdAt || Date.now());
+function getMessageDayOfMonth(moment, timezone, message) {
+    return moment(message?.createdAt || Date.now()).tz(timezone).date();
+}
+
+function getMessageSubmissionDate(moment, timezone, message) {
+    const createdAt = message?.createdAt || Date.now();
+    const zoned = moment(createdAt).tz(timezone);
+    if (typeof zoned?.format === 'function') return zoned.format('YYYY-MM-DD');
+    return new Intl.DateTimeFormat('en-CA', {
+        timeZone: timezone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    }).format(new Date(createdAt));
 }
 
 function createEndAdenaReactionHandler({
@@ -483,13 +494,8 @@ function createEndAdenaReactionHandler({
                     : null;
                 const shiftStartAt = validationContext?.shiftStartAt || fallbackShiftBounds?.start?.toISOString?.() || null;
                 const shiftEndAt = validationContext?.shiftEndAt || fallbackShiftBounds?.end?.toISOString?.() || null;
-                const dayOfMonth = getMessageDayOfMonth(
-                    moment,
-                    CONFIG.TIMEZONE,
-                    message,
-                    shift,
-                    validationContext?.shiftStartAt || null
-                );
+                const submissionDate = getMessageSubmissionDate(moment, CONFIG.TIMEZONE, message);
+                const dayOfMonth = getMessageDayOfMonth(moment, CONFIG.TIMEZONE, message);
                 const audit = {
                     action: isCancel ? 'cancel' : 'approve',
                     actionAt,
@@ -498,6 +504,8 @@ function createEndAdenaReactionHandler({
                     authorId: message.author?.id || null,
                     authorName: authorMember?.displayName || message.author?.globalName || message.author?.username || null,
                     messageCreatedAt,
+                    submissionDate,
+                    dateResolutionSource: 'message-created-at',
                     shiftStartAt,
                     shiftEndAt,
                     shiftResolutionSource: validationContext?.shiftResolutionSource || validationContext?.source || (fallbackShiftBounds ? 'message-time' : null),
@@ -614,6 +622,7 @@ module.exports = {
     parseEndAdenaMessage,
     getServerForChannel,
     getMessageDayOfMonth,
+    getMessageSubmissionDate,
     getSheetName,
     getEndAdenaSheetName,
     getMemberShift

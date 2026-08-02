@@ -138,15 +138,18 @@ function cleanMemberName(value) {
 }
 
 function resolvePostContext({ parsed, message, attendanceUser, operation, timeLogic }) {
-    const declaredStart = parseDeclaredStart(parsed);
     const operationAudit = operation?.payload?.audit || operation?.audit || {};
     const operationShift = String(operation?.shift || operation?.payload?.shift || '').toUpperCase();
+    const created = moment(
+        message?.timestamp || message?.created_at || operationAudit.messageCreatedAt || operation?.createdAt
+    ).tz(CONFIG.TIMEZONE);
+    if (!created.isValid()) return { ok: false, code: 'post-date-unresolved' };
     let shift = String(attendanceUser?.shift || '').toUpperCase() ||
         memberShift(message?.member) ||
         operationShift ||
         shiftFromText(message?.member?.nick);
-    if (!['DAY', 'NIGHT'].includes(shift) && declaredStart) {
-        const hour = declaredStart.hour();
+    if (!['DAY', 'NIGHT'].includes(shift)) {
+        const hour = created.hour();
         shift = hour >= 9 && hour < 21 ? 'DAY' : 'NIGHT';
     }
     if (!['DAY', 'NIGHT'].includes(shift)) return { ok: false, code: 'shift-unresolved' };
@@ -159,7 +162,6 @@ function resolvePostContext({ parsed, message, attendanceUser, operation, timeLo
     if (!['REGULAR', 'OVERTIME'].includes(submissionType)) submissionType = 'REGULAR';
 
     let bounds = null;
-    let dateSource = null;
     const trustedAttendanceWindow = Boolean(
         operationAudit.attendanceSessionId &&
         operationAudit.shiftStartAt &&
@@ -170,47 +172,30 @@ function resolvePostContext({ parsed, message, attendanceUser, operation, timeLo
         const end = moment(operationAudit.shiftEndAt).tz(CONFIG.TIMEZONE);
         if (start.isValid() && end.isValid()) {
             bounds = { start, end };
-            dateSource = 'attendance-session';
             if (['DAY', 'NIGHT'].includes(operationShift)) shift = operationShift;
         }
-    }
-    if (!bounds && declaredStart) {
-        bounds = timeLogic.getShiftBounds(shift.toLowerCase(), declaredStart);
-        const declaredAfterEnd = declaredStart.valueOf() > bounds.end.valueOf() + 5 * 60_000;
-        if (declaredAfterEnd) submissionType = 'OVERTIME';
-        if (submissionType === 'OVERTIME' && declaredStart.valueOf() < bounds.start.valueOf()) {
-            bounds = timeLogic.getShiftBounds(shift.toLowerCase(), declaredStart.clone().subtract(1, 'day'));
-        }
-        dateSource = 'declared-start';
     }
     if (!bounds && operationAudit.shiftStartAt) {
         const start = moment(operationAudit.shiftStartAt).tz(CONFIG.TIMEZONE);
         const end = moment(operationAudit.shiftEndAt).tz(CONFIG.TIMEZONE);
         if (start.isValid() && end.isValid()) {
             bounds = { start, end };
-            dateSource = 'operation-window';
         }
     }
     if (!bounds) {
-        const created = moment(message?.timestamp || message?.created_at).tz(CONFIG.TIMEZONE);
         bounds = timeLogic.getShiftBounds(shift.toLowerCase(), created);
-        dateSource = 'message-time';
     }
 
     return {
         ok: true,
         shift,
         submissionType,
-        declaredStartAt: declaredStart?.toISOString() || null,
-        businessDate: bounds.start.format('YYYY-MM-DD'),
+        declaredStartAt: null,
+        businessDate: created.format('YYYY-MM-DD'),
         shiftStartAt: bounds.start.toISOString(),
         shiftEndAt: bounds.end.toISOString(),
-        dateSource,
-        declaredDateConflict: Boolean(
-            trustedAttendanceWindow &&
-            declaredStart &&
-            declaredStart.format('YYYY-MM-DD') !== bounds.start.format('YYYY-MM-DD')
-        )
+        dateSource: 'message-created-at',
+        declaredDateConflict: false
     };
 }
 
@@ -622,9 +607,9 @@ async function runAudit(options) {
     for (const [messageId, operation] of latestOperations.entries()) {
         if (fetchedMessageIds.has(messageId) || String(operation?.action || '').toLowerCase() !== 'approve') continue;
         const audit = operation?.payload?.audit || operation?.audit || {};
-        const start = moment(audit.shiftStartAt || '').tz(CONFIG.TIMEZONE);
-        if (!start.isValid()) continue;
-        const businessDate = start.format('YYYY-MM-DD');
+        const created = moment(audit.messageCreatedAt || operation.messageCreatedAt || operation.createdAt).tz(CONFIG.TIMEZONE);
+        if (!created.isValid()) continue;
+        const businessDate = created.format('YYYY-MM-DD');
         if (!dateKeys.includes(businessDate)) continue;
         const shift = String(operation.shift || operation.payload?.shift || '').toUpperCase();
         const server = normalizePayrollServer(operation.server || operation.payload?.server);
@@ -656,7 +641,7 @@ async function runAudit(options) {
             businessDate,
             shiftStartAt: audit.shiftStartAt,
             shiftEndAt: audit.shiftEndAt || null,
-            dateSource: 'operation-log',
+            dateSource: 'message-created-at',
             declaredDateConflict: false
         });
     }
@@ -669,7 +654,9 @@ async function runAudit(options) {
         for (const session of user?.sessions || []) {
             const start = moment(session.scheduledStartAt || session.clockInAt).tz(CONFIG.TIMEZONE);
             if (!start.isValid()) continue;
-            const businessDate = start.format('YYYY-MM-DD');
+            const expectedAt = moment(session.scheduledEndAt || session.clockOutAt || session.scheduledStartAt || session.clockInAt)
+                .tz(CONFIG.TIMEZONE);
+            const businessDate = expectedAt.isValid() ? expectedAt.format('YYYY-MM-DD') : start.format('YYYY-MM-DD');
             if (!dateKeys.includes(businessDate)) continue;
             const shift = String(session.shift || user.shift || '').toUpperCase();
             if (!['DAY', 'NIGHT'].includes(shift)) continue;

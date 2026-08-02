@@ -117,7 +117,7 @@ function createHandler({
             ManageMessages: 'ManageMessages'
         },
         CONFIG,
-        moment: momentOverride || (() => ({ tz: () => ({ date: () => 1 }) })),
+        moment: momentOverride || momentTimezone,
         getShiftBounds,
         purchaseSheetService,
         submissionValidationService,
@@ -198,7 +198,7 @@ assert.strictEqual(
         { createdAt: new Date('2026-06-01T01:00:00Z') },
         'NIGHT'
     ),
-    31
+    1
 );
 assert.strictEqual(
     getSheetName({ displayName: 'BitShelby - H Day Time', user: { username: 'ignored' } }, 'WrongName'),
@@ -541,7 +541,9 @@ assert.strictEqual(
             message
         }, { id: 'head', bot: false });
 
-        assert.strictEqual(writtenPayload.dayOfMonth, 29);
+        assert.strictEqual(writtenPayload.dayOfMonth, 30);
+        assert.strictEqual(writtenPayload.audit.submissionDate, '2026-07-30');
+        assert.strictEqual(writtenPayload.audit.dateResolutionSource, 'message-created-at');
         assert.strictEqual(writtenPayload.audit.shiftStartAt, '2026-07-29T01:00:00.000Z');
         assert.strictEqual(writtenPayload.audit.shiftEndAt, '2026-07-29T13:00:00.000Z');
         assert.strictEqual(writtenPayload.audit.shiftResolutionSource, 'attendance-session');
@@ -577,7 +579,7 @@ assert.strictEqual(
             message
         }, { id: 'head', bot: false });
 
-        assert(calls.includes('sheet:VALAKAS:NIGHT:Bellet:111000:31'));
+        assert(calls.includes('sheet:VALAKAS:NIGHT:Bellet:111000:1'));
     }
 
     {
@@ -608,7 +610,7 @@ assert.strictEqual(
             message
         }, { id: 'head', bot: false });
 
-        assert(calls.includes('sheet:VALAKAS:NIGHT:Lancyy:120000:1'));
+        assert(calls.includes('sheet:VALAKAS:NIGHT:Lancyy:120000:2'));
     }
 
     {
@@ -843,7 +845,7 @@ assert.strictEqual(
         assert.deepStrictEqual(calls, [
             'fetch:owner',
             `react:${CONFIG.PURCHASE_PROCESSING_EMOJI}`,
-            'sheet:PAAGRIO:DAY:BitShelby:-140000:1',
+            'sheet:PAAGRIO:DAY:BitShelby:-140000:31',
             `removeAll:${CONFIG.PURCHASE_SUCCESS_EMOJI}`,
             `react:${CONFIG.PURCHASE_CANCEL_EMOJI}`
         ]);
@@ -880,7 +882,7 @@ assert.strictEqual(
             message
         }, { id: 'owner', bot: false });
 
-        assert(calls.includes('summary:PAAGRIO:DAY:BitShelby:-140000:-140884:1'));
+        assert(calls.includes('summary:PAAGRIO:DAY:BitShelby:-140000:-140884:31'));
     }
 
     {
@@ -1027,7 +1029,8 @@ assert.strictEqual(
         await handler.syncMessageStatus(message, { pendingMessageIds: new Set() });
 
         assert(calls.includes('fetch:head'));
-        assert(calls.includes('retry-sheet:PAAGRIO:DAY:BitShelby:180000:1'));
+        const postedDay = momentTimezone(message.createdAt).tz(CONFIG.TIMEZONE).date();
+        assert(calls.includes(`retry-sheet:PAAGRIO:DAY:BitShelby:180000:${postedDay}`));
         assert(calls.includes(`react:${CONFIG.PURCHASE_SUCCESS_EMOJI}`));
     }
 
